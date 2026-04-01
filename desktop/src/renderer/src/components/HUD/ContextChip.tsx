@@ -23,7 +23,14 @@ interface ContextChipProps {
 }
 
 export function ContextChip({ state }: ContextChipProps) {
-  const { surface_type, detected_text, probable_user_focus, change_summary, pedagogical_topics } = state
+  const {
+    surface_type,
+    detected_text,
+    probable_user_focus,
+    change_summary,
+    pedagogical_topics,
+    capture_policy
+  } = state
   if (surface_type === 'unknown' && !detected_text) return null
 
   const label = SURFACE_LABEL[surface_type]
@@ -52,6 +59,17 @@ export function ContextChip({ state }: ContextChipProps) {
             border: '1px solid rgba(255,180,60,0.15)'
           }}>
           mudou
+        </span>
+      )}
+
+      {capture_policy === 'blocked-sensitive' && (
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px]"
+          style={{
+            background: 'rgba(255,90,90,0.12)',
+            color: 'rgba(255,140,140,0.92)',
+            border: '1px solid rgba(255,90,90,0.18)'
+          }}>
+          captura bloqueada
         </span>
       )}
 

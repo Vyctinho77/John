@@ -1,11 +1,12 @@
 import { app } from 'electron'
-import { mkdir, readFile, writeFile } from 'fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import type { UserProfile } from '../../shared/perception.types'
 
 const PROFILE_PATH = join(app.getPath('userData'), 'user-profile.json')
 
 const DEFAULT_PROFILE: UserProfile = {
+  display_name: '',
   user_level: 'beginner',
   preferred_explanation_style: 'step_by_step',
   study_goals: [],
@@ -46,6 +47,10 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Us
 
 function normalizeProfile(profile: Partial<UserProfile>): UserProfile {
   return {
+    display_name:
+      typeof profile.display_name === 'string'
+        ? profile.display_name.trim().slice(0, 40)
+        : DEFAULT_PROFILE.display_name,
     user_level: profile.user_level ?? DEFAULT_PROFILE.user_level,
     preferred_explanation_style:
       profile.preferred_explanation_style ?? DEFAULT_PROFILE.preferred_explanation_style,
@@ -67,4 +72,11 @@ function normalizeProfile(profile: Partial<UserProfile>): UserProfile {
 async function persistProfile(profile: UserProfile): Promise<void> {
   await mkdir(dirname(PROFILE_PATH), { recursive: true })
   await writeFile(PROFILE_PATH, JSON.stringify(profile, null, 2), 'utf-8')
+}
+
+export async function resetUserProfile(): Promise<UserProfile> {
+  cachedProfile = { ...DEFAULT_PROFILE, updated_at: Date.now() }
+  await rm(PROFILE_PATH, { force: true })
+  await persistProfile(cachedProfile)
+  return cachedProfile
 }

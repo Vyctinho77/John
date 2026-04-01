@@ -15,6 +15,7 @@ interface UsePerceptionResult {
   permissionStatus: 'granted' | 'denied' | 'not-determined' | 'unknown'
   analyze: () => Promise<void>
   togglePrivateMode: () => void
+  resumeSensitiveBlock: () => Promise<void>
   updateUserProfile: (patch: Partial<UserProfile>) => Promise<void>
   clearSessionMemory: () => Promise<void>
 }
@@ -95,6 +96,15 @@ export function usePerception({
     })
   }, [])
 
+  const resumeSensitiveBlock = useCallback(async () => {
+    const snapshot = await window.perceptionAPI?.resumeSensitiveBlock()
+    if (snapshot) setContextSnapshot(snapshot)
+
+    if (!_privateMode && sessionActive) {
+      window.perceptionAPI?.startSession()
+    }
+  }, [_privateMode, sessionActive])
+
   const updateUserProfile = useCallback(async (patch: Partial<UserProfile>) => {
     const snapshot = await window.perceptionAPI?.updateUserProfile(patch)
     if (snapshot) setContextSnapshot(snapshot)
@@ -120,6 +130,7 @@ export function usePerception({
     permissionStatus,
     analyze,
     togglePrivateMode,
+    resumeSensitiveBlock,
     updateUserProfile,
     clearSessionMemory
   }

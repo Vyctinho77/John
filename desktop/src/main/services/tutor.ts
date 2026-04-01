@@ -1,4 +1,7 @@
 import { getContextSnapshot } from './perception'
+import { runDomainTutor } from './tutor-domains'
+import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
+import { generateRemoteText } from './ai-provider'
 import type {
   PerceptionContextSnapshot,
   TutorMode,
@@ -8,30 +11,127 @@ import type {
 } from '../../shared/perception.types'
 
 export async function generateTutorResponse(request: TutorRequest): Promise<TutorResponse> {
-  const context = request.context ?? await getContextSnapshot()
-  const mode = inferMode(request, context.userProfile)
-  const uncertainty = context.semanticState.uncertainty
-  const warning = inferWarning(context)
-  const needsVisualConfirmation = uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown'
-  const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
+  const startedAt = Date.now()
 
-  const content = composeResponse({
-    mode,
-    prompt: request.prompt,
-    context,
-    shouldAskConfirmation,
-    warning
-  })
+  try {
+    const context = request.context ?? await getContextSnapshot()
+    const mode = inferMode(request, context.userProfile)
+    const uncertainty = context.semanticState.uncertainty
+    const baseWarning = inferWarning(context)
+    const needsVisualConfirmation = uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown'
+    const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
+    const domainOutput = runDomainTutor({ request, context, mode })
+    const localContent = composeResponse({
+      mode,
+      context,
+      shouldAskConfirmation,
+      warning: domainOutput?.warning ?? baseWarning,
+      domainBody: domainOutput?.content ?? null
+    })
+    const remoteResult = await generateRemoteText({
+      sensitive: Boolean(domainOutput?.warning ?? baseWarning),
+      system: buildRemoteSystemPrompt(mode, context, domainOutput?.warning ?? baseWarning),
+      prompt: buildRemoteUserPrompt(request, context, domainOutput?.content ?? null),
+      imageDataUrl: context.screenshotDataUrl ?? null
+    })
+    const content = remoteResult?.text?.trim() || localContent
 
-  return {
-    mode,
-    content,
-    uncertainty,
-    should_ask_confirmation: shouldAskConfirmation,
-    needs_visual_confirmation: needsVisualConfirmation,
-    suggested_follow_ups: buildFollowUps(mode, context),
-    warning
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'tutor',
+      action: 'generate_response',
+      sessionId: context.sessionMemory.session_id,
+      details: {
+        domain: domainOutput?.domain ?? 'general',
+        mode,
+        provider: remoteResult?.providerId ?? 'local',
+        model: remoteResult?.model ?? 'local',
+        uncertainty: Number(uncertainty.toFixed(2)),
+        asksConfirmation: shouldAskConfirmation
+      }
+    })
+
+    void recordPerformanceTrace({
+      operation: 'tutor.respond',
+      durationMs: Date.now() - startedAt,
+      status: 'ok'
+    })
+
+    return {
+      domain: domainOutput?.domain ?? 'general',
+      mode,
+      content,
+      provider: remoteResult?.providerId ?? 'local',
+      model: remoteResult?.model ?? 'local',
+      uncertainty,
+      should_ask_confirmation: shouldAskConfirmation,
+      needs_visual_confirmation: needsVisualConfirmation,
+      suggested_follow_ups: domainOutput?.suggested_follow_ups ?? buildFollowUps(mode, context),
+      warning: domainOutput?.warning ?? baseWarning
+    }
+  } catch (error) {
+    void recordDiagnosticEvent({
+      type: 'error',
+      source: 'tutor',
+      action: 'generate_response_failed',
+      details: {
+        hasMessage: error instanceof Error ? Boolean(error.message) : true
+      }
+    })
+
+    void recordPerformanceTrace({
+      operation: 'tutor.respond',
+      durationMs: Date.now() - startedAt,
+      status: 'error'
+    })
+
+    throw error
   }
+}
+
+function buildRemoteSystemPrompt(
+  mode: TutorMode,
+  context: PerceptionContextSnapshot,
+  warning: string | null
+): string {
+  const { userProfile } = context
+  return [
+    'You are John, a desktop tutor assistant that watches the user\'s screen.',
+    'A screenshot of the user\'s current screen is attached — use it as your primary source of context.',
+    'Respond in Portuguese (pt-BR). Be concise and practical.',
+    `Teaching mode: ${mode}.`,
+    `User level: ${userProfile.user_level}.`,
+    `Preferred explanation style: ${userProfile.preferred_explanation_style}.`,
+    warning ? `Safety warning to respect: ${warning}.` : '',
+    'Never say you cannot see the screen — describe what is visible and help directly.',
+    'Do not add emojis or unnecessary formatting. Answer as a focused tutor, not a chatbot.'
+  ]
+    .filter(Boolean)
+    .join(' ')
+}
+
+function buildRemoteUserPrompt(
+  request: TutorRequest,
+  context: PerceptionContextSnapshot,
+  domainBody: string | null
+): string {
+  const { semanticState, sessionMemory } = context
+  return [
+    `User request: ${request.prompt}`,
+    `Screen summary: ${semanticState.visual_summary}`,
+    `Detected text: ${semanticState.detected_text || 'none'}`,
+    `Surface type: ${semanticState.surface_type}`,
+    `Probable focus: ${semanticState.probable_user_focus}`,
+    `Current intent: ${sessionMemory.current_intent}`,
+    `Continuity summary: ${sessionMemory.continuity_summary}`,
+    semanticState.pedagogical_topics.length
+      ? `Topics: ${semanticState.pedagogical_topics.join(', ')}`
+      : '',
+    domainBody ? `Domain guidance: ${domainBody}` : '',
+    'Answer as a tutor, not just a chatbot.'
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 function inferMode(request: TutorRequest, profile: UserProfile): TutorMode {
@@ -60,20 +160,20 @@ function inferMode(request: TutorRequest, profile: UserProfile): TutorMode {
 
 function composeResponse(input: {
   mode: TutorMode
-  prompt: string
   context: PerceptionContextSnapshot
   shouldAskConfirmation: boolean
   warning: string | null
+  domainBody: string | null
 }): string {
-  const { mode, context, shouldAskConfirmation, warning } = input
+  const { mode, context, shouldAskConfirmation, warning, domainBody } = input
   const { semanticState, userProfile } = context
 
   const intro = buildIntro(semanticState.uncertainty, semanticState.visual_summary)
-  const body = buildBody(mode, context)
+  const body = domainBody ?? buildGeneralBody(mode, context)
   const confirmation = shouldAskConfirmation
     ? buildConfirmationLine(semanticState.uncertainty)
     : ''
-  const warningLine = warning ? `Atenção: ${warning}` : ''
+  const warningLine = warning ? `Atencao: ${warning}` : ''
   const pedagogicalHint = buildPedagogicalHint(mode, userProfile)
 
   return [intro, body, pedagogicalHint, warningLine, confirmation]
@@ -85,17 +185,17 @@ function composeResponse(input: {
 
 function buildIntro(uncertainty: number, visualSummary: string): string {
   if (uncertainty >= 0.72) {
-    return `Leitura provisória da tela: ${visualSummary}. Posso estar vendo só parte do contexto.`
+    return `Leitura provisoria da tela: ${visualSummary}. Posso estar vendo so parte do contexto.`
   }
 
   if (uncertainty >= 0.45) {
-    return `Pelo que aparece na tela, o contexto mais provável é: ${visualSummary}.`
+    return `Pelo que aparece na tela, o contexto mais provavel e: ${visualSummary}.`
   }
 
-  return `O que a tela sugere neste momento é: ${visualSummary}.`
+  return `O que a tela sugere neste momento e: ${visualSummary}.`
 }
 
-function buildBody(mode: TutorMode, context: PerceptionContextSnapshot): string {
+function buildGeneralBody(mode: TutorMode, context: PerceptionContextSnapshot): string {
   const { semanticState, sessionMemory } = context
   const focus = semanticState.probable_user_focus
   const topics = semanticState.pedagogical_topics
@@ -106,7 +206,7 @@ function buildBody(mode: TutorMode, context: PerceptionContextSnapshot): string 
     case 'direct':
       return [
         `Em termos diretos, o foco parece ser ${focus}.`,
-        topics[0] ? `O conceito principal aqui é ${topics[0]}.` : '',
+        topics[0] ? `O conceito principal aqui e ${topics[0]}.` : '',
         `Continuidade recente: ${continuity}`
       ].filter(Boolean).join('\n')
 
@@ -114,54 +214,54 @@ function buildBody(mode: TutorMode, context: PerceptionContextSnapshot): string 
       return [
         'Vamos por partes:',
         `1. Primeiro identifique o elemento central: ${focus}.`,
-        `2. Depois observe a mudança mais recente: ${change}`,
-        topics.length ? `3. Os tópicos que valem estudar agora são: ${topics.join(', ')}.` : '3. Se quiser, eu quebro isso em subtópicos.'
+        `2. Depois observe a mudanca mais recente: ${change}`,
+        topics.length ? `3. Os topicos que valem estudar agora sao: ${topics.join(', ')}.` : '3. Se quiser, eu quebro isso em subtopicos.'
       ].join('\n')
 
     case 'analogy':
       return [
         `Pense nisso como um professor apontando para o quadro e dizendo "olhe primeiro para ${focus}" antes de entrar nos detalhes.`,
         continuity,
-        topics[0] ? `A analogia útil aqui é tratar ${topics[0]} como a chave de leitura do resto.` : ''
+        topics[0] ? `A analogia util aqui e tratar ${topics[0]} como a chave de leitura do resto.` : ''
       ].filter(Boolean).join('\n')
 
     case 'summary':
       return [
         `Resumo curto: ${focus}.`,
-        `Mudança recente: ${change}`,
+        `Mudanca recente: ${change}`,
         topics.length ? `Assuntos relacionados: ${topics.join(', ')}.` : ''
       ].filter(Boolean).join('\n')
 
     case 'diagnostic':
       return [
         `Antes de eu explicar demais, quero testar se estamos olhando para a mesma coisa: ${focus}.`,
-        topics[0] ? `Se você tivesse que nomear o conceito dominante, seria algo como ${topics[0]}?` : 'Qual parte dessa tela parece mais importante para você?',
-        'Se responder isso, eu ajusto a profundidade da explicação.'
+        topics[0] ? `Se voce tivesse que nomear o conceito dominante, seria algo como ${topics[0]}?` : 'Qual parte dessa tela parece mais importante para voce?',
+        'Se responder isso, eu ajusto a profundidade da explicacao.'
       ].join('\n')
 
     case 'layered':
       return [
         `Camada 1: a tela aponta para ${focus}.`,
-        topics[0] ? `Camada 2: o conceito pedagógico dominante parece ser ${topics[0]}.` : 'Camada 2: há um conceito central que posso destrinchar com exemplos.',
+        topics[0] ? `Camada 2: o conceito pedagogico dominante parece ser ${topics[0]}.` : 'Camada 2: ha um conceito central que posso destrinchar com exemplos.',
         `Camada 3: no fluxo recente, ${continuity.toLowerCase()}`,
-        'Se quiser, a próxima camada pode ser exemplo concreto, passo a passo ou checagem de entendimento.'
+        'Se quiser, a proxima camada pode ser exemplo concreto, passo a passo ou checagem de entendimento.'
       ].join('\n')
   }
 }
 
 function buildPedagogicalHint(mode: TutorMode, profile: UserProfile): string {
-  if (mode === 'diagnostic') return 'Responda em uma frase e eu calibro a explicação.'
-  if (profile.user_level === 'beginner') return 'Vou priorizar vocabulário simples e progressão do básico para o detalhe.'
-  if (profile.user_level === 'advanced') return 'Posso ir direto para nuances, tradeoffs e implicações.'
-  return 'Posso ajustar para mais síntese ou mais profundidade conforme o próximo passo.'
+  if (mode === 'diagnostic') return 'Responda em uma frase e eu calibro a explicacao.'
+  if (profile.user_level === 'beginner') return 'Vou priorizar vocabulario simples e progressao do basico para o detalhe.'
+  if (profile.user_level === 'advanced') return 'Posso ir direto para nuances, tradeoffs e implicacoes.'
+  return 'Posso ajustar para mais sintese ou mais profundidade conforme o proximo passo.'
 }
 
 function buildConfirmationLine(uncertainty: number): string {
   if (uncertainty >= 0.72) {
-    return 'Confirma se você está olhando exatamente para essa área da tela. Se não, descreva o bloco visível e eu recalibro.'
+    return 'Confirma se voce esta olhando exatamente para essa area da tela. Se nao, descreva o bloco visivel e eu recalibro.'
   }
 
-  return 'Se eu estiver mirando a área errada, me diga qual painel ou trecho da tela devo usar como referência.'
+  return 'Se eu estiver mirando a area errada, me diga qual painel ou trecho da tela devo usar como referencia.'
 }
 
 function buildFollowUps(mode: TutorMode, context: PerceptionContextSnapshot): string[] {
@@ -185,15 +285,15 @@ function inferWarning(context: PerceptionContextSnapshot): string | null {
   ].join(' ').toLowerCase()
 
   if (/(senha|password|token|2fa|otp|credencial)/.test(haystack)) {
-    return 'parece haver informação sensível; vou evitar assumir ou repetir dados privados'
+    return 'parece haver informacao sensivel; vou evitar assumir ou repetir dados privados'
   }
 
   if (/(bank|banco|cart[aã]o|saldo|pix|conta)/.test(haystack)) {
-    return 'isso pode envolver contexto financeiro; trate a leitura como apoio, não como instrução operacional'
+    return 'isso pode envolver contexto financeiro; trate a leitura como apoio, nao como instrucao operacional'
   }
 
-  if (/(medical|m[ée]dico|diagn[oó]stico|legal|contrato)/.test(haystack)) {
-    return 'isso pode ser um contexto de alto risco; vale confirmar com a fonte primária'
+  if (/(medical|m[eé]dico|diagn[oó]stico|legal|contrato)/.test(haystack)) {
+    return 'isso pode ser um contexto de alto risco; vale confirmar com a fonte primaria'
   }
 
   return null

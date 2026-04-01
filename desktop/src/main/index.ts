@@ -3,15 +3,45 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
   analyzeOnce, startSession, stopSession,
+  configurePerception,
   setPrivateMode, listSources, onCaptureStateChange, shutdown,
-  getContextSnapshot, updateUserProfile, clearSessionMemory
+  getContextSnapshot, updateUserProfile, clearSessionMemory, resumeAfterSensitiveBlock
 } from './services/perception'
 import { checkScreenPermission, requestScreenPermission } from './services/permission'
 import { generateTutorResponse } from './services/tutor'
+import { getAppSettings, resetAppSettings, updateAppSettings } from './services/settings'
+import {
+  getAISettingsSnapshot,
+  removeAIProvider,
+  resetAISettings,
+  saveAIProvider,
+  testAIProvider,
+  updateAIRouting
+} from './services/ai-provider'
+import {
+  clearConsentTrail,
+  clearDiagnostics,
+  getDiagnosticsSnapshot,
+  getPrivacySnapshot,
+  installCrashHandlers,
+  markDataDeletion,
+  recordConsentChange,
+  recordDiagnosticEvent,
+  recordPerformanceTrace
+} from './services/observability'
+import {
+  dismissCurrentHint,
+  getProactiveState,
+  markProactiveUserActivity,
+  markProactiveStreaming,
+  onProactiveHint
+} from './services/proactive-engine'
+import { resetUserProfile } from './services/user-profile'
+import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
 
-const HUD_COMPACT = { width: 360, height: 64 }
+const HUD_COMPACT = { width: 488, height: 55 }
 
 function getInitialPosition(width: number) {
   const display = screen.getPrimaryDisplay()
@@ -44,6 +74,8 @@ function createHudWindow(): void {
 
   hudWindow.setAlwaysOnTop(true, 'screen-saver')
   hudWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+  // Keep the HUD out of screen capture frames to avoid self-perception loops.
+  hudWindow.setContentProtection(true)
 
   hudWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
@@ -55,13 +87,29 @@ function createHudWindow(): void {
     hudWindow?.webContents.send('perception:capture-state', isCapturing)
   })
   hudWindow.on('closed', unsubscribe)
+  const unsubscribeProactive = onProactiveHint(hint => {
+    hudWindow?.webContents.send('proactive:hint', hint)
+  })
+  hudWindow.on('closed', unsubscribeProactive)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     hudWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-    hudWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     hudWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+async function applyWindowSettings(): Promise<void> {
+  if (!hudWindow) return
+  const settings = await getAppSettings()
+  configurePerception({
+    targetSourceId:
+      settings.captureScope.mode === 'selected-source'
+        ? settings.captureScope.selectedSourceId
+        : null
+  })
+  hudWindow.setAlwaysOnTop(settings.alwaysVisible, 'screen-saver')
+  hudWindow.setVisibleOnAllWorkspaces(settings.alwaysVisible, { visibleOnFullScreen: false })
 }
 
 // ─── Drag ─────────────────────────────────────────────────────────────────────
@@ -89,12 +137,18 @@ ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number
   const margin = 24
   const newX = Math.max(margin, Math.min(cx, sw - width - margin))
   const newY = Math.max(margin, Math.min(cy, sh - height - margin))
-  hudWindow.setBounds({ x: newX, y: newY, width, height }, true)
+  hudWindow.setBounds({ x: newX, y: newY, width, height }, false)
 })
 
 // ─── Perception IPC ───────────────────────────────────────────────────────────
 
 ipcMain.handle('perception:check-permission', async () => {
+  void recordDiagnosticEvent({
+    type: 'trace',
+    source: 'perception',
+    action: 'check_permission',
+    details: {}
+  })
   return checkScreenPermission()
 })
 
@@ -118,8 +172,113 @@ ipcMain.handle('perception:clear-session-memory', async () => {
   return clearSessionMemory()
 })
 
+ipcMain.handle('perception:resume-sensitive-block', async () => {
+  return resumeAfterSensitiveBlock()
+})
+
 ipcMain.handle('tutor:respond', async (_e, request) => {
   return generateTutorResponse(request)
+})
+
+ipcMain.handle('ai:get-settings', async () => {
+  return getAISettingsSnapshot()
+})
+
+ipcMain.handle('ai:save-provider', async (_e, input) => {
+  return saveAIProvider(input)
+})
+
+ipcMain.handle('ai:remove-provider', async (_e, providerId) => {
+  return removeAIProvider(providerId)
+})
+
+ipcMain.handle('ai:test-provider', async (_e, providerId) => {
+  return testAIProvider(providerId)
+})
+
+ipcMain.handle('ai:update-routing', async (_e, patch) => {
+  return updateAIRouting(patch)
+})
+
+ipcMain.handle('settings:get', async () => {
+  return getAppSettings()
+})
+
+ipcMain.handle('settings:update', async (_e, patch) => {
+  const startedAt = Date.now()
+  const settings = await updateAppSettings(patch)
+  await applyWindowSettings()
+  if (typeof patch.telemetryOptIn === 'boolean') {
+    await recordConsentChange({ action: 'telemetry_opt_in', enabled: patch.telemetryOptIn })
+  }
+  if (typeof patch.alwaysVisible === 'boolean') {
+    await recordConsentChange({ action: 'always_visible', enabled: patch.alwaysVisible })
+  }
+  if (typeof patch.passiveSuggestions === 'boolean') {
+    await recordConsentChange({ action: 'passive_suggestions', enabled: patch.passiveSuggestions })
+  }
+  if (typeof patch.featureFlags?.crashReporting === 'boolean') {
+    await recordConsentChange({ action: 'crash_reporting', enabled: patch.featureFlags.crashReporting })
+  }
+  if (typeof patch.featureFlags?.advancedPerception === 'boolean') {
+    await recordConsentChange({ action: 'advanced_perception', enabled: patch.featureFlags.advancedPerception })
+  }
+  if (typeof patch.featureFlags?.voiceMode === 'boolean') {
+    await recordConsentChange({ action: 'voice_mode', enabled: patch.featureFlags.voiceMode })
+  }
+  if (patch.captureScope) {
+    await recordConsentChange({
+      action: patch.captureScope.mode === 'selected-source' ? 'capture_scope_selected' : 'capture_scope_open',
+      enabled: patch.captureScope.mode === 'selected-source'
+    })
+  }
+  void recordDiagnosticEvent({
+    type: 'audit',
+    source: 'settings',
+    action: 'settings_updated',
+    details: {
+      telemetryOptIn: settings.telemetryOptIn,
+      alwaysVisible: settings.alwaysVisible,
+      minimalMode: settings.minimalMode,
+      passiveSuggestions: settings.passiveSuggestions,
+      selectedScope: settings.captureScope.mode === 'selected-source'
+    }
+  })
+  void recordPerformanceTrace({
+    operation: 'settings.update',
+    durationMs: Date.now() - startedAt,
+    status: 'ok'
+  })
+  return settings
+})
+
+ipcMain.handle('diagnostics:get', async () => {
+  return getDiagnosticsSnapshot()
+})
+
+ipcMain.handle('privacy:get', async () => {
+  return getPrivacySnapshot()
+})
+
+ipcMain.handle('privacy:delete-local-data', async () => {
+  clearSessionMemory()
+  await clearDiagnostics()
+  await clearConsentTrail()
+  await resetUserProfile()
+  await resetAppSettings()
+  await resetAISettings()
+  await applyWindowSettings()
+  markDataDeletion()
+
+  const summary: DataDeletionSummary = {
+    sessionCleared: true,
+    diagnosticsCleared: true,
+    userProfileReset: true,
+    settingsReset: true,
+    at: Date.now()
+  }
+
+  return summary
 })
 
 ipcMain.on('perception:start-session', () => startSession())
@@ -127,10 +286,27 @@ ipcMain.on('perception:stop-session',  () => stopSession())
 
 ipcMain.on('perception:set-private-mode', (_e, enabled: boolean) => {
   setPrivateMode(enabled)
+  void recordConsentChange({ action: 'private_mode', enabled })
 })
 
 ipcMain.handle('perception:get-sources', async () => {
   return listSources()
+})
+
+ipcMain.handle('proactive:get-state', async () => {
+  return getProactiveState()
+})
+
+ipcMain.on('proactive:mark-activity', (_e, type) => {
+  markProactiveUserActivity(type)
+})
+
+ipcMain.on('proactive:dismiss-hint', (_e, outcome) => {
+  dismissCurrentHint(outcome)
+})
+
+ipcMain.on('proactive:set-streaming', (_e, active: boolean) => {
+  markProactiveStreaming(active)
 })
 
 // ─── HUD toggle ───────────────────────────────────────────────────────────────
@@ -145,8 +321,10 @@ function toggleHud(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.john.desktop')
+  void installCrashHandlers()
   app.on('browser-window-created', (_, w) => optimizer.watchWindowShortcuts(w))
   createHudWindow()
+  void applyWindowSettings()
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createHudWindow()

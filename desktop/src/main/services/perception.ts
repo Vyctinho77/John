@@ -1,6 +1,14 @@
 import { captureScreen, getWindowSources } from './capture'
 import { recognizeImage, terminateWorker } from './ocr'
+import { detectSensitiveSurface } from './privacy-guards'
+import { evaluateProactiveOpportunity } from './proactive-engine'
 import { getUserProfile, updateUserProfile as persistUserProfile } from './user-profile'
+import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
+import {
+  effectiveObservationText,
+  estimateUncertainty,
+  extractPrimaryContentText
+} from './perception-helpers'
 import type {
   CaptureSource,
   ChangeSummary,
@@ -31,6 +39,7 @@ let captureStateListeners: ((isCapturing: boolean) => void)[] = []
 let lastRawText = ''
 let sessionMemory = createSessionMemory()
 let latestSnapshot: PerceptionContextSnapshot | null = null
+let sensitiveSurfaceBlocked = false
 
 export function configurePerception(patch: Partial<PerceptionConfig>): void {
   config = { ...config, ...patch }
@@ -38,12 +47,13 @@ export function configurePerception(patch: Partial<PerceptionConfig>): void {
 
 export function setPrivateMode(enabled: boolean): void {
   config.privateMode = enabled
+  if (enabled) sensitiveSurfaceBlocked = false
   notifyCaptureState(!enabled && config.enabled)
   if (enabled) stopSession()
 }
 
 export function startSession(): void {
-  if (config.privateMode) return
+  if (config.privateMode || sensitiveSurfaceBlocked) return
   config.enabled = true
   ensureActiveSession()
   notifyCaptureState(true)
@@ -65,37 +75,103 @@ export function stopSession(): void {
 }
 
 export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
+  const startedAt = Date.now()
   const userProfile = await getUserProfile()
 
-  if (config.privateMode) {
-    const snapshot = buildEmptySnapshot('private mode active', userProfile)
+  try {
+    if (config.privateMode) {
+      const snapshot = buildEmptySnapshot('private mode active', userProfile)
+      latestSnapshot = snapshot
+      void recordPerformanceTrace({
+        operation: 'perception.analyze',
+        durationMs: Date.now() - startedAt,
+        status: 'ok'
+      })
+      return snapshot
+    }
+
+    ensureActiveSession()
+
+    const dataUrl = await captureScreen(config.targetSourceId ?? undefined)
+    if (!dataUrl) {
+      const snapshot = buildEmptySnapshot('capture failed - check screen recording permission', userProfile)
+      latestSnapshot = snapshot
+      void recordPerformanceTrace({
+        operation: 'perception.analyze',
+        durationMs: Date.now() - startedAt,
+        status: 'error'
+      })
+      return snapshot
+    }
+
+    const perception = await recognizeImage(dataUrl)
+    if (!perception.rawText.trim() && perception.regions.length === 0) {
+      const snapshot = buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
+      latestSnapshot = snapshot
+      void recordPerformanceTrace({
+        operation: 'perception.analyze',
+        durationMs: Date.now() - startedAt,
+        status: 'ok'
+      })
+      return snapshot
+    }
+
+    const semanticState = buildSemanticState(perception, userProfile)
+
+    if (semanticState.capture_policy === 'blocked-sensitive') {
+      sensitiveSurfaceBlocked = true
+      stopSession()
+    }
+
+    lastRawText = semanticState.detected_text || effectiveObservationText(perception) || perception.rawText
+    sessionMemory = updateSessionMemory(sessionMemory, semanticState)
+
+    const snapshot = {
+      semanticState,
+      sessionMemory,
+      userProfile,
+      screenshotDataUrl: dataUrl
+    }
+
+    void evaluateProactiveOpportunity(snapshot)
+
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'perception',
+      action: 'analyze_once',
+      sessionId: sessionMemory.session_id,
+      details: {
+        surfaceType: semanticState.surface_type,
+        changeSummary: semanticState.change_summary,
+        uncertainty: Number(semanticState.uncertainty.toFixed(2))
+      }
+    })
+
+    void recordPerformanceTrace({
+      operation: 'perception.analyze',
+      durationMs: Date.now() - startedAt,
+      status: semanticState.capture_policy === 'blocked-sensitive' ? 'error' : 'ok'
+    })
+
     latestSnapshot = snapshot
     return snapshot
+  } catch (error) {
+    void recordDiagnosticEvent({
+      type: 'error',
+      source: 'perception',
+      action: 'analyze_failed',
+      sessionId: sessionMemory.session_id,
+      details: {
+        hasMessage: error instanceof Error ? Boolean(error.message) : true
+      }
+    })
+    void recordPerformanceTrace({
+      operation: 'perception.analyze',
+      durationMs: Date.now() - startedAt,
+      status: 'error'
+    })
+    throw error
   }
-
-  ensureActiveSession()
-
-  const dataUrl = await captureScreen(config.targetSourceId ?? undefined)
-  if (!dataUrl) {
-    const snapshot = buildEmptySnapshot('capture failed - check screen recording permission', userProfile)
-    latestSnapshot = snapshot
-    return snapshot
-  }
-
-  const perception = await recognizeImage(dataUrl)
-  const semanticState = buildSemanticState(perception, userProfile)
-
-  lastRawText = perception.rawText
-  sessionMemory = updateSessionMemory(sessionMemory, semanticState)
-
-  const snapshot = {
-    semanticState,
-    sessionMemory,
-    userProfile
-  }
-
-  latestSnapshot = snapshot
-  return snapshot
 }
 
 export async function getContextSnapshot(): Promise<PerceptionContextSnapshot> {
@@ -115,10 +191,21 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
   const snapshot = {
     semanticState,
     sessionMemory,
-    userProfile
+    userProfile,
+    screenshotDataUrl: latestSnapshot?.screenshotDataUrl ?? null
   }
 
   latestSnapshot = snapshot
+  void recordDiagnosticEvent({
+    type: 'audit',
+    source: 'perception',
+    action: 'user_profile_updated',
+    sessionId: sessionMemory.session_id,
+    details: {
+      userLevel: userProfile.user_level,
+      responseTone: userProfile.response_tone
+    }
+  })
   return snapshot
 }
 
@@ -133,7 +220,29 @@ export function clearSessionMemory(): SessionMemory {
     }
   }
 
+  void recordDiagnosticEvent({
+    type: 'audit',
+    source: 'perception',
+    action: 'session_memory_cleared',
+    sessionId: sessionMemory.session_id,
+    details: {}
+  })
+
   return sessionMemory
+}
+
+export async function resumeAfterSensitiveBlock(): Promise<PerceptionContextSnapshot> {
+  sensitiveSurfaceBlocked = false
+  lastRawText = ''
+
+  const userProfile = await getUserProfile()
+  if (config.privateMode) {
+    const snapshot = buildEmptySnapshot('private mode active', userProfile)
+    latestSnapshot = snapshot
+    return snapshot
+  }
+
+  return analyzeOnce()
 }
 
 export async function listSources(): Promise<CaptureSource[]> {
@@ -156,15 +265,18 @@ function buildSemanticState(
   perception: PerceptionResult,
   userProfile: UserProfile
 ): SemanticState {
-  const text = perception.rawText.trim()
-  const surface = classifySurface(text)
-  const change = computeChange(lastRawText, text)
+  const text = extractPrimaryContentText(perception)
+  const fallbackText = perception.rawText.trim()
+  const effectiveText = text || fallbackText
+  const surface = classifySurface(effectiveText)
+  const change = computeChange(lastRawText, effectiveText)
   const focusRegion = estimateFocus(perception.regions)
-  const uncertainty = Math.max(0, Math.min(1, 1 - perception.confidence / 100))
-  const detectedText = summarizeText(text, surface)
+  const uncertainty = estimateUncertainty(perception, text, fallbackText)
+  const detectedText = summarizeText(effectiveText, surface)
   const probableUserFocus = inferUserFocus(detectedText, surface, focusRegion)
   const inferredIntent = inferIntent(surface, detectedText, userProfile)
-  const pedagogicalTopics = inferPedagogicalTopics(text, surface, userProfile)
+  const pedagogicalTopics = inferPedagogicalTopics(effectiveText, surface, userProfile)
+  const sensitivity = detectSensitiveSurface(fallbackText || effectiveText)
   const visualSummary = buildVisualSummary({
     detectedText,
     surface,
@@ -183,6 +295,8 @@ function buildSemanticState(
     probable_user_focus: probableUserFocus,
     inferred_intent: inferredIntent,
     pedagogical_topics: pedagogicalTopics,
+    capture_policy: sensitivity.isSensitive ? 'blocked-sensitive' : 'allowed',
+    sensitivity_reason: sensitivity.reason,
     uncertainty,
     capturedAt: perception.capturedAt
   }
@@ -198,7 +312,8 @@ function buildEmptySnapshot(
   return {
     semanticState,
     sessionMemory,
-    userProfile
+    userProfile,
+    screenshotDataUrl: null
   }
 }
 
@@ -212,6 +327,8 @@ function buildEmptySemanticState(reason: string): SemanticState {
     probable_user_focus: 'context unavailable',
     inferred_intent: 'await clearer context',
     pedagogical_topics: [],
+    capture_policy: reason === 'private mode active' ? 'private-mode' : 'allowed',
+    sensitivity_reason: null,
     uncertainty: 1,
     capturedAt: Date.now()
   }

@@ -1,12 +1,29 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
+  AppSettings,
   CaptureSource,
+  DataDeletionSummary,
+  DiagnosticsSnapshot,
   PerceptionContextSnapshot,
+  PrivacySnapshot,
   SessionMemory,
   TutorRequest,
   TutorResponse,
   UserProfile
 } from '../shared/perception.types'
+import type {
+  AIRoutingSettings,
+  AIProviderId,
+  AISettingsSnapshot,
+  SaveAIProviderInput,
+  TestAIProviderResult
+} from '../shared/ai-provider.types'
+import type {
+  ProactiveActivityType,
+  ProactiveHint,
+  ProactiveOutcome,
+  ProactiveState
+} from '../shared/proactive.types'
 
 declare global {
   interface Window {
@@ -28,10 +45,32 @@ declare global {
       getSources:        () => Promise<CaptureSource[]>
       updateUserProfile: (patch: Partial<UserProfile>) => Promise<PerceptionContextSnapshot>
       clearSessionMemory: () => Promise<SessionMemory>
+      resumeSensitiveBlock: () => Promise<PerceptionContextSnapshot>
       onCaptureStateChange: (cb: (isCapturing: boolean) => void) => () => void
     }
     tutorAPI: {
       respond: (request: TutorRequest) => Promise<TutorResponse>
+    }
+    settingsAPI: {
+      get: () => Promise<AppSettings>
+      update: (patch: Partial<AppSettings>) => Promise<AppSettings>
+      getDiagnostics: () => Promise<DiagnosticsSnapshot>
+      getPrivacy: () => Promise<PrivacySnapshot>
+      deleteLocalData: () => Promise<DataDeletionSummary>
+    }
+    aiAPI: {
+      getSettings: () => Promise<AISettingsSnapshot>
+      saveProvider: (input: SaveAIProviderInput) => Promise<AISettingsSnapshot>
+      removeProvider: (providerId: AIProviderId) => Promise<AISettingsSnapshot>
+      testProvider: (providerId: AIProviderId) => Promise<TestAIProviderResult>
+      updateRouting: (patch: Partial<AIRoutingSettings>) => Promise<AISettingsSnapshot>
+    }
+    proactiveAPI: {
+      getState: () => Promise<ProactiveState>
+      markActivity: (type: ProactiveActivityType) => void
+      dismissHint: (outcome?: ProactiveOutcome) => void
+      setStreaming: (active: boolean) => void
+      onHint: (cb: (hint: ProactiveHint | null) => void) => () => void
     }
   }
 }

@@ -1,11 +1,35 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useHudStateMachine, HudVisual } from '@renderer/hooks/useHudStateMachine'
 import { usePerception } from '@renderer/hooks/usePerception'
-import type { TutorMessage, TutorResponse } from '@shared/perception.types'
+import type {
+  AppSettings,
+  CaptureSource,
+  DataDeletionSummary,
+  DiagnosticsSnapshot,
+  PrivacySnapshot,
+  TutorMessage,
+  TutorResponse
+} from '@shared/perception.types'
+import type { AIProviderId, AISettingsSnapshot, SaveAIProviderInput } from '@shared/ai-provider.types'
+import type { ProactiveHint } from '@shared/proactive.types'
 import { HudShell, HudContent } from './HudShell'
 import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
+
+const FONT_FAMILY_MAP = {
+  'system-sans': '"SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+  'system-serif': '"New York", Georgia, "Times New Roman", serif',
+  mono: '"SF Mono", "Cascadia Code", Consolas, monospace'
+} as const
+
+const FONT_WEIGHT_MAP = {
+  light: 300,
+  book: 350,
+  regular: 400,
+  medium: 500,
+  bold: 700
+} as const
 
 interface Message {
   role: 'user' | 'assistant'
@@ -22,6 +46,7 @@ function streamText(
   const interval = setInterval(() => {
     if (i >= text.length) {
       clearInterval(interval)
+      onChunk(text)
       onDone()
       return
     }
@@ -35,11 +60,18 @@ export function HUD() {
   const [inputValue, setInputValue] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [streamingContent, setChunk] = useState('')
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [sources, setSources] = useState<CaptureSource[]>([])
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null)
+  const [privacy, setPrivacy] = useState<PrivacySnapshot | null>(null)
+  const [lastDeletion, setLastDeletion] = useState<DataDeletionSummary | null>(null)
+  const [aiSettings, setAISettings] = useState<AISettingsSnapshot | null>(null)
+  const [proactiveHint, setProactiveHint] = useState<ProactiveHint | null>(null)
   const prevVisual = useRef<HudVisual>('compact')
 
   const {
     visual, isStreaming,
-    expand, expandFull, collapse, ping,
+    expand, expandFull, showIntermediate, showExpanded, collapse, ping,
     setStreaming, setInputFocused
   } = useHudStateMachine()
 
@@ -50,6 +82,7 @@ export function HUD() {
     contextSnapshot,
     isCapturing,
     togglePrivateMode: _togglePrivate,
+    resumeSensitiveBlock,
     updateUserProfile,
     clearSessionMemory
   } = usePerception({ sessionActive, privateMode })
@@ -58,10 +91,108 @@ export function HUD() {
   const sessionMemory = contextSnapshot?.sessionMemory ?? null
   const userProfile = contextSnapshot?.userProfile ?? null
 
+  const refreshPrivacyState = useCallback(async () => {
+    const [nextSettings, nextSources, nextDiagnostics, nextPrivacy, nextAISettings] = await Promise.all([
+      window.settingsAPI.get(),
+      window.perceptionAPI.getSources(),
+      window.settingsAPI.getDiagnostics(),
+      window.settingsAPI.getPrivacy(),
+      window.aiAPI.getSettings()
+    ])
+
+    setSettings(nextSettings)
+    setSources(nextSources)
+    setDiagnostics(nextDiagnostics)
+    setPrivacy(nextPrivacy)
+    setAISettings(nextAISettings)
+  }, [])
+
+  useEffect(() => {
+    void refreshPrivacyState()
+  }, [refreshPrivacyState])
+
+  useEffect(() => {
+    window.proactiveAPI.getState().then(state => setProactiveHint(state.currentHint))
+    const unsub = window.proactiveAPI.onHint(hint => setProactiveHint(hint))
+    return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    window.proactiveAPI.setStreaming(isStreaming)
+  }, [isStreaming])
+
+  const handleActivity = useCallback((type: 'mouse-move' | 'scroll' | 'typing' | 'submit' | 'expand' | 'collapse' | 'engage' = 'engage') => {
+    ping()
+    window.proactiveAPI.markActivity(type)
+  }, [ping])
+
+  const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    const next = await window.settingsAPI.update(patch)
+    setSettings(next)
+    const [nextDiagnostics, nextPrivacy] = await Promise.all([
+      window.settingsAPI.getDiagnostics(),
+      window.settingsAPI.getPrivacy()
+    ])
+    setDiagnostics(nextDiagnostics)
+    setPrivacy(nextPrivacy)
+  }, [])
+
+  const handleDeleteLocalData = useCallback(async () => {
+    const summary = await window.settingsAPI.deleteLocalData()
+    setLastDeletion(summary)
+    setMessages([])
+    setInputValue('')
+    setChunk('')
+    setPrivateModeState(false)
+    await refreshPrivacyState()
+  }, [refreshPrivacyState])
+
+  const refreshAISettings = useCallback(async () => {
+    const snapshot = await window.aiAPI.getSettings()
+    setAISettings(snapshot)
+  }, [])
+
+  const handleSaveProvider = useCallback(async (input: SaveAIProviderInput) => {
+    const snapshot = await window.aiAPI.saveProvider(input)
+    setAISettings(snapshot)
+  }, [])
+
+  const handleRemoveProvider = useCallback(async (providerId: AIProviderId) => {
+    const snapshot = await window.aiAPI.removeProvider(providerId)
+    setAISettings(snapshot)
+  }, [])
+
+  const handleTestProvider = useCallback(async (providerId: AIProviderId) => {
+    const result = await window.aiAPI.testProvider(providerId)
+    setAISettings(current => {
+      if (!current) return current
+      return {
+        ...current,
+        providers: current.providers.map(provider =>
+          provider.id === providerId ? result.snapshot : provider
+        )
+      }
+    })
+    const fresh = await window.aiAPI.getSettings()
+    setAISettings(fresh)
+    return result
+  }, [])
+
+  const handleUpdateAIRouting = useCallback(async (patch: Partial<AISettingsSnapshot['routing']>) => {
+    const snapshot = await window.aiAPI.updateRouting(patch)
+    setAISettings(snapshot)
+  }, [])
+
   const handleTogglePrivate = useCallback(() => {
     setPrivateModeState(prev => !prev)
     _togglePrivate()
-  }, [_togglePrivate])
+    setTimeout(() => { void refreshPrivacyState() }, 0)
+  }, [_togglePrivate, refreshPrivacyState])
+
+  const handleResumeSensitiveBlock = useCallback(async () => {
+    await resumeSensitiveBlock()
+    await refreshPrivacyState()
+  }, [refreshPrivacyState, resumeSensitiveBlock])
 
   const handleCycleLevel = useCallback(() => {
     if (!userProfile) return
@@ -107,6 +238,8 @@ export function HUD() {
 
     setInputValue('')
     setChunk('')
+    window.proactiveAPI.markActivity('submit')
+    window.proactiveAPI.dismissHint('consumed')
 
     setMessages(prev => {
       if (prev.length === 0) expandFull()
@@ -140,6 +273,7 @@ export function HUD() {
           ])
           setChunk('')
           setStreaming(false)
+          void refreshPrivacyState()
         }
       )
     } catch (error) {
@@ -150,6 +284,7 @@ export function HUD() {
           role: 'assistant',
           content: 'Nao consegui gerar uma explicacao contextual agora. Tente novamente com a sessao ativa.',
           meta: {
+            domain: 'general',
             mode: 'direct',
             content: '',
             uncertainty: 1,
@@ -163,28 +298,52 @@ export function HUD() {
       setChunk('')
       setStreaming(false)
     }
-  }, [contextSnapshot, expandFull, inputValue, isStreaming, messages, setStreaming])
+  }, [contextSnapshot, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming])
 
   const latestAssistant = [...messages].reverse().find(message => message.role === 'assistant')
   const latestResponse = latestAssistant?.content ?? ''
   const latestResponseMeta = latestAssistant?.meta ?? null
+  const passiveSuggestion =
+    settings?.passiveSuggestions && settings.featureFlags.passiveSuggestions
+      ? proactiveHint?.text
+        ?? latestResponseMeta?.suggested_follow_ups?.[0]
+        ?? semanticState?.pedagogical_topics?.[0]
+        ?? null
+      : null
+
+  const typography = settings?.typography
+  const hudTypographyStyle = typography
+    ? {
+        ['--hud-font-size' as string]: `${typography.fontSize}px`,
+        fontFamily: FONT_FAMILY_MAP[typography.fontFamily],
+        fontWeight: FONT_WEIGHT_MAP[typography.fontWeight] as number
+      }
+    : undefined
 
   return (
-    <div className="w-screen h-screen flex items-start justify-center">
+    <div className="w-screen h-screen flex items-start justify-center hud-typography" style={hudTypographyStyle}>
       <HudShell visual={visual} prevVisual={prevVisual.current}>
         <HudContent id={visual}>
           {visual === 'compact' && (
-            <HudCompact onExpand={expand} isCapturing={isCapturing} />
+            <HudCompact
+              onExpand={expand}
+              onExpandFull={expandFull}
+              onActivity={() => handleActivity('expand')}
+              isCapturing={isCapturing}
+              minimalMode={settings?.minimalMode ?? false}
+              passiveSuggestion={passiveSuggestion}
+              hasProactiveHint={Boolean(proactiveHint)}
+            />
           )}
 
           {visual === 'intermediate' && (
             <HudIntermediate
               inputValue={inputValue}
-              onInputChange={value => { setInputValue(value); ping() }}
+              onInputChange={value => { setInputValue(value); handleActivity('typing') }}
               onSubmit={handleSubmit}
               onInputFocus={() => setInputFocused(true)}
               onInputBlur={() => setInputFocused(false)}
-              onActivity={ping}
+              onActivity={() => handleActivity('engage')}
               onCollapse={collapse}
               response={latestResponse}
               responseMeta={latestResponseMeta}
@@ -194,17 +353,20 @@ export function HUD() {
               isCapturing={isCapturing}
               isPrivate={privateMode}
               onTogglePrivate={handleTogglePrivate}
+              onShowStage1={collapse}
+              onShowStage2={showIntermediate}
+              onShowStage3={showExpanded}
             />
           )}
 
           {visual === 'expanded' && (
             <HudExpanded
               inputValue={inputValue}
-              onInputChange={value => { setInputValue(value); ping() }}
+              onInputChange={value => { setInputValue(value); handleActivity('typing') }}
               onSubmit={handleSubmit}
               onInputFocus={() => setInputFocused(true)}
               onInputBlur={() => setInputFocused(false)}
-              onActivity={ping}
+              onActivity={() => handleActivity('engage')}
               onCollapse={collapse}
               messages={messages}
               isStreaming={isStreaming}
@@ -213,13 +375,107 @@ export function HUD() {
               semanticState={semanticState}
               sessionMemory={sessionMemory}
               userProfile={userProfile}
+              settings={settings}
+              diagnostics={diagnostics}
+              privacy={privacy}
+              lastDeletion={lastDeletion}
+              sources={sources}
               isCapturing={isCapturing}
               isPrivate={privateMode}
               onTogglePrivate={handleTogglePrivate}
+              onResumeSensitiveBlock={handleResumeSensitiveBlock}
               onCycleLevel={handleCycleLevel}
               onCycleStyle={handleCycleStyle}
+              onUpdateUserProfile={updateUserProfile}
               onClearContext={clearSessionMemory}
               onQuickPrompt={value => setInputValue(value)}
+              onToggleTelemetry={() => {
+                if (!settings) return
+                void updateSettings({ telemetryOptIn: !settings.telemetryOptIn })
+              }}
+              onToggleAlwaysVisible={() => {
+                if (!settings) return
+                void updateSettings({ alwaysVisible: !settings.alwaysVisible })
+              }}
+              onToggleMinimalMode={() => {
+                if (!settings) return
+                void updateSettings({ minimalMode: !settings.minimalMode })
+              }}
+              onTogglePassiveSuggestions={() => {
+                if (!settings) return
+                void updateSettings({
+                  passiveSuggestions: !settings.passiveSuggestions,
+                  featureFlags: {
+                    ...settings.featureFlags,
+                    passiveSuggestions: !settings.passiveSuggestions
+                  }
+                })
+              }}
+              onToggleAdvancedPerception={() => {
+                if (!settings) return
+                void updateSettings({
+                  featureFlags: {
+                    ...settings.featureFlags,
+                    advancedPerception: !settings.featureFlags.advancedPerception
+                  }
+                })
+              }}
+              onToggleCrashReporting={() => {
+                if (!settings) return
+                void updateSettings({
+                  featureFlags: {
+                    ...settings.featureFlags,
+                    crashReporting: !settings.featureFlags.crashReporting
+                  }
+                })
+              }}
+              onToggleVoiceMode={() => {
+                if (!settings) return
+                void updateSettings({
+                  featureFlags: {
+                    ...settings.featureFlags,
+                    voiceMode: !settings.featureFlags.voiceMode
+                  }
+                })
+              }}
+              onSelectCaptureSource={source => {
+                if (!settings) return
+                void updateSettings({
+                  captureScope: source
+                    ? {
+                        ...settings.captureScope,
+                        mode: 'selected-source',
+                        selectedSourceId: source.id,
+                        selectedSourceName: source.name
+                      }
+                    : {
+                        ...settings.captureScope,
+                        mode: 'any-visible',
+                        selectedSourceId: null,
+                        selectedSourceName: null
+                      }
+                })
+              }}
+              onDeleteLocalData={() => { void handleDeleteLocalData() }}
+              aiSettings={aiSettings}
+              onRefreshAISettings={refreshAISettings}
+              onSaveProvider={input => { void handleSaveProvider(input) }}
+              onRemoveProvider={providerId => { void handleRemoveProvider(providerId) }}
+              onTestProvider={providerId => handleTestProvider(providerId)}
+              onUpdateAIRouting={patch => { void handleUpdateAIRouting(patch) }}
+              onUpdateTypography={patch => {
+                if (!settings) return
+                void updateSettings({
+                  typography: {
+                    ...settings.typography,
+                    ...patch
+                  }
+                })
+              }}
+              onShowStage1={collapse}
+              onShowStage2={showIntermediate}
+              onShowStage3={showExpanded}
+              onSettingsOpenChange={open => setInputFocused(open)}
             />
           )}
         </HudContent>

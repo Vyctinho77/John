@@ -30,6 +30,8 @@ export interface SemanticState {
   probable_user_focus: string
   inferred_intent: string
   pedagogical_topics: string[]
+  capture_policy: 'allowed' | 'blocked-sensitive' | 'private-mode'
+  sensitivity_reason: string | null
   uncertainty: number
   capturedAt: number
 }
@@ -60,6 +62,7 @@ export interface SessionMemory {
 }
 
 export interface UserProfile {
+  display_name: string
   user_level: 'beginner' | 'intermediate' | 'advanced'
   preferred_explanation_style: 'step_by_step' | 'direct' | 'analogy' | 'summary'
   study_goals: string[]
@@ -72,6 +75,7 @@ export interface PerceptionContextSnapshot {
   semanticState: SemanticState
   sessionMemory: SessionMemory
   userProfile: UserProfile
+  screenshotDataUrl: string | null
 }
 
 export type TutorMode =
@@ -81,6 +85,15 @@ export type TutorMode =
   | 'summary'
   | 'diagnostic'
   | 'layered'
+
+export type TutorDomain =
+  | 'general'
+  | 'reading'
+  | 'homework'
+  | 'code'
+  | 'market'
+  | 'document'
+  | 'dashboard'
 
 export interface TutorMessage {
   role: 'user' | 'assistant'
@@ -94,8 +107,11 @@ export interface TutorRequest {
 }
 
 export interface TutorResponse {
+  domain: TutorDomain
   mode: TutorMode
   content: string
+  provider?: string
+  model?: string
   uncertainty: number
   should_ask_confirmation: boolean
   needs_visual_confirmation: boolean
@@ -103,10 +119,120 @@ export interface TutorResponse {
   warning: string | null
 }
 
+export interface FeatureFlags {
+  passiveSuggestions: boolean
+  advancedPerception: boolean
+  voiceMode: boolean
+  crashReporting: boolean
+}
+
+export interface CaptureScopeSettings {
+  mode: 'any-visible' | 'selected-source'
+  selectedSourceId: string | null
+  selectedSourceName: string | null
+  blockedSourceKeywords: string[]
+}
+
+export type TypographyFontFamily = 'system-sans' | 'system-serif' | 'mono'
+
+export type TypographyFontWeight = 'light' | 'book' | 'regular' | 'medium' | 'bold'
+
+export interface TypographySettings {
+  fontFamily: TypographyFontFamily
+  fontSize: number
+  fontWeight: TypographyFontWeight
+}
+
+export interface AppSettings {
+  telemetryOptIn: boolean
+  alwaysVisible: boolean
+  minimalMode: boolean
+  passiveSuggestions: boolean
+  featureFlags: FeatureFlags
+  captureScope: CaptureScopeSettings
+  typography: TypographySettings
+  updatedAt: number
+}
+
+export interface DiagnosticEvent {
+  id: string
+  type: 'trace' | 'audit' | 'error'
+  source: 'main' | 'perception' | 'tutor' | 'renderer' | 'settings' | 'proactive'
+  action: string
+  at: number
+  sessionId?: string
+  details: Record<string, string | number | boolean | null>
+}
+
+export interface PerformanceTrace {
+  id: string
+  operation: string
+  durationMs: number
+  at: number
+  status: 'ok' | 'error'
+}
+
+export interface ReplayEvent {
+  id: string
+  at: number
+  source: DiagnosticEvent['source']
+  action: string
+  sessionId?: string
+  summary: string
+}
+
+export interface FeatureFlagPolicyState {
+  requested: boolean
+  effective: boolean
+  rolloutPercentage: number
+  reason: string
+}
+
+export type FeaturePolicySnapshot = Record<keyof FeatureFlags, FeatureFlagPolicyState>
+
+export interface DiagnosticsSnapshot {
+  appVersion: string
+  telemetryOptIn: boolean
+  eventCount: number
+  recentEvents: DiagnosticEvent[]
+  replayEvents: ReplayEvent[]
+  performance: {
+    traceCount: number
+    averageDurationMs: number
+    slowestDurationMs: number
+    recentTraces: PerformanceTrace[]
+  }
+  featurePolicy: FeaturePolicySnapshot
+}
+
+export interface ConsentRecord {
+  id: string
+  action: string
+  enabled: boolean
+  at: number
+  source: 'user' | 'system'
+}
+
+export interface PrivacySnapshot {
+  consentTrail: ConsentRecord[]
+  lastDataDeletionAt: number | null
+}
+
+export interface DataDeletionSummary {
+  sessionCleared: boolean
+  diagnosticsCleared: boolean
+  userProfileReset: boolean
+  settingsReset: boolean
+  at: number
+}
+
 export interface CaptureSource {
   id: string
   name: string
   thumbnailDataUrl: string
+  blocked: boolean
+  blockedReason: string | null
+  selected: boolean
 }
 
 export interface PerceptionConfig {

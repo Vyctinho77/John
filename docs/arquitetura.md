@@ -460,7 +460,7 @@ Adicionar senso pedagógico:
 
 ---
 
-# Fase 5 — Especializações por domínio
+# Fase 5 — Especializações por domínio CONCLUÍDA ✅
 
 ## Objetivo
 
@@ -514,7 +514,7 @@ Para texto:
 
 ---
 
-# Fase 6 — Maturidade de produto, observabilidade e hardening
+# Fase 6 — Maturidade de produto, observabilidade e hardening CONCLUÍDA ✅
 
 ## Objetivo
 
@@ -530,6 +530,7 @@ Adicionar:
 * crash reporting anonimizado
 * política de feature flags
 * rollout gradual de percepção avançada
+* escopo de captura por janela selecionada + bloqueio local por palavras-chave de fontes sensíveis
 
 Melhorar cliente:
 
@@ -537,6 +538,7 @@ Melhorar cliente:
 * modo minimalista
 * sugestões contextuais passivas
 * voice mode opcional
+* painel operacional com consentimento, diagnóstico, replay técnico e controles de captura
 
 ## Testes
 
@@ -560,6 +562,7 @@ Melhorar cliente:
 * confirmar retenção real
 * validar exclusão definitiva
 * validar trilha de consentimento
+* validar política de escopo de captura e detectores de superfície sensível
 
 ## Segurança do usuário
 

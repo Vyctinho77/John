@@ -1,3 +1,4 @@
+import { nativeImage } from 'electron'
 import Tesseract, { Worker } from 'tesseract.js'
 import type { PerceptionResult, TextRegion } from '../../shared/perception.types'
 
@@ -32,10 +33,18 @@ async function getWorker(): Promise<Worker> {
 }
 
 export async function recognizeImage(dataUrl: string): Promise<PerceptionResult> {
-  const w = await getWorker()
+  const image = nativeImage.createFromDataURL(dataUrl)
+  const { width, height } = image.getSize()
   const startedAt = Date.now()
 
-  const { data } = await w.recognize(dataUrl)
+  if (image.isEmpty() || width < 32 || height < 32) {
+    console.warn('[ocr] Skipping invalid capture before OCR.')
+    return emptyResult(startedAt)
+  }
+
+  const normalizedDataUrl = image.toDataURL()
+  const w = await getWorker()
+  const { data } = await w.recognize(normalizedDataUrl)
 
   const regions: TextRegion[] = (data.blocks ?? [])
     .filter(b => b.text.trim().length > 0)
@@ -62,6 +71,15 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
     confidence: avgConfidence,
     regions,
     capturedAt: startedAt
+  }
+}
+
+function emptyResult(capturedAt: number): PerceptionResult {
+  return {
+    rawText: '',
+    confidence: 0,
+    regions: [],
+    capturedAt
   }
 }
 
