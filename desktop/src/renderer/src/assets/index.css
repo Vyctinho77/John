@@ -1,0 +1,46 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection inside content areas */
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Placeholder color for HUD inputs */
+textarea::placeholder,
+input::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Hide scrollbars visually but keep function */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Allow dragging the HUD shell */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
