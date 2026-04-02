@@ -276,67 +276,111 @@ Implementar input layer com:
 
 ---
 
-# Fase 2 — Captura contextual e percepção mínima CONCLUÍDA ✅
+## Fase 2 — Captura contextual e percepção baseada em visão
+Objetivo
 
-## Objetivo
+Permitir ao sistema enxergar a tela com alta fidelidade, de forma robusta e consistente, transformando frames visuais em contexto semântico utilizável sem depender de OCR ou parsing textual.
 
-Permitir ao sistema enxergar a tela de forma controlada.
+Implementação da arquitetura
+Capture Service (nível robusto)
 
-## Implementação da arquitetura
+Implementar um sistema de captura baseado em orquestração com múltiplas estratégias:
 
-Implementar capture-service com:
+captura por snapshot sob demanda em alta resolução
+captura contextual em baixa frequência durante sessão ativa
+captura de janela específica com fallback automático
+fallback para captura de tela inteira + recorte inteligente
+normalização de coordenadas (multi-monitor + DPI scaling)
+validação de frame (detecção de frame inválido, preto ou congelado)
+priorização dinâmica de estratégia por aplicação (learning local)
+Focus Engine (nova camada crítica)
 
-* captura por snapshot sob demanda
-* captura contextual em baixa frequência quando a sessão estiver ativa
-* seleção de janela alvo
-* exclusão de superfícies sensíveis
+Implementar sistema de foco para determinar onde o usuário está olhando/interagindo:
 
-Implementar percepção mínima com:
+tracking de posição do mouse
+detecção de área ativa recente
+tracking de scroll e mudança de viewport
+inferência de região de interesse (ROI)
+priorização de sub-região da tela para análise
+Perception Engine (vision-first)
 
-* OCR em JavaScript
-* detecção de regiões simples
-* identificação de mudanças entre snapshots
-* classificação básica de superfície: texto, código, gráfico, documento, dashboard
+Substituir completamente OCR por percepção visual baseada em modelos multimodais.
 
-Implementar semantic-state-builder inicial com:
+Implementar:
 
-* detected_text
-* surface_type
-* change_summary
-* focus_region aproximada
+análise de frame via modelo de visão
+identificação de:
+tipo de superfície (gráfico, texto, código, UI, dashboard)
+estrutura visual (layout, regiões, componentes)
+elementos relevantes (diagramas, candles, blocos, listas)
+extração de contexto semântico direto da imagem
+detecção de eventos visuais:
+mudanças relevantes
+transições de contexto
+padrões visuais (ex: queda, consolidação, fluxo de leitura)
+Change Detection (continuidade visual)
 
-## Testes
+Implementar sistema de comparação entre frames:
 
-### Testes funcionais
+comparação de frames consecutivos
+detecção de:
+mudança de viewport
+nova área explorada
+alteração relevante no conteúdo
+geração de resumo incremental do que mudou
+Semantic-State Builder (vision-driven)
 
-* OCR reconhece texto legível com precisão mínima aceitável
-* sistema diferencia superfícies básicas
-* tracking detecta mudança entre dois estados da tela
-* seleção de janela restringe escopo de visão
+Construir estado semântico baseado em visão, não texto:
 
-### Testes de robustez
-
-* diferentes resoluções
-* dark mode e light mode
-* zoom alto e baixo
-* apps comuns: browser, PDF, editor de código, gráfico
-
-### Testes de erro
-
-* OCR falhando
-* permissão revogada
-* janela minimizada
-* frame corrompido
-
-## Segurança do usuário
-
-* permissão explícita de screen recording
-* indicador visual de captura ativa
-* allowlist e blocklist de apps e janelas
-* modo privado com suspensão imediata da visão
-* retenção zero por padrão para frames
-* frames temporários criptografados apenas se estritamente necessário
-
+surface_type (derivado da visão)
+visual_summary (o que está acontecendo na tela)
+focus_region (baseado no focus engine)
+change_summary (continuidade temporal)
+confidence_score (qualidade da percepção)
+inferred_user_intent (hipótese do que o usuário está tentando entender)
+Testes
+Testes funcionais
+captura funciona consistentemente em:
+browser
+apps nativos
+múltiplos monitores
+fallback automático resolve falhas de captura
+focus engine identifica corretamente região de interesse
+perception engine identifica corretamente tipo de superfície
+sistema detecta mudanças relevantes entre frames
+Testes de robustez
+diferentes resoluções (HD → 4K)
+DPI scaling variado
+dark mode e light mode
+zoom alto e baixo
+apps variados:
+browser
+PDF
+editor de código
+gráfico financeiro
+múltiplos monitores
+Testes de percepção
+modelo identifica corretamente:
+estrutura de layout
+elementos visuais importantes
+contexto geral da tela
+consistência entre frames semelhantes
+estabilidade de interpretação
+Testes de erro
+falha de captura → fallback automático
+frame inválido → rejeição + retry
+janela minimizada → captura bloqueada
+permissão revogada → sistema pausa
+inconsistência de coordenadas → correção automática
+Segurança do usuário
+permissão explícita de captura de tela
+indicador visual claro quando a visão está ativa
+allowlist e blocklist de apps/janelas
+modo privado com suspensão imediata da percepção
+retenção zero de frames por padrão
+processamento preferencialmente em memória
+criptografia para qualquer armazenamento temporário
+nenhum armazenamento de imagem sem consentimento explícito
 ---
 
 # Fase 3 — Estado semântico e memória curta CONCLUÍDA ✅
