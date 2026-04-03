@@ -45,6 +45,12 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Us
   return next
 }
 
+export async function setUserProfile(profile: UserProfile): Promise<UserProfile> {
+  cachedProfile = normalizeProfile(profile)
+  await persistProfile(cachedProfile)
+  return cachedProfile
+}
+
 function normalizeProfile(profile: Partial<UserProfile>): UserProfile {
   return {
     display_name:

@@ -454,7 +454,7 @@ function buildHintText(
     return 'parece que isso mudou agora'
   }
   if (eventType === 'revisit-focus') {
-    return 'voce voltou nisso de novo'
+    return 'você voltou nisso de novo'
   }
   if (eventType === 'ocr-conflict') {
     return 'esse trecho parece instavel, mas importante'

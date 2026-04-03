@@ -75,6 +75,8 @@ export interface PerceptionContextSnapshot {
   semanticState: SemanticState
   sessionMemory: SessionMemory
   userProfile: UserProfile
+  persisted_memory_summary: string
+  persisted_memory_highlights: string[]
   screenshotDataUrl: string | null
 }
 

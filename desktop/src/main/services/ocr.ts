@@ -6,6 +6,8 @@ let worker: Worker | null = null
 let initializing = false
 let initPromise: Promise<void> | null = null
 
+const OCR_DPI = '110'
+
 async function getWorker(): Promise<Worker> {
   if (worker) return worker
 
@@ -22,7 +24,9 @@ async function getWorker(): Promise<Worker> {
       logger: () => {}
     })
     await worker.setParameters({
-      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+      // Screenshots behave more like sparse UI text than scanned documents.
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+      user_defined_dpi: OCR_DPI
     })
     console.log('[ocr] Worker ready.')
   })()
@@ -48,16 +52,27 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   const regions: TextRegion[] = (data.blocks ?? [])
     .filter(b => b.text.trim().length > 0)
-    .map(b => ({
-      text: b.text.trim(),
-      confidence: b.confidence,
-      bbox: {
-        x: b.bbox.x0,
-        y: b.bbox.y0,
-        width: b.bbox.x1 - b.bbox.x0,
-        height: b.bbox.y1 - b.bbox.y0
+    .map(b => {
+      const bbox = sanitizeBBox(
+        {
+          x0: b.bbox.x0,
+          y0: b.bbox.y0,
+          x1: b.bbox.x1,
+          y1: b.bbox.y1
+        },
+        width,
+        height
+      )
+
+      if (!bbox) return null
+
+      return {
+        text: b.text.trim(),
+        confidence: b.confidence,
+        bbox
       }
-    }))
+    })
+    .filter((region): region is TextRegion => region !== null)
 
   const avgConfidence =
     regions.length > 0
@@ -89,4 +104,25 @@ export async function terminateWorker(): Promise<void> {
     worker = null
     console.log('[ocr] Worker terminated.')
   }
+}
+
+function sanitizeBBox(
+  bbox: { x0: number; y0: number; x1: number; y1: number },
+  imageWidth: number,
+  imageHeight: number
+): TextRegion['bbox'] | null {
+  const x0 = clamp(Math.min(bbox.x0, bbox.x1), 0, imageWidth)
+  const y0 = clamp(Math.min(bbox.y0, bbox.y1), 0, imageHeight)
+  const x1 = clamp(Math.max(bbox.x0, bbox.x1), 0, imageWidth)
+  const y1 = clamp(Math.max(bbox.y0, bbox.y1), 0, imageHeight)
+  const width = x1 - x0
+  const height = y1 - y0
+
+  if (width < 2 || height < 2) return null
+
+  return { x: x0, y: y0, width, height }
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
 }

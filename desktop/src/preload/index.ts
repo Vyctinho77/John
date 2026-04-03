@@ -18,6 +18,13 @@ import type {
   ProactiveOutcome,
   ProactiveState
 } from '../shared/proactive.types'
+import type {
+  ApplyMemoryImportInput,
+  MemoryEmbeddingStatus,
+  MemoryCardSummary,
+  MemoryExportResult,
+  MemoryImportPreview
+} from '../shared/memory.types'
 
 const hudAPI = {
   resize:    (width: number, height: number) => ipcRenderer.send('hud:resize', { width, height }),
@@ -98,6 +105,20 @@ const proactiveAPI = {
   }
 }
 
+const memoryAPI = {
+  getSummary: (): Promise<MemoryCardSummary> => ipcRenderer.invoke('memory:get-summary'),
+  getEmbeddingStatus: (): Promise<MemoryEmbeddingStatus> => ipcRenderer.invoke('memory:get-embedding-status'),
+  exportCard: (): Promise<MemoryExportResult | null> => ipcRenderer.invoke('memory:export-card'),
+  selectImportCard: (): Promise<string | null> => ipcRenderer.invoke('memory:select-import-card'),
+  previewImport: (filePath: string): Promise<MemoryImportPreview> =>
+    ipcRenderer.invoke('memory:preview-import', filePath),
+  applyImport: (input: ApplyMemoryImportInput): Promise<MemoryCardSummary> =>
+    ipcRenderer.invoke('memory:apply-import', input),
+  clearPersisted: (): Promise<MemoryCardSummary> => ipcRenderer.invoke('memory:clear-persisted'),
+  syncEmbeddings: (): Promise<MemoryEmbeddingStatus> => ipcRenderer.invoke('memory:sync-embeddings'),
+  rebuildEmbeddings: (): Promise<MemoryEmbeddingStatus> => ipcRenderer.invoke('memory:rebuild-embeddings')
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
@@ -107,6 +128,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('settingsAPI', settingsAPI)
     contextBridge.exposeInMainWorld('aiAPI', aiAPI)
     contextBridge.exposeInMainWorld('proactiveAPI', proactiveAPI)
+    contextBridge.exposeInMainWorld('memoryAPI', memoryAPI)
   } catch (e) {
     console.error(e)
   }
@@ -125,4 +147,6 @@ if (process.contextIsolated) {
   window.aiAPI = aiAPI
   // @ts-ignore
   window.proactiveAPI = proactiveAPI
+  // @ts-ignore
+  window.memoryAPI = memoryAPI
 }

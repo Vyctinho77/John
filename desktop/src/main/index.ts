@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, globalShortcut, screen, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, globalShortcut, screen, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
@@ -37,6 +37,19 @@ import {
   onProactiveHint
 } from './services/proactive-engine'
 import { resetUserProfile } from './services/user-profile'
+import {
+  applyImportCard,
+  clearPersistedMemory,
+  exportMemoryCard,
+  getMemorySummary,
+  MEMORY_CARD_EXTENSION,
+  previewImportCard
+} from './services/memory-card'
+import {
+  getMemoryEmbeddingStatus,
+  rebuildMemoryEmbeddings,
+  syncMemoryEmbeddings
+} from './services/memory-embeddings'
 import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -262,6 +275,7 @@ ipcMain.handle('privacy:get', async () => {
 
 ipcMain.handle('privacy:delete-local-data', async () => {
   clearSessionMemory()
+  await clearPersistedMemory()
   await clearDiagnostics()
   await clearConsentTrail()
   await resetUserProfile()
@@ -279,6 +293,65 @@ ipcMain.handle('privacy:delete-local-data', async () => {
   }
 
   return summary
+})
+
+ipcMain.handle('memory:get-summary', async () => {
+  return getMemorySummary()
+})
+
+ipcMain.handle('memory:get-embedding-status', async () => {
+  return getMemoryEmbeddingStatus()
+})
+
+ipcMain.handle('memory:select-import-card', async () => {
+  const options = {
+    title: 'Importar memory card',
+    properties: ['openFile'] as Array<'openFile'>,
+    filters: [
+      { name: 'John Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] },
+      { name: 'Todos os arquivos', extensions: ['*'] }
+    ]
+  }
+  const result = hudWindow
+    ? await dialog.showOpenDialog(hudWindow, options)
+    : await dialog.showOpenDialog(options)
+
+  return result.canceled ? null : result.filePaths[0] ?? null
+})
+
+ipcMain.handle('memory:export-card', async () => {
+  const summary = await getMemorySummary()
+  const options = {
+    title: 'Exportar memory card',
+    defaultPath: `${summary.owner_name || 'john-memory'}-${new Date(summary.updated_at).toISOString().slice(0, 10)}${MEMORY_CARD_EXTENSION}`,
+    filters: [{ name: 'John Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] }]
+  }
+  const result = hudWindow
+    ? await dialog.showSaveDialog(hudWindow, options)
+    : await dialog.showSaveDialog(options)
+
+  if (result.canceled || !result.filePath) return null
+  return exportMemoryCard(result.filePath)
+})
+
+ipcMain.handle('memory:preview-import', async (_e, filePath: string) => {
+  return previewImportCard(filePath)
+})
+
+ipcMain.handle('memory:apply-import', async (_e, input) => {
+  return applyImportCard(input)
+})
+
+ipcMain.handle('memory:clear-persisted', async () => {
+  return clearPersistedMemory()
+})
+
+ipcMain.handle('memory:sync-embeddings', async () => {
+  return syncMemoryEmbeddings()
+})
+
+ipcMain.handle('memory:rebuild-embeddings', async () => {
+  return rebuildMemoryEmbeddings()
 })
 
 ipcMain.on('perception:start-session', () => startSession())

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useEffect,
   useRef,
   useState,
@@ -37,6 +37,12 @@ import type {
   TutorResponse,
   UserProfile
 } from '@shared/perception.types'
+import type {
+  MemoryCardSummary,
+  MemoryEmbeddingStatus,
+  MemoryImportMode,
+  MemoryImportPreview
+} from '@shared/memory.types'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -63,6 +69,11 @@ interface HudExpandedProps {
   diagnostics: DiagnosticsSnapshot | null
   privacy: PrivacySnapshot | null
   lastDeletion: DataDeletionSummary | null
+  memorySummary: MemoryCardSummary | null
+  memoryEmbeddingStatus: MemoryEmbeddingStatus | null
+  memoryImportPreview: MemoryImportPreview | null
+  memoryIncludeProfile: boolean
+  memoryFeedback: string | null
   sources: CaptureSource[]
   isCapturing: boolean
   isPrivate: boolean
@@ -82,6 +93,13 @@ interface HudExpandedProps {
   onToggleVoiceMode: () => void
   onSelectCaptureSource: (source: CaptureSource | null) => void
   onDeleteLocalData: () => void
+  onExportMemory: () => void
+  onSyncEmbeddings: () => void
+  onRebuildEmbeddings: () => void
+  onSelectImportCard: () => void
+  onApplyMemoryImport: (mode: MemoryImportMode) => void
+  onToggleMemoryImportProfile: () => void
+  onClearPersistedMemory: () => void
   aiSettings: AISettingsSnapshot | null
   onRefreshAISettings: () => Promise<void>
   onSaveProvider: (input: SaveAIProviderInput) => void
@@ -105,6 +123,9 @@ type ProviderDraftMap = Record<
     selectedModel: string
   }
 >
+
+const INPUT_MIN_HEIGHT = 24
+const INPUT_MAX_HEIGHT = 132
 
 const TYPOGRAPHY_FAMILY_OPTIONS: Array<{ id: TypographyFontFamily; label: string; sample: string }> = [
   { id: 'system-sans', label: 'SF Pro / System Sans', sample: 'Apple-like, limpa e neutra' },
@@ -227,13 +248,13 @@ function SettingsNavItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors duration-150"
+      className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-left transition-colors duration-150"
       style={{
         color: active ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.44)',
         background: active ? 'rgba(255,255,255,0.06)' : 'transparent'
       }}
     >
-      <span className="w-[18px] h-[18px] flex items-center justify-center flex-shrink-0 opacity-80">
+      <span className="w-[22px] h-[22px] flex items-center justify-center flex-shrink-0 opacity-80">
         {icon}
       </span>
       <span className="text-[13px] leading-none" style={{ fontSize: 'var(--hud-font-size, 15px)' }}>{label}</span>
@@ -316,6 +337,21 @@ function labelSurface(surface: string): string {
   }
 }
 
+function labelEmbeddingState(state: MemoryEmbeddingStatus['state']): string {
+  switch (state) {
+    case 'ready':
+      return 'ativo'
+    case 'syncing':
+      return 'sincronizando'
+    case 'unavailable':
+      return 'indisponivel'
+    case 'error':
+      return 'erro'
+    default:
+      return 'ocioso'
+  }
+}
+
 export function HudExpanded({
   inputValue,
   onInputChange,
@@ -335,6 +371,11 @@ export function HudExpanded({
   diagnostics,
   privacy,
   lastDeletion,
+  memorySummary,
+  memoryEmbeddingStatus,
+  memoryImportPreview,
+  memoryIncludeProfile,
+  memoryFeedback,
   sources,
   isCapturing: _isCapturing,
   isPrivate,
@@ -354,6 +395,13 @@ export function HudExpanded({
   onToggleVoiceMode,
   onSelectCaptureSource,
   onDeleteLocalData,
+  onExportMemory,
+  onSyncEmbeddings,
+  onRebuildEmbeddings,
+  onSelectImportCard,
+  onApplyMemoryImport,
+  onToggleMemoryImportProfile,
+  onClearPersistedMemory,
   aiSettings,
   onRefreshAISettings,
   onSaveProvider,
@@ -512,6 +560,17 @@ export function HudExpanded({
   const greeting = buildGreeting()
   const suggestionPills = buildSuggestionPills()
 
+  const syncInputHeight = () => {
+    const input = inputRef.current
+    if (!input) return
+    input.style.height = `${INPUT_MIN_HEIGHT}px`
+    input.style.height = `${Math.min(input.scrollHeight, INPUT_MAX_HEIGHT)}px`
+  }
+
+  useEffect(() => {
+    syncInputHeight()
+  }, [inputValue])
+
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onActivity()
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -571,7 +630,7 @@ export function HudExpanded({
     if (!settings) {
       return (
         <p className="mt-4 text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          Configuracoes indisponiveis.
+          Configurações indisponíveis.
         </p>
       )
     }
@@ -642,7 +701,7 @@ export function HudExpanded({
 
           <div className="mt-4 flex flex-col gap-3">
             {!selectedProvider.capabilities.localOnly && (
-              <label className="flex flex-col gap-1.5">
+              <label className="flex flex-col gap-2">
                 <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
                   API key
                 </span>
@@ -659,7 +718,7 @@ export function HudExpanded({
               </label>
             )}
 
-            <label className="flex flex-col gap-1.5">
+            <label className="flex flex-col gap-2">
               <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
                 Base URL
               </span>
@@ -674,7 +733,7 @@ export function HudExpanded({
               />
             </label>
 
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-2">
               <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
                 Modelo
               </span>
@@ -742,7 +801,7 @@ export function HudExpanded({
                 border: '1px solid rgba(255,255,255,0.08)'
               }}
             >
-              {isTestingProvider === selectedProvider.id ? 'testando...' : 'testar conexao'}
+              {isTestingProvider === selectedProvider.id ? 'testando...' : 'testar conexão'}
             </button>
             <button
               onMouseDown={e => {
@@ -782,7 +841,7 @@ export function HudExpanded({
             <SettingsRow label="Primario de texto" value={aiSettings.routing.textPrimary || 'local'} />
             <SettingsRow label="Fallback" value={aiSettings.routing.textFallback || 'sem fallback'} />
             <SettingsRow
-              label="Preferir local em conteudo sensivel"
+              label="Preferir local em conteúdo sensível"
               value={aiSettings.routing.preferLocalForSensitive ? 'Ativado' : 'Desativado'}
               toggle={aiSettings.routing.preferLocalForSensitive}
               onClick={() =>
@@ -877,7 +936,7 @@ export function HudExpanded({
 
         {diagnostics && privacy && (
           <p className="mt-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-            storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo basico'} | traces:{' '}
+            storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo básico'} | traces:{' '}
             {diagnostics.performance.traceCount} | consentimentos: {privacy.consentTrail.length}
             {lastDeletion ? ' | limpeza registrada' : ''}
           </p>
@@ -891,7 +950,7 @@ export function HudExpanded({
       return (
         <div className="pt-2">
           <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
-            Configuracoes indisponiveis no momento.
+            Configurações indisponíveis no momento.
           </p>
         </div>
       )
@@ -914,7 +973,7 @@ export function HudExpanded({
               onClick={onToggleMinimalMode}
             />
             <SettingsRow label="Cor de fundo" value="Preto" />
-            <SettingsRow label="Idioma" value={userProfile?.response_language || 'Portugues'} last />
+            <SettingsRow label="Idioma" value={userProfile?.response_language || 'Português'} last />
           </div>
 
           {sessionMemory?.continuity_summary && (
@@ -933,17 +992,17 @@ export function HudExpanded({
             className="text-[18px] font-medium mb-1"
             style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
           >
-            Notificacoes
+            Notificações
           </p>
           <div className="mt-4">
             <SettingsRow
-              label="Sugestoes passivas"
+              label="Sugestões passivas"
               value={settings.passiveSuggestions ? 'Ativado' : 'Desativado'}
               toggle={settings.passiveSuggestions}
               onClick={onTogglePassiveSuggestions}
             />
             <SettingsRow
-              label="Sempre visivel"
+              label="Sempre visível"
               value={settings.alwaysVisible ? 'Ativado' : 'Desativado'}
               toggle={settings.alwaysVisible}
               onClick={onToggleAlwaysVisible}
@@ -1001,6 +1060,249 @@ export function HudExpanded({
             />
           </div>
 
+          <div
+            className="mt-5 rounded-[22px] p-4"
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.07)'
+            }}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
+                  Memory Card
+                </p>
+                <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                  Perfil + memória persistida, pronto para exportar ou reimportar.
+                </p>
+              </div>
+              {memorySummary && (
+                <span
+                  className="px-2.5 py-1 rounded-full text-[10px]"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'rgba(255,255,255,0.68)',
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}
+                >
+                  {memorySummary.item_count} memórias
+                </span>
+              )}
+            </div>
+
+            {memorySummary && (
+              <div className="mt-4">
+                <SettingsRow label="Dono" value={memorySummary.owner_name || 'sem nome'} />
+                <SettingsRow label="Perfil" value={memorySummary.profile_summary} />
+                <SettingsRow label="Impacto" value={memorySummary.impact_summary} last />
+              </div>
+            )}
+
+            {memoryEmbeddingStatus && (
+              <div
+                className="mt-4 rounded-[18px] p-3.5"
+                style={{
+                  background: 'rgba(255,255,255,0.022)',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.86)' }}>
+                      OpenAI embeddings
+                    </p>
+                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+                      {memoryEmbeddingStatus.embedding_model}
+                    </p>
+                  </div>
+                  <span
+                    className="px-2 py-1 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'rgba(255,255,255,0.66)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    {labelEmbeddingState(memoryEmbeddingStatus.state)}
+                  </span>
+                </div>
+
+                <div className="mt-3">
+                  <SettingsRow
+                    label="Itens indexados"
+                    value={String(memoryEmbeddingStatus.indexed_count)}
+                  />
+                  <SettingsRow
+                    label="Ultimo sync"
+                    value={
+                      memoryEmbeddingStatus.last_synced_at
+                        ? new Date(memoryEmbeddingStatus.last_synced_at).toLocaleString('pt-BR')
+                        : 'ainda nao sincronizado'
+                    }
+                    last={!memoryEmbeddingStatus.error}
+                  />
+                  {memoryEmbeddingStatus.error ? (
+                    <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)', lineHeight: 1.45 }}>
+                      {memoryEmbeddingStatus.error}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <button
+                    onMouseDown={e => { e.preventDefault(); onSyncEmbeddings() }}
+                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'rgba(255,255,255,0.72)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    sincronizar
+                  </button>
+                  <button
+                    onMouseDown={e => { e.preventDefault(); onRebuildEmbeddings() }}
+                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'rgba(255,255,255,0.56)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    reindexar memoria
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {memorySummary?.highlight_texts?.length ? (
+              <div className="mt-4 flex flex-col gap-2">
+                {memorySummary.highlight_texts.map(text => (
+                  <p
+                    key={text}
+                    className="text-[11px]"
+                    style={{ color: 'rgba(255,255,255,0.48)', lineHeight: 1.45 }}
+                  >
+                    {text}
+                  </p>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex gap-2 flex-wrap">
+              <button
+                onMouseDown={e => { e.preventDefault(); onExportMemory() }}
+                className="px-3 py-1.5 rounded-full text-[10px]"
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  color: 'rgba(255,255,255,0.86)',
+                  border: '1px solid rgba(255,255,255,0.12)'
+                }}
+              >
+                exportar memória
+              </button>
+              <button
+                onMouseDown={e => { e.preventDefault(); onSelectImportCard() }}
+                className="px-3 py-1.5 rounded-full text-[10px]"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.72)',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}
+              >
+                importar memória
+              </button>
+              <button
+                onMouseDown={e => { e.preventDefault(); onClearPersistedMemory() }}
+                className="px-3 py-1.5 rounded-full text-[10px]"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.46)',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}
+              >
+                limpar memória local
+              </button>
+            </div>
+
+            {memoryImportPreview && (
+              <div
+                className="mt-4 rounded-[18px] p-4"
+                style={{
+                  background: 'rgba(255,255,255,0.025)',
+                  border: '1px solid rgba(255,255,255,0.06)'
+                }}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                      {memoryImportPreview.file_name}
+                    </p>
+                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                      {memoryImportPreview.summary.profile_summary}
+                    </p>
+                  </div>
+                  <span
+                    className="px-2 py-1 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      color: 'rgba(255,255,255,0.66)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    {memoryImportPreview.conflicts} conflitos
+                  </span>
+                </div>
+
+                <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)', lineHeight: 1.45 }}>
+                  {memoryImportPreview.summary.impact_summary}
+                </p>
+
+                <button
+                  onMouseDown={e => { e.preventDefault(); onToggleMemoryImportProfile() }}
+                  className="mt-3 w-full flex items-center justify-between gap-4"
+                  style={{ minHeight: 40 }}
+                >
+                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                    Aplicar perfil do cartão
+                  </span>
+                  <Toggle on={memoryIncludeProfile} />
+                </button>
+
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <button
+                    onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('merge') }}
+                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: 'rgba(255,255,255,0.86)',
+                      border: '1px solid rgba(255,255,255,0.12)'
+                    }}
+                  >
+                    mesclar
+                  </button>
+                  <button
+                    onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('replace') }}
+                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    style={{
+                      background: 'rgba(255,255,255,0.04)',
+                      color: 'rgba(255,255,255,0.68)',
+                      border: '1px solid rgba(255,255,255,0.08)'
+                    }}
+                  >
+                    substituir
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {memoryFeedback && (
+              <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
+                {memoryFeedback}
+              </p>
+            )}
+          </div>
+
           {semanticState?.capture_policy === 'blocked-sensitive' && (
             <div className="mt-4 flex items-center justify-between">
               <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
@@ -1026,7 +1328,7 @@ export function HudExpanded({
           {sources.length > 0 && (
             <>
               <p className="mt-5 mb-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-                Janelas disponiveis
+                Janelas disponíveis
               </p>
               <div className="flex gap-2 flex-wrap">
                 {sources.slice(0, 5).map(source => (
@@ -1090,7 +1392,7 @@ export function HudExpanded({
               value={`${typography.fontSize}px`}
             />
             <SettingsRow
-              label="Familia ativa"
+              label="Família ativa"
               value={TYPOGRAPHY_FAMILY_OPTIONS.find(option => option.id === typography.fontFamily)?.label || 'System Sans'}
             />
             <SettingsRow
@@ -1102,7 +1404,7 @@ export function HudExpanded({
 
           <div className="mt-5">
             <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-              Familia de fonte
+              Família de fonte
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {TYPOGRAPHY_FAMILY_OPTIONS.map(option => (
@@ -1230,12 +1532,12 @@ export function HudExpanded({
 
             <SettingsRow label="Nivel" value={userProfile?.user_level || 'intermediate'} onClick={onCycleLevel} />
             <SettingsRow
-              label="Estilo de explicacao"
+              label="Estilo de explicação"
               value={userProfile?.preferred_explanation_style || 'direct'}
               onClick={onCycleStyle}
             />
             <SettingsRow
-              label="Limpar contexto da sessao"
+              label="Limpar contexto da sessão"
               value=""
               onClick={onClearContext}
               muted
@@ -1282,7 +1584,7 @@ export function HudExpanded({
                 }}
                 className="text-[11px] transition-opacity duration-150"
                 style={{ color: stage === 3 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.62)' }}
-                aria-label={`Abrir estagio ${stage}`}
+                aria-label={`Abrir estágio ${stage}`}
               >
                 {stage}
               </button>
@@ -1315,9 +1617,9 @@ export function HudExpanded({
           }}
           className="w-7 h-7 flex items-center justify-center transition-opacity duration-150"
           style={{ color: settingsOpen ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.76)' }}
-          aria-label="Configuracoes"
+          aria-label="Configurações"
         >
-          <ConfigIcon className="h-4 w-auto" />
+          <ConfigIcon className="h-[18px] w-auto" />
         </button>
       </div>
 
@@ -1379,7 +1681,7 @@ export function HudExpanded({
           {settingsOpen ? (
             <div className="h-full flex">
               <aside
-                className="w-[152px] flex-shrink-0 px-3 pt-5 pb-6"
+                className="w-[164px] flex-shrink-0 px-3.5 pt-5 pb-6"
                 style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
               >
                 <button
@@ -1402,42 +1704,42 @@ export function HudExpanded({
                   </svg>
                 </button>
 
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-2">
                   <SettingsNavItem
                     label="Geral"
                     active={activeSettingsTab === 'general'}
                     onClick={() => setActiveSettingsTab('general')}
-                    icon={<ConfigIcon className="h-3.5 w-auto" />}
+                    icon={<ConfigIcon className="h-[18px] w-auto" />}
                   />
                   <SettingsNavItem
-                    label="Notificacoes"
+                    label="Notificações"
                     active={activeSettingsTab === 'notifications'}
                     onClick={() => setActiveSettingsTab('notifications')}
-                    icon={<NotificationsIcon className="h-3.5 w-auto" />}
+                    icon={<NotificationsIcon className="h-[18px] w-auto" />}
                   />
                   <SettingsNavItem
                     label="Controle de dados"
                     active={activeSettingsTab === 'data'}
                     onClick={() => setActiveSettingsTab('data')}
-                    icon={<DataIcon className="h-3.5 w-auto" />}
+                    icon={<DataIcon className="h-[18px] w-auto" />}
                   />
                   <SettingsNavItem
                     label="Conta"
                     active={activeSettingsTab === 'account'}
                     onClick={() => setActiveSettingsTab('account')}
-                    icon={<ProfileIcon className="h-3.5 w-auto" />}
+                    icon={<ProfileIcon className="h-[18px] w-auto" />}
                   />
                   <SettingsNavItem
                     label="Minha API Key"
                     active={activeSettingsTab === 'api'}
                     onClick={() => setActiveSettingsTab('api')}
-                    icon={<span className="text-[11px] font-medium leading-none">{'</>'}</span>}
+                    icon={<span className="text-[13px] font-medium leading-none">{'</>'}</span>}
                   />
                   <SettingsNavItem
                     label="Tipografia"
                     active={activeSettingsTab === 'typography'}
                     onClick={() => setActiveSettingsTab('typography')}
-                    icon={<span className="text-[16px] leading-none">Aa</span>}
+                    icon={<span className="text-[18px] leading-none">Aa</span>}
                   />
                 </div>
               </aside>
@@ -1447,24 +1749,39 @@ export function HudExpanded({
               </section>
             </div>
           ) : (
-            <div style={{ maxWidth: 760, margin: '0 auto', padding: '18px 28px 12px' }}>
+            <div style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 30px 18px' }}>
               {messages.map((msg, i) => (
-                <div key={i} className={`mb-7 ${msg.role === 'user' ? 'flex justify-end' : ''}`}>
+                <div
+                  key={i}
+                  className="flex"
+                  style={{
+                    marginBottom: msg.role === 'user' ? 24 : 40,
+                    width: '100%',
+                    justifyContent: 'center'
+                  }}
+                >
                   {msg.role === 'user' ? (
-                    <span
-                      className="inline-block leading-relaxed px-4 py-2.5 selectable"
-                      style={{
-                        background: 'rgba(255,255,255,0.065)',
-                        color: 'rgba(255,255,255,0.88)',
-                        borderRadius: '18px 18px 6px 18px',
-                        maxWidth: '78%',
-                        fontSize: 'var(--hud-font-size, 15px)'
-                      }}
-                    >
-                      {msg.content}
-                    </span>
+                    <div style={{ width: '100%', maxWidth: 860, display: 'flex', justifyContent: 'flex-end' }}>
+                      <span
+                        className="inline-flex leading-relaxed px-4 py-2 selectable"
+                        style={{
+                          background: 'rgba(255,255,255,0.03)',
+                          color: 'rgba(255,255,255,0.94)',
+                          border: '1px solid rgba(255,255,255,0.12)',
+                          borderRadius: '14px',
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.08) inset',
+                          width: 'fit-content',
+                          maxWidth: 'min(58ch, 100%)',
+                          fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
+                          lineHeight: 1.42,
+                          letterSpacing: '0.001em'
+                        }}
+                      >
+                        {msg.content}
+                      </span>
+                    </div>
                   ) : (
-                    <div style={{ maxWidth: 660 }}>
+                    <div style={{ maxWidth: 860, width: '100%' }}>
                       <MessageBody content={msg.content} />
                     </div>
                   )}
@@ -1472,7 +1789,7 @@ export function HudExpanded({
               ))}
 
               {isStreaming && streamingContent && (
-                <div style={{ maxWidth: 660 }}>
+                <div style={{ maxWidth: 860, width: '100%', margin: '0 auto' }}>
                   <MessageBody content={streamingContent} />
                   <motion.span
                     className="inline-block w-0.5 h-3.5 ml-0.5 align-middle"
@@ -1487,19 +1804,20 @@ export function HudExpanded({
         </div>
       )}
 
-      <div className="flex-shrink-0 px-3 pb-4 pt-3">
+      <div className="flex-shrink-0 px-3 pb-3 pt-2">
         <div style={{ width: '100%' }}>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.38)', paddingTop: 12 }}>
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.28)', paddingTop: 14, paddingLeft: 10, paddingRight: 6 }}>
             <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
                 style={{
-                  color: 'rgba(255,255,255,0.88)',
-                  fontSize: 'var(--hud-font-size, 15px)',
-                  lineHeight: 1.3,
-                  minHeight: 24,
-                  maxHeight: 72
+                  color: 'rgba(255,255,255,0.72)',
+                  fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
+                  lineHeight: 1.35,
+                  minHeight: INPUT_MIN_HEIGHT,
+                  height: INPUT_MIN_HEIGHT,
+                  maxHeight: INPUT_MAX_HEIGHT
                 }}
                 placeholder={inputPlaceholder()}
                 rows={1}
@@ -1508,6 +1826,7 @@ export function HudExpanded({
                 onChange={e => {
                   onInputChange(e.target.value)
                   onActivity()
+                  syncInputHeight()
                 }}
                 onKeyDown={handleKey}
                 onFocus={onInputFocus}
@@ -1524,8 +1843,8 @@ export function HudExpanded({
                 style={{
                   color:
                     inputValue.trim() && !isStreaming
-                      ? 'rgba(255,255,255,0.82)'
-                      : 'rgba(255,255,255,0.28)'
+                      ? 'rgba(255,255,255,0.72)'
+                      : 'rgba(255,255,255,0.22)'
                 }}
                 aria-label="Enviar"
               >
@@ -1535,7 +1854,7 @@ export function HudExpanded({
           </div>
 
           {!settingsOpen && !showGreeting && (
-            <div className="flex gap-3 mt-2.5 flex-wrap">
+            <div className="flex gap-3 mt-2.5 flex-wrap pl-[10px]">
               {quickActions.map(action => (
                 <button
                   key={action}
@@ -1544,7 +1863,7 @@ export function HudExpanded({
                     onQuickPrompt(action)
                   }}
                   className="text-[11px] transition-colors duration-150"
-                  style={{ color: 'rgba(255,255,255,0.28)' }}
+                  style={{ color: 'rgba(255,255,255,0.22)' }}
                 >
                   {action}
                 </button>
@@ -1556,3 +1875,4 @@ export function HudExpanded({
     </div>
   )
 }
+

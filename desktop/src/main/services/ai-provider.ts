@@ -51,6 +51,11 @@ export interface ProviderExecutionResult {
   text: string
 }
 
+export interface OpenAIEmbeddingAvailability {
+  available: boolean
+  reason: string | null
+}
+
 interface RemoteChatRequest {
   system: string
   prompt: string
@@ -270,6 +275,64 @@ export async function generateRemoteText(input: {
   }
 
   return null
+}
+
+export async function getOpenAIEmbeddingAvailability(): Promise<OpenAIEmbeddingAvailability> {
+  const settings = await getStoredSettings()
+  const provider = settings.providers.openai
+
+  if (!provider.enabled) {
+    return { available: false, reason: 'OpenAI desativado.' }
+  }
+
+  if (!hasSecret(provider)) {
+    return { available: false, reason: 'Chave OpenAI ausente.' }
+  }
+
+  return { available: true, reason: null }
+}
+
+export async function generateOpenAIEmbeddings(texts: string[]): Promise<number[][]> {
+  const trimmedInputs = texts.map(text => text.trim()).filter(Boolean)
+  if (trimmedInputs.length === 0) return []
+
+  const settings = await getStoredSettings()
+  const provider = settings.providers.openai
+  if (!canUseProvider(provider)) {
+    throw new Error('OpenAI embeddings indisponiveis.')
+  }
+
+  const apiKey = requireSecret(provider)
+  const response = await fetch(joinUrl(provider.baseUrl, '/embeddings'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-3-small',
+      input: trimmedInputs
+    })
+  })
+
+  if (!response.ok) {
+    throw new Error(`OpenAI embeddings respondeu ${response.status}.`)
+  }
+
+  const payload = await response.json() as {
+    data?: Array<{ embedding?: number[]; index?: number }>
+  }
+
+  const vectors = (payload.data ?? [])
+    .slice()
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map(entry => entry.embedding ?? [])
+
+  if (vectors.length !== trimmedInputs.length || vectors.some(vector => vector.length === 0)) {
+    throw new Error('OpenAI embeddings nao retornou vetores validos.')
+  }
+
+  return vectors
 }
 
 export async function resetAISettings(): Promise<AISettingsSnapshot> {

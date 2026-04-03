@@ -4,6 +4,7 @@ import { detectSensitiveSurface } from './privacy-guards'
 import { evaluateProactiveOpportunity } from './proactive-engine'
 import { getUserProfile, updateUserProfile as persistUserProfile } from './user-profile'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
+import { getMemoryContext, syncPersistedMemory } from './memory-card'
 import {
   effectiveObservationText,
   estimateUncertainty,
@@ -80,7 +81,7 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
 
   try {
     if (config.privateMode) {
-      const snapshot = buildEmptySnapshot('private mode active', userProfile)
+      const snapshot = await buildEmptySnapshot('private mode active', userProfile)
       latestSnapshot = snapshot
       void recordPerformanceTrace({
         operation: 'perception.analyze',
@@ -94,7 +95,7 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
 
     const dataUrl = await captureScreen(config.targetSourceId ?? undefined)
     if (!dataUrl) {
-      const snapshot = buildEmptySnapshot('capture failed - check screen recording permission', userProfile)
+      const snapshot = await buildEmptySnapshot('capture failed - check screen recording permission', userProfile)
       latestSnapshot = snapshot
       void recordPerformanceTrace({
         operation: 'perception.analyze',
@@ -106,7 +107,7 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
 
     const perception = await recognizeImage(dataUrl)
     if (!perception.rawText.trim() && perception.regions.length === 0) {
-      const snapshot = buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
+      const snapshot = await buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
       latestSnapshot = snapshot
       void recordPerformanceTrace({
         operation: 'perception.analyze',
@@ -126,10 +127,15 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
     lastRawText = semanticState.detected_text || effectiveObservationText(perception) || perception.rawText
     sessionMemory = updateSessionMemory(sessionMemory, semanticState)
 
+    await syncPersistedMemory({ userProfile, sessionMemory })
+    const memoryContext = await getMemoryContext()
+
     const snapshot = {
       semanticState,
       sessionMemory,
       userProfile,
+      persisted_memory_summary: memoryContext.summary,
+      persisted_memory_highlights: memoryContext.highlights,
       screenshotDataUrl: dataUrl
     }
 
@@ -187,11 +193,15 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
   const userProfile = await persistUserProfile(patch)
   const semanticState =
     latestSnapshot?.semanticState ?? buildEmptySemanticState('waiting for first capture')
+  await syncPersistedMemory({ userProfile, sessionMemory })
+  const memoryContext = await getMemoryContext()
 
   const snapshot = {
     semanticState,
     sessionMemory,
     userProfile,
+    persisted_memory_summary: memoryContext.summary,
+    persisted_memory_highlights: memoryContext.highlights,
     screenshotDataUrl: latestSnapshot?.screenshotDataUrl ?? null
   }
 
@@ -237,7 +247,7 @@ export async function resumeAfterSensitiveBlock(): Promise<PerceptionContextSnap
 
   const userProfile = await getUserProfile()
   if (config.privateMode) {
-    const snapshot = buildEmptySnapshot('private mode active', userProfile)
+    const snapshot = await buildEmptySnapshot('private mode active', userProfile)
     latestSnapshot = snapshot
     return snapshot
   }
@@ -302,17 +312,20 @@ function buildSemanticState(
   }
 }
 
-function buildEmptySnapshot(
+async function buildEmptySnapshot(
   reason: string,
   userProfile: UserProfile
-): PerceptionContextSnapshot {
+): Promise<PerceptionContextSnapshot> {
   const semanticState = buildEmptySemanticState(reason)
   sessionMemory = updateSessionMemory(sessionMemory, semanticState)
+  const memoryContext = await getMemoryContext()
 
   return {
     semanticState,
     sessionMemory,
     userProfile,
+    persisted_memory_summary: memoryContext.summary,
+    persisted_memory_highlights: memoryContext.highlights,
     screenshotDataUrl: null
   }
 }

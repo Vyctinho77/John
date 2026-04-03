@@ -21,6 +21,10 @@ interface CodeToken {
 }
 
 const BODY_SIZE = 'var(--hud-font-size, 15px)'
+const READING_MEASURE = '100%'
+const COMPACT_READING_MEASURE = '60ch'
+const TECHNICAL_MEASURE = '100%'
+const CODE_FONT = '"SF Mono", "Cascadia Code", Consolas, monospace'
 
 const LANGUAGE_ALIASES: Record<string, string> = {
   ts: 'TypeScript',
@@ -50,14 +54,16 @@ export function MessageBody({ content, compact = false }: MessageBodyProps) {
     <div
       className="selectable"
       style={{
-        color: 'rgba(255,255,255,0.86)',
+        color: 'rgba(255,255,255,0.84)',
         fontSize: BODY_SIZE,
-        lineHeight: compact ? 1.6 : 1.72,
-        letterSpacing: '-0.01em'
+        lineHeight: compact ? 1.62 : 1.7,
+        letterSpacing: '0.002em',
+        width: '100%',
+        maxWidth: '100%'
       }}
     >
       {blocks.map((block, index) => (
-        <div key={`${block.type}-${index}`} style={{ marginTop: index === 0 ? 0 : compact ? 12 : 16 }}>
+        <div key={`${block.type}-${index}`} style={{ marginTop: index === 0 ? 0 : compact ? 16 : 24 }}>
           {renderBlock(block, compact)}
         </div>
       ))}
@@ -78,10 +84,11 @@ function renderBlock(block: Block, compact: boolean) {
         <p
           style={{
             fontSize: sizeMap[block.level],
-            lineHeight: 1.25,
-            fontWeight: 600,
+            lineHeight: block.level === 1 ? 1.18 : block.level === 2 ? 1.24 : 1.32,
+            fontWeight: block.level === 1 ? 600 : 550,
             color: 'rgba(255,255,255,0.95)',
-            letterSpacing: '-0.025em'
+            letterSpacing: block.level === 1 ? '-0.022em' : '-0.014em',
+            maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
           {renderInlineContent(block.text)}
@@ -93,7 +100,8 @@ function renderBlock(block: Block, compact: boolean) {
         <p
           style={{
             color: 'rgba(255,255,255,0.86)',
-            whiteSpace: 'pre-wrap'
+            whiteSpace: 'pre-wrap',
+            maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
           {renderInlineContent(block.text)}
@@ -103,10 +111,11 @@ function renderBlock(block: Block, compact: boolean) {
       return (
         <ul
           style={{
-            paddingLeft: compact ? 16 : 18,
+            paddingLeft: compact ? 18 : 20,
             display: 'grid',
-            gap: 8,
-            color: 'rgba(255,255,255,0.84)'
+            gap: compact ? 9 : 11,
+            color: 'rgba(255,255,255,0.82)',
+            maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
           {block.items.map(item => (
@@ -120,10 +129,11 @@ function renderBlock(block: Block, compact: boolean) {
       return (
         <ol
           style={{
-            paddingLeft: compact ? 18 : 20,
+            paddingLeft: compact ? 20 : 22,
             display: 'grid',
-            gap: 8,
-            color: 'rgba(255,255,255,0.84)'
+            gap: compact ? 9 : 11,
+            color: 'rgba(255,255,255,0.82)',
+            maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
           {block.items.map(item => (
@@ -137,10 +147,11 @@ function renderBlock(block: Block, compact: boolean) {
       return (
         <blockquote
           style={{
-            paddingLeft: compact ? 12 : 14,
+            padding: compact ? '4px 0 4px 15px' : '4px 0 4px 18px',
             borderLeft: '1px solid rgba(255,255,255,0.18)',
             color: 'rgba(255,255,255,0.68)',
-            whiteSpace: 'pre-wrap'
+            whiteSpace: 'pre-wrap',
+            maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
           {renderInlineContent(block.text)}
@@ -175,25 +186,27 @@ function CodeBlock({ block, compact }: { block: Extract<Block, { type: 'code' }>
     <div
       style={{
         border: '1px solid rgba(255,255,255,0.08)',
-        background: 'rgba(255,255,255,0.035)',
-        borderRadius: 22,
+        background: 'rgba(255,255,255,0.03)',
+        borderRadius: 16,
         overflow: 'hidden',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03)'
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
+        width: '100%',
+        maxWidth: compact ? '100%' : TECHNICAL_MEASURE
       }}
     >
       <div
         className="flex items-center justify-between"
         style={{
-          padding: compact ? '12px 14px 10px' : '14px 18px 12px',
+          padding: compact ? '11px 14px 10px' : '12px 18px 10px',
           borderBottom: '1px solid rgba(255,255,255,0.05)'
         }}
       >
         <div className="flex items-center gap-3">
           <span
             style={{
-              color: 'rgba(255,255,255,0.9)',
-              fontFamily: '"SF Mono", "Cascadia Code", Consolas, monospace',
-              fontSize: 12,
+              color: 'rgba(255,255,255,0.78)',
+              fontFamily: CODE_FONT,
+              fontSize: 11.5,
               lineHeight: 1
             }}
           >
@@ -201,10 +214,11 @@ function CodeBlock({ block, compact }: { block: Extract<Block, { type: 'code' }>
           </span>
           <span
             style={{
-              color: 'rgba(255,255,255,0.96)',
-              fontSize: 13,
+              color: 'rgba(255,255,255,0.9)',
+              fontSize: 12,
               fontWeight: 600,
-              lineHeight: 1
+              lineHeight: 1,
+              letterSpacing: '0.015em'
             }}
           >
             {detectedLanguage}
@@ -222,7 +236,7 @@ function CodeBlock({ block, compact }: { block: Extract<Block, { type: 'code' }>
             justifyContent: 'center',
             color: copied ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.72)'
           }}
-          aria-label={copied ? 'Codigo copiado' : 'Copiar codigo'}
+          aria-label={copied ? 'Código copiado' : 'Copiar código'}
           title={copied ? 'Copiado' : 'Copiar'}
         >
           {copied ? (
@@ -242,12 +256,12 @@ function CodeBlock({ block, compact }: { block: Extract<Block, { type: 'code' }>
         className="scrollbar-none"
         style={{
           margin: 0,
-          padding: compact ? '14px' : '16px 20px 18px',
+          padding: compact ? '14px 14px 15px' : '16px 18px 18px',
           overflowX: 'auto',
-          color: 'rgba(255,255,255,0.9)',
-          fontFamily: '"SF Mono", "Cascadia Code", Consolas, monospace',
-          fontSize: '13px',
-          lineHeight: 1.72,
+          color: 'rgba(255,255,255,0.92)',
+          fontFamily: CODE_FONT,
+          fontSize: compact ? '13px' : '13.75px',
+          lineHeight: 1.62,
           tabSize: 2
         }}
       >
@@ -276,8 +290,10 @@ function TableBlock({ rows, compact }: { rows: string[][]; compact: boolean }) {
       style={{
         overflowX: 'auto',
         border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 14,
-        background: 'rgba(255,255,255,0.03)'
+        borderRadius: 16,
+        background: 'rgba(255,255,255,0.028)',
+        width: '100%',
+        maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
       }}
     >
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: compact ? 320 : 420 }}>
@@ -309,10 +325,11 @@ function TableBlock({ rows, compact }: { rows: string[][]; compact: boolean }) {
 function cellStyle(isHeader: boolean, isLastRow = false): CSSProperties {
   return {
     padding: '10px 12px',
+    lineHeight: isHeader ? 1.32 : 1.58,
     textAlign: 'left',
-    fontSize: isHeader ? '13px' : BODY_SIZE,
+    fontSize: isHeader ? '12.5px' : BODY_SIZE,
     fontWeight: isHeader ? 600 : 400,
-    color: isHeader ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.78)',
+    color: isHeader ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.8)',
     borderBottom: isLastRow ? 'none' : '1px solid rgba(255,255,255,0.06)',
     verticalAlign: 'top'
   }
@@ -336,12 +353,12 @@ function renderInlineContent(text: string) {
         <code
           key={index}
           style={{
-            fontFamily: '"SF Mono", "Cascadia Code", Consolas, monospace',
+            fontFamily: CODE_FONT,
             fontSize: '0.92em',
             padding: '0.08em 0.34em',
             borderRadius: 6,
-            background: 'rgba(255,255,255,0.06)',
-            color: 'rgba(255,255,255,0.9)'
+            background: 'rgba(255,255,255,0.07)',
+            color: 'rgba(255,255,255,0.92)'
           }}
         >
           {part.slice(1, -1)}

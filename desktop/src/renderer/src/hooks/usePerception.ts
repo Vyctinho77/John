@@ -18,6 +18,7 @@ interface UsePerceptionResult {
   resumeSensitiveBlock: () => Promise<void>
   updateUserProfile: (patch: Partial<UserProfile>) => Promise<void>
   clearSessionMemory: () => Promise<void>
+  refreshContext: () => Promise<void>
 }
 
 export function usePerception({
@@ -56,6 +57,11 @@ export function usePerception({
       analyzeRef.current = false
     }
   }, [_privateMode])
+
+  const refreshContext = useCallback(async () => {
+    const snapshot = await window.perceptionAPI?.getContext()
+    if (snapshot) setContextSnapshot(snapshot)
+  }, [])
 
   useEffect(() => {
     if (_privateMode) {
@@ -132,6 +138,7 @@ export function usePerception({
     togglePrivateMode,
     resumeSensitiveBlock,
     updateUserProfile,
-    clearSessionMemory
+    clearSessionMemory,
+    refreshContext
   }
 }

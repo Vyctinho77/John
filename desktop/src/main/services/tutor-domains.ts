@@ -66,15 +66,15 @@ function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
 
   const body = input.mode === 'step_by_step'
     ? [
-        'Leitura de codigo em etapas:',
+        'Leitura de código em etapas:',
         `1. O trecho central parece ser: ${cue}.`,
         '2. Identifique a responsabilidade dessa funcao, bloco ou contrato.',
         `3. Compare com a mudanca recente da tela: ${sessionMemory.incremental_summary}`,
         topics[0] ? `4. O ponto tecnico que mais vale destrinchar agora e ${topics[0]}.` : '4. Se quiser, eu decomponho o fluxo linha por linha.'
       ].join('\n')
     : [
-        `A tela parece mostrar codigo com foco em ${cue}.`,
-        topics.length ? `Os conceitos tecnicos mais provaveis aqui sao: ${topics.join(', ')}.` : '',
+        `A tela parece mostrar código com foco em ${cue}.`,
+        topics.length ? `Os conceitos técnicos mais prováveis aqui são: ${topics.join(', ')}.` : '',
         'Posso explicar a responsabilidade do trecho, o fluxo de dados ou os tradeoffs da implementacao.'
       ].filter(Boolean).join('\n')
 
@@ -91,15 +91,13 @@ function buildMarketTutor(input: DomainTutorInput): DomainTutorOutput {
   return {
     domain: 'market',
     content: [
-      `Estou tratando isso como leitura educacional de grafico, nao como recomendacao operacional.`,
-      `O foco visual parece ser ${semanticState.probable_user_focus}.`,
-      `Mudanca de contexto recente: ${sessionMemory.incremental_summary}`,
-      semanticState.pedagogical_topics.length
-        ? `Os topicos didaticos mais relevantes aqui sao ${semanticState.pedagogical_topics.join(', ')}.`
-        : 'Posso explicar estrutura, indicadores e leitura de contexto do grafico.'
+      'Trate isso como leitura de tela e contexto, não como chamada automática de compra ou venda.',
+      `O trecho central do gráfico parece ser ${semanticState.probable_user_focus}.`,
+      `Mudança recente no viewport: ${sessionMemory.incremental_summary}.`,
+      'Se a leitura for simples, prefira responder como trader lendo o gráfico ao vivo: posição prática, motivo, gatilho que mudaria a leitura e pergunta curta sobre horizonte.'
     ].join('\n'),
-    suggested_follow_ups: ['Explica o grafico', 'O que mudou no viewport?', 'Quais indicadores aparecem?', 'Resume como estudo'],
-    warning: 'contexto de mercado deve ser tratado como estudo, nao como sinal de compra ou venda'
+    suggested_follow_ups: ['Explica o gráfico', 'O que você faria aqui?', 'Qual nível importa?', 'Resume a leitura'],
+    warning: 'contexto de mercado deve ser tratado como estudo, não como sinal de compra ou venda'
   }
 }
 
@@ -114,12 +112,12 @@ function buildDocumentTutor(input: DomainTutorInput): DomainTutorOutput {
           `Continuidade de leitura: ${sessionMemory.continuity_summary}`,
           semanticState.pedagogical_topics.length
             ? `Temas centrais: ${semanticState.pedagogical_topics.join(', ')}.`
-            : 'Se quiser, eu separo em ideia principal, argumentos e implicacoes.'
+            : 'Se quiser, eu separo em ideia principal, argumentos e implicações.'
         ].join('\n')
       : [
           `Isso parece um documento mais longo com foco em ${semanticState.probable_user_focus}.`,
-          'Eu posso organizar a explicacao por tese principal, argumentos de apoio e termos importantes.',
-          `O resumo incremental da sessao diz: ${sessionMemory.incremental_summary}`
+          'Eu posso organizar a explicação por tese principal, argumentos de apoio e termos importantes.',
+          `O resumo incremental da sessão diz: ${sessionMemory.incremental_summary}`
         ].join('\n'),
     suggested_follow_ups: ['Resume o documento', 'Extrai a tese principal', 'Lista os argumentos', 'Explica os termos']
   }
@@ -131,13 +129,13 @@ function buildDashboardTutor(input: DomainTutorInput): DomainTutorOutput {
   return {
     domain: 'dashboard',
     content: [
-      `Isso parece um painel de metricas com foco em ${semanticState.probable_user_focus}.`,
-      `Mudanca mais relevante observada: ${sessionMemory.incremental_summary}`,
+      `Isso parece um painel de métricas com foco em ${semanticState.probable_user_focus}.`,
+      `Mudança mais relevante observada: ${sessionMemory.incremental_summary}`,
       semanticState.pedagogical_topics.length
-        ? `As lentes de leitura mais uteis aqui sao ${semanticState.pedagogical_topics.join(', ')}.`
-        : 'Posso explicar hierarquia de metricas, comparacoes e relacoes entre paines.'
+        ? `As lentes de leitura mais úteis aqui são ${semanticState.pedagogical_topics.join(', ')}.`
+        : 'Posso explicar hierarquia de métricas, comparações e relações entre painéis.'
     ].join('\n'),
-    suggested_follow_ups: ['Explica as metricas', 'O que mudou?', 'Quais numeros importam?', 'Resume o dashboard']
+    suggested_follow_ups: ['Explica as métricas', 'O que mudou?', 'Quais números importam?', 'Resume o dashboard']
   }
 }
 
@@ -149,10 +147,10 @@ function buildHomeworkTutor(input: DomainTutorInput): DomainTutorOutput {
     content: [
       `Vou tratar isso como apoio de estudo, nao como atalho para cola pronta.`,
       `A parte central parece ser ${semanticState.probable_user_focus}.`,
-      'Posso ajudar decompondo a questao, sugerindo como pensar e checando seu raciocinio antes da resposta final.'
+      'Posso ajudar decompondo a questão, sugerindo como pensar e checando seu raciocínio antes da resposta final.'
     ].join('\n'),
-    suggested_follow_ups: ['Quebra a questao', 'Me guia sem dar a resposta', 'Faz uma pergunta diagnostica', 'Confere meu raciocinio'],
-    warning: 'em contexto escolar, o foco sera orientar o raciocinio em vez de entregar a resposta pronta'
+    suggested_follow_ups: ['Quebra a questão', 'Me guia sem dar a resposta', 'Faz uma pergunta diagnóstica', 'Confere meu raciocínio'],
+    warning: 'em contexto escolar, o foco será orientar o raciocínio em vez de entregar a resposta pronta'
   }
 }
 
@@ -165,9 +163,9 @@ function buildReadingTutor(input: DomainTutorInput): DomainTutorOutput {
       `Isso parece leitura textual com foco em ${semanticState.probable_user_focus}.`,
       `Fluxo recente da leitura: ${sessionMemory.continuity_summary}`,
       semanticState.pedagogical_topics.length
-        ? `Os conceitos de leitura mais provaveis sao ${semanticState.pedagogical_topics.join(', ')}.`
-        : 'Posso resumir, explicar termos e testar compreensao.'
+        ? `Os conceitos de leitura mais prováveis são ${semanticState.pedagogical_topics.join(', ')}.`
+        : 'Posso resumir, explicar termos e testar compreensão.'
     ].join('\n'),
-    suggested_follow_ups: ['Resume o texto', 'Explica os termos', 'Faz perguntas de compreensao', 'Simplifica a linguagem']
+    suggested_follow_ups: ['Resume o texto', 'Explica os termos', 'Faz perguntas de compreensão', 'Simplifica a linguagem']
   }
 }

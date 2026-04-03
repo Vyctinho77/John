@@ -12,6 +12,12 @@ import type {
 } from '@shared/perception.types'
 import type { AIProviderId, AISettingsSnapshot, SaveAIProviderInput } from '@shared/ai-provider.types'
 import type { ProactiveHint } from '@shared/proactive.types'
+import type {
+  MemoryCardSummary,
+  MemoryEmbeddingStatus,
+  MemoryImportPreview,
+  MemoryImportMode
+} from '@shared/memory.types'
 import { HudShell, HudContent } from './HudShell'
 import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
@@ -67,6 +73,11 @@ export function HUD() {
   const [lastDeletion, setLastDeletion] = useState<DataDeletionSummary | null>(null)
   const [aiSettings, setAISettings] = useState<AISettingsSnapshot | null>(null)
   const [proactiveHint, setProactiveHint] = useState<ProactiveHint | null>(null)
+  const [memorySummary, setMemorySummary] = useState<MemoryCardSummary | null>(null)
+  const [memoryEmbeddingStatus, setMemoryEmbeddingStatus] = useState<MemoryEmbeddingStatus | null>(null)
+  const [memoryImportPreview, setMemoryImportPreview] = useState<MemoryImportPreview | null>(null)
+  const [memoryIncludeProfile, setMemoryIncludeProfile] = useState(true)
+  const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
   const prevVisual = useRef<HudVisual>('compact')
 
   const {
@@ -84,7 +95,8 @@ export function HUD() {
     togglePrivateMode: _togglePrivate,
     resumeSensitiveBlock,
     updateUserProfile,
-    clearSessionMemory
+    clearSessionMemory,
+    refreshContext
   } = usePerception({ sessionActive, privateMode })
 
   const semanticState = contextSnapshot?.semanticState ?? null
@@ -92,12 +104,22 @@ export function HUD() {
   const userProfile = contextSnapshot?.userProfile ?? null
 
   const refreshPrivacyState = useCallback(async () => {
-    const [nextSettings, nextSources, nextDiagnostics, nextPrivacy, nextAISettings] = await Promise.all([
+    const [
+      nextSettings,
+      nextSources,
+      nextDiagnostics,
+      nextPrivacy,
+      nextAISettings,
+      nextMemorySummary,
+      nextEmbeddingStatus
+    ] = await Promise.all([
       window.settingsAPI.get(),
       window.perceptionAPI.getSources(),
       window.settingsAPI.getDiagnostics(),
       window.settingsAPI.getPrivacy(),
-      window.aiAPI.getSettings()
+      window.aiAPI.getSettings(),
+      window.memoryAPI.getSummary(),
+      window.memoryAPI.getEmbeddingStatus()
     ])
 
     setSettings(nextSettings)
@@ -105,11 +127,18 @@ export function HUD() {
     setDiagnostics(nextDiagnostics)
     setPrivacy(nextPrivacy)
     setAISettings(nextAISettings)
+    setMemorySummary(nextMemorySummary)
+    setMemoryEmbeddingStatus(nextEmbeddingStatus)
   }, [])
 
   useEffect(() => {
     void refreshPrivacyState()
   }, [refreshPrivacyState])
+
+  useEffect(() => {
+    window.memoryAPI.getSummary().then(setMemorySummary).catch(() => {})
+    window.memoryAPI.getEmbeddingStatus().then(setMemoryEmbeddingStatus).catch(() => {})
+  }, [userProfile?.updated_at, sessionMemory?.updated_at])
 
   useEffect(() => {
     window.proactiveAPI.getState().then(state => setProactiveHint(state.currentHint))
@@ -144,8 +173,57 @@ export function HUD() {
     setInputValue('')
     setChunk('')
     setPrivateModeState(false)
+    setMemoryImportPreview(null)
+    setMemoryFeedback(null)
     await refreshPrivacyState()
   }, [refreshPrivacyState])
+
+  const handleExportMemory = useCallback(async () => {
+    const result = await window.memoryAPI.exportCard()
+    if (!result) return
+    setMemorySummary(result.summary)
+    setMemoryFeedback(`Memória exportada para ${result.path}`)
+  }, [])
+
+  const handleSelectImportCard = useCallback(async () => {
+    const filePath = await window.memoryAPI.selectImportCard()
+    if (!filePath) return
+    const preview = await window.memoryAPI.previewImport(filePath)
+    setMemoryImportPreview(preview)
+    setMemoryIncludeProfile(preview.include_profile_default)
+    setMemoryFeedback(null)
+  }, [])
+
+  const handleApplyMemoryImport = useCallback(async (mode: MemoryImportMode) => {
+    if (!memoryImportPreview) return
+    const summary = await window.memoryAPI.applyImport({
+      filePath: memoryImportPreview.file_path,
+      mode,
+      includeProfile: memoryIncludeProfile
+    })
+    setMemorySummary(summary)
+    setMemoryImportPreview(null)
+    setMemoryFeedback(mode === 'replace' ? 'Memory card restaurado.' : 'Memory card mesclado.')
+    await refreshContext()
+    setMemoryEmbeddingStatus(await window.memoryAPI.getEmbeddingStatus())
+  }, [memoryImportPreview, memoryIncludeProfile, refreshContext])
+
+  const handleClearPersistedMemory = useCallback(async () => {
+    const summary = await window.memoryAPI.clearPersisted()
+    setMemorySummary(summary)
+    setMemoryImportPreview(null)
+    setMemoryFeedback('Memória persistida local limpa.')
+    await refreshContext()
+    setMemoryEmbeddingStatus(await window.memoryAPI.getEmbeddingStatus())
+  }, [refreshContext])
+
+  const handleSyncEmbeddings = useCallback(async (force = false) => {
+    const status = force
+      ? await window.memoryAPI.rebuildEmbeddings()
+      : await window.memoryAPI.syncEmbeddings()
+    setMemoryEmbeddingStatus(status)
+    setMemoryFeedback(force ? 'Indice semantico reindexado.' : 'Embeddings sincronizados.')
+  }, [])
 
   const refreshAISettings = useCallback(async () => {
     const snapshot = await window.aiAPI.getSettings()
@@ -282,7 +360,7 @@ export function HUD() {
         ...prev,
         {
           role: 'assistant',
-          content: 'Nao consegui gerar uma explicacao contextual agora. Tente novamente com a sessao ativa.',
+          content: 'Não consegui gerar uma explicação contextual agora. Tente novamente com a sessão ativa.',
           meta: {
             domain: 'general',
             mode: 'direct',
@@ -379,6 +457,11 @@ export function HUD() {
               diagnostics={diagnostics}
               privacy={privacy}
               lastDeletion={lastDeletion}
+              memorySummary={memorySummary}
+              memoryEmbeddingStatus={memoryEmbeddingStatus}
+              memoryImportPreview={memoryImportPreview}
+              memoryIncludeProfile={memoryIncludeProfile}
+              memoryFeedback={memoryFeedback}
               sources={sources}
               isCapturing={isCapturing}
               isPrivate={privateMode}
@@ -457,6 +540,13 @@ export function HUD() {
                 })
               }}
               onDeleteLocalData={() => { void handleDeleteLocalData() }}
+              onExportMemory={() => { void handleExportMemory() }}
+              onSyncEmbeddings={() => { void handleSyncEmbeddings(false) }}
+              onRebuildEmbeddings={() => { void handleSyncEmbeddings(true) }}
+              onSelectImportCard={() => { void handleSelectImportCard() }}
+              onApplyMemoryImport={mode => { void handleApplyMemoryImport(mode) }}
+              onToggleMemoryImportProfile={() => setMemoryIncludeProfile(prev => !prev)}
+              onClearPersistedMemory={() => { void handleClearPersistedMemory() }}
               aiSettings={aiSettings}
               onRefreshAISettings={refreshAISettings}
               onSaveProvider={input => { void handleSaveProvider(input) }}

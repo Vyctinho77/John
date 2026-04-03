@@ -122,7 +122,10 @@ function makeSnapshot(overrides: Partial<PerceptionContextSnapshot> = {}): Perce
       response_language: 'Português',
       response_tone: 'didactic',
       updated_at: now
-    }
+    },
+    persisted_memory_summary: 'Perfil Victor · beginner · step_by_step · didactic.',
+    persisted_memory_highlights: ['Objetivo de estudo: javascript.'],
+    screenshotDataUrl: null
   }
 
   return {

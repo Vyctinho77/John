@@ -24,6 +24,13 @@ import type {
   ProactiveOutcome,
   ProactiveState
 } from '../shared/proactive.types'
+import type {
+  ApplyMemoryImportInput,
+  MemoryEmbeddingStatus,
+  MemoryCardSummary,
+  MemoryExportResult,
+  MemoryImportPreview
+} from '../shared/memory.types'
 
 declare global {
   interface Window {
@@ -71,6 +78,17 @@ declare global {
       dismissHint: (outcome?: ProactiveOutcome) => void
       setStreaming: (active: boolean) => void
       onHint: (cb: (hint: ProactiveHint | null) => void) => () => void
+    }
+    memoryAPI: {
+      getSummary: () => Promise<MemoryCardSummary>
+      getEmbeddingStatus: () => Promise<MemoryEmbeddingStatus>
+      exportCard: () => Promise<MemoryExportResult | null>
+      selectImportCard: () => Promise<string | null>
+      previewImport: (filePath: string) => Promise<MemoryImportPreview>
+      applyImport: (input: ApplyMemoryImportInput) => Promise<MemoryCardSummary>
+      clearPersisted: () => Promise<MemoryCardSummary>
+      syncEmbeddings: () => Promise<MemoryEmbeddingStatus>
+      rebuildEmbeddings: () => Promise<MemoryEmbeddingStatus>
     }
   }
 }
