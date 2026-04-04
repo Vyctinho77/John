@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron'
 import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import type {
+  AICostSnapshot,
   AIRoutingSettings,
   AIProviderId,
   AIProviderModelOption,
@@ -10,6 +11,7 @@ import type {
   SaveAIProviderInput,
   TestAIProviderResult
 } from '../../shared/ai-provider.types'
+import { assertOpenAIBudgetAvailable, getAICostSnapshot, recordAICost } from './ai-costs'
 
 const AI_SETTINGS_PATH = join(app.getPath('userData'), 'ai-providers.json')
 
@@ -292,6 +294,10 @@ export async function getOpenAIEmbeddingAvailability(): Promise<OpenAIEmbeddingA
   return { available: true, reason: null }
 }
 
+export async function getAICosts(): Promise<AICostSnapshot> {
+  return getAICostSnapshot()
+}
+
 export async function generateOpenAIEmbeddings(texts: string[]): Promise<number[][]> {
   const trimmedInputs = texts.map(text => text.trim()).filter(Boolean)
   if (trimmedInputs.length === 0) return []
@@ -301,6 +307,7 @@ export async function generateOpenAIEmbeddings(texts: string[]): Promise<number[
   if (!canUseProvider(provider)) {
     throw new Error('OpenAI embeddings indisponiveis.')
   }
+  await assertOpenAIBudgetAvailable()
 
   const apiKey = requireSecret(provider)
   const response = await fetch(joinUrl(provider.baseUrl, '/embeddings'), {
@@ -321,6 +328,10 @@ export async function generateOpenAIEmbeddings(texts: string[]): Promise<number[
 
   const payload = await response.json() as {
     data?: Array<{ embedding?: number[]; index?: number }>
+    usage?: {
+      prompt_tokens?: number
+      total_tokens?: number
+    }
   }
 
   const vectors = (payload.data ?? [])
@@ -331,6 +342,18 @@ export async function generateOpenAIEmbeddings(texts: string[]): Promise<number[
   if (vectors.length !== trimmedInputs.length || vectors.some(vector => vector.length === 0)) {
     throw new Error('OpenAI embeddings nao retornou vetores validos.')
   }
+
+  const promptTokens = payload.usage?.prompt_tokens ?? payload.usage?.total_tokens ?? 0
+  await recordAICost({
+    providerId: 'openai',
+    model: 'text-embedding-3-small',
+    operation: 'embedding',
+    costUsd: calculateEmbeddingCost('text-embedding-3-small', promptTokens),
+    inputTokens: promptTokens,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    at: Date.now()
+  })
 
   return vectors
 }
@@ -582,6 +605,7 @@ async function sendOpenAIChat(
   provider: StoredAIProvider,
   request: RemoteChatRequest
 ): Promise<ProviderExecutionResult> {
+  await assertOpenAIBudgetAvailable()
   const apiKey = requireSecret(provider)
   const userContent = request.imageDataUrl
     ? [
@@ -611,12 +635,34 @@ async function sendOpenAIChat(
   const payload = await response.json() as {
     choices?: Array<{ message?: { content?: string } }>
     model?: string
+    usage?: {
+      prompt_tokens?: number
+      completion_tokens?: number
+      prompt_tokens_details?: {
+        cached_tokens?: number
+      }
+    }
   }
   const text = payload.choices?.[0]?.message?.content?.trim()
   if (!text) throw new Error('OpenAI nao retornou texto.')
+  const model = payload.model ?? provider.selectedModel ?? 'openai'
+  const promptTokens = payload.usage?.prompt_tokens ?? 0
+  const completionTokens = payload.usage?.completion_tokens ?? 0
+  const cachedInputTokens = payload.usage?.prompt_tokens_details?.cached_tokens ?? 0
+  await recordAICost({
+    providerId: 'openai',
+    model,
+    operation: 'chat',
+    costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
+    inputTokens: promptTokens,
+    cachedInputTokens,
+    outputTokens: completionTokens,
+    at: Date.now()
+  })
+
   return {
     providerId: 'openai',
-    model: payload.model ?? provider.selectedModel ?? 'openai',
+    model,
     text
   }
 }
@@ -793,4 +839,67 @@ function buildSuccessMessage(providerId: AIProviderId, model: string | null): st
   const providerName = PROVIDER_DEFINITIONS[providerId].label
   if (!model) return `${providerName} conectado com sucesso.`
   return `${providerName} conectado com o modelo ${model}.`
+}
+
+function calculateOpenAITextCost(
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+  cachedInputTokens: number
+): number {
+  const pricing = resolveOpenAITextPricing(model)
+  if (!pricing) return 0
+
+  const billableInputTokens = Math.max(0, promptTokens - cachedInputTokens)
+  return (
+    (billableInputTokens / 1_000_000) * pricing.input
+    + (cachedInputTokens / 1_000_000) * pricing.cachedInput
+    + (completionTokens / 1_000_000) * pricing.output
+  )
+}
+
+function calculateEmbeddingCost(model: string, promptTokens: number): number {
+  const pricing = resolveEmbeddingPricing(model)
+  if (!pricing) return 0
+  return (promptTokens / 1_000_000) * pricing.input
+}
+
+function resolveOpenAITextPricing(model: string): {
+  input: number
+  cachedInput: number
+  output: number
+} | null {
+  const normalized = model.toLowerCase()
+
+  if (normalized.startsWith('gpt-4.1-mini')) {
+    return { input: 0.4, cachedInput: 0.1, output: 1.6 }
+  }
+  if (normalized.startsWith('gpt-4.1')) {
+    return { input: 2, cachedInput: 0.5, output: 8 }
+  }
+  if (normalized.startsWith('gpt-4o-mini')) {
+    return { input: 0.15, cachedInput: 0.075, output: 0.6 }
+  }
+  if (normalized.startsWith('gpt-4o')) {
+    return { input: 2.5, cachedInput: 1.25, output: 10 }
+  }
+  if (normalized.startsWith('o4-mini')) {
+    return { input: 1.1, cachedInput: 0.275, output: 4.4 }
+  }
+  if (normalized === 'o3' || normalized.startsWith('o3-')) {
+    return { input: 2, cachedInput: 0.5, output: 8 }
+  }
+
+  return null
+}
+
+function resolveEmbeddingPricing(model: string): { input: number } | null {
+  const normalized = model.toLowerCase()
+  if (normalized === 'text-embedding-3-small') {
+    return { input: 0.02 }
+  }
+  if (normalized === 'text-embedding-3-large') {
+    return { input: 0.13 }
+  }
+  return null
 }

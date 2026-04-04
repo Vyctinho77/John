@@ -1,11 +1,12 @@
-import { desktopCapturer, nativeImage, screen } from 'electron'
+import { desktopCapturer, screen } from 'electron'
 import type { CaptureSource } from '../../shared/perception.types'
 import { getActiveWindowTitle, normalizeWindowTitle } from './active-window'
 import { evaluateCaptureSource } from './capture-scope'
 import { getAppSettings } from './settings'
 
-const THUMBNAIL_W = 1280
-const THUMBNAIL_H = 720
+// 960x540 is sufficient for OCR while reducing PNG encode overhead ~45%
+const THUMBNAIL_W = 960
+const THUMBNAIL_H = 540
 
 const EMPTY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
@@ -36,11 +37,13 @@ export async function captureScreen(sourceId?: string): Promise<string | null> {
       return normalizeCaptureImage(source.thumbnail)
     }
 
-    const windowSources = await desktopCapturer.getSources({
-      types: ['window'],
+    // Single enumeration pass for both window and screen sources
+    const allSources = await desktopCapturer.getSources({
+      types: ['window', 'screen'],
       thumbnailSize: { width: THUMBNAIL_W, height: THUMBNAIL_H }
     })
 
+    const windowSources = allSources.filter(s => s.id.startsWith('window:'))
     const activeWindowTitle = await getActiveWindowTitle()
     const candidate = pickBestWindowSource(windowSources, activeWindowTitle)
     if (candidate) {
@@ -48,10 +51,7 @@ export async function captureScreen(sourceId?: string): Promise<string | null> {
       if (result) return result
     }
 
-    const screenSources = await desktopCapturer.getSources({
-      types: ['screen'],
-      thumbnailSize: { width: THUMBNAIL_W, height: THUMBNAIL_H }
-    })
+    const screenSources = allSources.filter(s => s.id.startsWith('screen:'))
     const screenSource = getPrimaryScreenSource(screenSources)
     if (!screenSource) return null
     return normalizeCaptureImage(screenSource.thumbnail)
@@ -109,14 +109,8 @@ function normalizeCaptureImage(image: Electron.NativeImage): string | null {
   const { width, height } = image.getSize()
   if (width < 32 || height < 32) return null
 
-  const pngBuffer = image.toPNG()
-  if (!pngBuffer.length) return null
-
-  const normalized = nativeImage.createFromBuffer(pngBuffer)
-  if (normalized.isEmpty()) return null
-
-  const normalizedDataUrl = normalized.toDataURL()
-  return normalizedDataUrl === EMPTY_PNG ? null : normalizedDataUrl
+  const dataUrl = image.toDataURL()
+  return dataUrl === EMPTY_PNG ? null : dataUrl
 }
 
 export async function getWindowSources(): Promise<CaptureSource[]> {

@@ -23,12 +23,17 @@ import type {
   UserProfile
 } from '../../shared/perception.types'
 
+const BASE_INTERVAL_MS = 10_000
+const IDLE_INTERVAL_MS = 20_000
+const ACTIVE_INTERVAL_MS = 8_000
+const MAX_CONSECUTIVE_UNCHANGED = 3
+
 const DEFAULT_CONFIG: PerceptionConfig = {
   enabled: false,
   privateMode: false,
-  intervalMs: 8_000,
-  thumbnailWidth: 1280,
-  thumbnailHeight: 720,
+  intervalMs: BASE_INTERVAL_MS,
+  thumbnailWidth: 960,
+  thumbnailHeight: 540,
   targetSourceId: null,
   sessionTtlMs: 15 * 60_000,
   memoryLimit: 6
@@ -37,7 +42,9 @@ const DEFAULT_CONFIG: PerceptionConfig = {
 let config: PerceptionConfig = { ...DEFAULT_CONFIG }
 let sessionInterval: ReturnType<typeof setInterval> | null = null
 let captureStateListeners: ((isCapturing: boolean) => void)[] = []
+let snapshotListeners: ((snapshot: PerceptionContextSnapshot) => void)[] = []
 let lastRawText = ''
+let consecutiveUnchanged = 0
 let sessionMemory = createSessionMemory()
 let latestSnapshot: PerceptionContextSnapshot | null = null
 let sensitiveSurfaceBlocked = false
@@ -53,24 +60,37 @@ export function setPrivateMode(enabled: boolean): void {
   if (enabled) stopSession()
 }
 
+function getAdaptiveInterval(): number {
+  if (consecutiveUnchanged >= MAX_CONSECUTIVE_UNCHANGED) return IDLE_INTERVAL_MS
+  if (consecutiveUnchanged === 0) return ACTIVE_INTERVAL_MS
+  return BASE_INTERVAL_MS
+}
+
+function scheduleNextTick(): void {
+  if (!config.enabled || config.privateMode) return
+  if (sessionInterval) clearTimeout(sessionInterval)
+
+  sessionInterval = setTimeout(async () => {
+    if (!config.enabled || config.privateMode) return
+    await analyzeOnce()
+    scheduleNextTick()
+  }, getAdaptiveInterval())
+}
+
 export function startSession(): void {
   if (config.privateMode || sensitiveSurfaceBlocked) return
   config.enabled = true
   ensureActiveSession()
   notifyCaptureState(true)
   if (sessionInterval) return
-
-  sessionInterval = setInterval(async () => {
-    if (!config.enabled || config.privateMode) return
-    await analyzeOnce()
-  }, config.intervalMs)
+  scheduleNextTick()
 }
 
 export function stopSession(): void {
   config.enabled = false
   notifyCaptureState(false)
   if (sessionInterval) {
-    clearInterval(sessionInterval)
+    clearTimeout(sessionInterval)
     sessionInterval = null
   }
 }
@@ -125,6 +145,14 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
     }
 
     lastRawText = semanticState.detected_text || effectiveObservationText(perception) || perception.rawText
+
+    // Track consecutive unchanged frames for adaptive throttling
+    if (semanticState.change_summary === 'none') {
+      consecutiveUnchanged++
+    } else {
+      consecutiveUnchanged = 0
+    }
+
     sessionMemory = updateSessionMemory(sessionMemory, semanticState)
 
     await syncPersistedMemory({ userProfile, sessionMemory })
@@ -140,6 +168,7 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
     }
 
     void evaluateProactiveOpportunity(snapshot)
+    notifySnapshotUpdate(snapshot)
 
     void recordDiagnosticEvent({
       type: 'trace',
@@ -264,6 +293,17 @@ export function onCaptureStateChange(cb: (isCapturing: boolean) => void): () => 
   return () => {
     captureStateListeners = captureStateListeners.filter(listener => listener !== cb)
   }
+}
+
+export function onSnapshotUpdate(cb: (snapshot: PerceptionContextSnapshot) => void): () => void {
+  snapshotListeners.push(cb)
+  return () => {
+    snapshotListeners = snapshotListeners.filter(listener => listener !== cb)
+  }
+}
+
+function notifySnapshotUpdate(snapshot: PerceptionContextSnapshot): void {
+  for (const listener of snapshotListeners) listener(snapshot)
 }
 
 export async function shutdown(): Promise<void> {

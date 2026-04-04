@@ -80,18 +80,16 @@ export function usePerception({
     window.perceptionAPI?.stopSession()
   }, [analyze, sessionActive, _privateMode])
 
+  // The main process already runs analyzeOnce() on its own interval.
+  // Instead of duplicating analysis, listen for snapshot updates pushed from main.
   useEffect(() => {
     if (!sessionActive || _privateMode) return
 
-    const interval = setInterval(async () => {
-      if (analyzeRef.current) return
-      try {
-        const snapshot = await window.perceptionAPI?.analyze()
-        if (snapshot) setContextSnapshot(snapshot)
-      } catch {}
-    }, 9_000)
+    const unsub = window.perceptionAPI?.onSnapshotUpdate(snapshot => {
+      if (snapshot) setContextSnapshot(snapshot)
+    })
 
-    return () => clearInterval(interval)
+    return () => unsub?.()
   }, [sessionActive, _privateMode])
 
   const togglePrivateMode = useCallback(() => {

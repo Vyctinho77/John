@@ -1,4 +1,5 @@
 ﻿import {
+  memo,
   useEffect,
   useRef,
   useState,
@@ -17,6 +18,7 @@ import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import type {
+  AICostSnapshot,
   AIProviderId,
   AIProviderSnapshot,
   AIRoutingSettings,
@@ -100,13 +102,17 @@ interface HudExpandedProps {
   onApplyMemoryImport: (mode: MemoryImportMode) => void
   onToggleMemoryImportProfile: () => void
   onClearPersistedMemory: () => void
+  screenshotMode: boolean
+  onToggleScreenshotMode: () => void
   aiSettings: AISettingsSnapshot | null
+  aiCosts: AICostSnapshot | null
   onRefreshAISettings: () => Promise<void>
   onSaveProvider: (input: SaveAIProviderInput) => void
   onRemoveProvider: (providerId: AIProviderId) => void
   onTestProvider: (providerId: AIProviderId) => Promise<TestAIProviderResult>
   onUpdateAIRouting: (patch: Partial<AIRoutingSettings>) => void
   onUpdateTypography: (patch: Partial<AppSettings['typography']>) => void
+  onUpdateDailyCostLimit: (value: number | null) => void
   onShowStage1: () => void
   onShowStage2: () => void
   onShowStage3: () => void
@@ -352,7 +358,45 @@ function labelEmbeddingState(state: MemoryEmbeddingStatus['state']): string {
   }
 }
 
-export function HudExpanded({
+function getCostAlertState(costs: AICostSnapshot | null): {
+  level: 'none' | 'watch' | 'danger' | 'blocked'
+  label: string | null
+  message: string | null
+} {
+  if (!costs || costs.dailyLimitUsd === null || costs.dailyLimitUsd <= 0) {
+    return { level: 'none', label: null, message: null }
+  }
+
+  const ratio = costs.spentUsd / costs.dailyLimitUsd
+
+  if (costs.blocked || ratio >= 1) {
+    return {
+      level: 'blocked',
+      label: 'limite atingido',
+      message: 'Novas chamadas OpenAI ficam bloqueadas ate a virada do dia ou ajuste do teto.'
+    }
+  }
+
+  if (ratio >= 0.95) {
+    return {
+      level: 'danger',
+      label: 'acima de 95%',
+      message: 'Voce esta muito perto do teto diario. A proxima chamada pode encostar no limite.'
+    }
+  }
+
+  if (ratio >= 0.8) {
+    return {
+      level: 'watch',
+      label: 'acima de 80%',
+      message: 'O gasto diario esta entrando na faixa de atencao.'
+    }
+  }
+
+  return { level: 'none', label: null, message: null }
+}
+
+export const HudExpanded = memo(function HudExpanded({
   inputValue,
   onInputChange,
   onSubmit,
@@ -402,13 +446,17 @@ export function HudExpanded({
   onApplyMemoryImport,
   onToggleMemoryImportProfile,
   onClearPersistedMemory,
+  screenshotMode,
+  onToggleScreenshotMode,
   aiSettings,
+  aiCosts,
   onRefreshAISettings,
   onSaveProvider,
   onRemoveProvider,
   onTestProvider,
   onUpdateAIRouting,
   onUpdateTypography,
+  onUpdateDailyCostLimit,
   onShowStage1,
   onShowStage2,
   onShowStage3,
@@ -425,6 +473,7 @@ export function HudExpanded({
   const [isTestingProvider, setIsTestingProvider] = useState<AIProviderId | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
+  const [dailyCostDraft, setDailyCostDraft] = useState('')
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -466,6 +515,14 @@ export function HudExpanded({
       return next
     })
   }, [aiSettings])
+
+  useEffect(() => {
+    setDailyCostDraft(
+      settings?.dailyCostLimitUsd === null || settings?.dailyCostLimitUsd === undefined
+        ? ''
+        : settings.dailyCostLimitUsd.toFixed(2)
+    )
+  }, [settings?.dailyCostLimitUsd])
 
   const quickActions = latestResponseMeta?.suggested_follow_ups?.length
     ? latestResponseMeta.suggested_follow_ups
@@ -581,6 +638,7 @@ export function HudExpanded({
 
   const selectedProvider = aiSettings?.providers.find(provider => provider.id === activeProviderId) ?? null
   const providerDraft = providerDrafts[activeProviderId]
+  const costAlert = getCostAlertState(aiCosts)
 
   const updateProviderDraft = (patch: Partial<ProviderDraftMap[AIProviderId]>) => {
     setProviderDrafts(current => ({
@@ -624,6 +682,28 @@ export function HudExpanded({
     } finally {
       setIsTestingProvider(null)
     }
+  }
+
+  const commitDailyCostLimit = () => {
+    if (!settings) return
+
+    const trimmed = dailyCostDraft.trim().replace(',', '.')
+    if (!trimmed) {
+      onUpdateDailyCostLimit(null)
+      return
+    }
+
+    const value = Number(trimmed)
+    if (!Number.isFinite(value) || value < 0) {
+      setDailyCostDraft(
+        settings.dailyCostLimitUsd === null
+          ? ''
+          : settings.dailyCostLimitUsd.toFixed(2)
+      )
+      return
+    }
+
+    onUpdateDailyCostLimit(Number(value.toFixed(2)))
   }
 
   const renderAPISettings = () => {
@@ -824,6 +904,143 @@ export function HudExpanded({
               {apiFeedback}
             </p>
           )}
+        </div>
+
+        <div
+          className="mt-4 rounded-[22px] p-4"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)'
+          }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
+                Custo diário
+              </p>
+              <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                Defina um teto diário em dólar para uso de API.
+              </p>
+            </div>
+            <span
+              className="px-2.5 py-1 rounded-full text-[10px]"
+              style={{
+                background: 'rgba(255,255,255,0.05)',
+                color: 'rgba(255,255,255,0.66)',
+                border: '1px solid rgba(255,255,255,0.08)'
+              }}
+            >
+              {settings.dailyCostLimitUsd === null ? 'sem limite' : `$${settings.dailyCostLimitUsd.toFixed(2)}/dia`}
+            </span>
+          </div>
+
+          {costAlert.level !== 'none' && (
+            <div
+              className="mt-3 rounded-[16px] px-3 py-2.5"
+              style={{
+                background:
+                  costAlert.level === 'blocked'
+                    ? 'rgba(255,255,255,0.08)'
+                    : costAlert.level === 'danger'
+                      ? 'rgba(255,255,255,0.06)'
+                      : 'rgba(255,255,255,0.04)',
+                border:
+                  costAlert.level === 'blocked'
+                    ? '1px solid rgba(255,255,255,0.16)'
+                    : costAlert.level === 'danger'
+                      ? '1px solid rgba(255,255,255,0.12)'
+                      : '1px solid rgba(255,255,255,0.08)'
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.86)' }}>
+                  Atenção de custo
+                </p>
+                <span
+                  className="px-2 py-1 rounded-full text-[10px]"
+                  style={{
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'rgba(255,255,255,0.72)',
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}
+                >
+                  {costAlert.label}
+                </span>
+              </div>
+              <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.45 }}>
+                {costAlert.message}
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2">
+            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+              Teto diário em USD
+            </span>
+            <div className="flex items-center gap-2">
+              <div
+                className="flex items-center rounded-xl px-3 h-10 flex-1"
+                style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                <span className="text-[12px] mr-2" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                  $
+                </span>
+                <input
+                  value={dailyCostDraft}
+                  onChange={e => setDailyCostDraft(e.target.value)}
+                  onBlur={commitDailyCostLimit}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      commitDailyCostLimit()
+                    }
+                    if (e.key === 'Escape') {
+                      setDailyCostDraft(
+                        settings.dailyCostLimitUsd === null
+                          ? ''
+                          : settings.dailyCostLimitUsd.toFixed(2)
+                      )
+                    }
+                  }}
+                  inputMode="decimal"
+                  placeholder="ex: 2.50"
+                  className="bg-transparent outline-none w-full text-[13px]"
+                  style={{ color: 'rgba(255,255,255,0.92)' }}
+                />
+              </div>
+              <button
+                onMouseDown={e => {
+                  e.preventDefault()
+                  setDailyCostDraft('')
+                  onUpdateDailyCostLimit(null)
+                }}
+                className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
+                style={{
+                  background: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.6)',
+                  border: '1px solid rgba(255,255,255,0.08)'
+                }}
+              >
+                sem limite
+              </button>
+            </div>
+            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.45 }}>
+              Esse valor fica salvo na configuração do app e pode ser usado como teto operacional para chamadas remotas.
+            </p>
+            {aiCosts && (
+              <div className="mt-2">
+                <SettingsRow
+                  label="Gasto hoje"
+                  value={`$${aiCosts.spentUsd.toFixed(4)}`}
+                />
+                <SettingsRow
+                  label="Restante"
+                  value={aiCosts.remainingUsd === null ? 'sem limite' : `$${aiCosts.remainingUsd.toFixed(4)}`}
+                  last
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <div
@@ -1060,74 +1277,147 @@ export function HudExpanded({
             />
           </div>
 
+          {/* Screenshot mode */}
           <div
-            className="mt-5 rounded-[22px] p-4"
+            className="mt-4 rounded-[16px] overflow-hidden"
             style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.07)'
+              background: screenshotMode
+                ? 'rgba(255,159,10,0.06)'
+                : 'rgba(255,255,255,0.025)',
+              border: `1px solid ${screenshotMode
+                ? 'rgba(255,159,10,0.15)'
+                : 'rgba(255,255,255,0.06)'}`,
+              transition: 'background 0.3s, border-color 0.3s'
             }}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
-                  Memory Card
-                </p>
-                <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
-                  Perfil + memória persistida, pronto para exportar ou reimportar.
-                </p>
+            <button
+              onMouseDown={e => { e.preventDefault(); onToggleScreenshotMode() }}
+              className="w-full flex items-center justify-between gap-4 px-4 transition-opacity duration-150 hover:opacity-80 active:opacity-60"
+              style={{ minHeight: 52 }}
+            >
+              <div className="flex items-center gap-3">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <rect x="3" y="5" width="18" height="14" rx="2.5" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
+                  <circle cx="12" cy="12" r="3" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
+                  <path d="M15 5V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v1" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
+                </svg>
+                <div>
+                  <span
+                    className="text-[13px] font-medium"
+                    style={{ color: screenshotMode ? 'rgba(255,179,64,0.95)' : 'rgba(255,255,255,0.82)' }}
+                  >
+                    Modo screenshot
+                  </span>
+                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                    {screenshotMode ? 'Captura pausada · restaura em 30s' : 'Torna o HUD visivel em prints'}
+                  </p>
+                </div>
               </div>
-              {memorySummary && (
-                <span
-                  className="px-2.5 py-1 rounded-full text-[10px]"
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'rgba(255,255,255,0.68)',
-                    border: '1px solid rgba(255,255,255,0.08)'
-                  }}
-                >
-                  {memorySummary.item_count} memórias
-                </span>
-              )}
+              <Toggle on={screenshotMode} />
+            </button>
+          </div>
+
+          <div
+            className="mt-5 rounded-[20px] overflow-hidden"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              backdropFilter: 'blur(40px)',
+              WebkitBackdropFilter: 'blur(40px)',
+              border: '1px solid rgba(255,255,255,0.08)'
+            }}
+          >
+            {/* Header */}
+            <div
+              className="px-5 pt-5 pb-4"
+              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+            >
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex items-center justify-center rounded-[12px]"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      background: 'linear-gradient(135deg, rgba(90,130,240,0.22), rgba(90,130,240,0.08))',
+                      border: '1px solid rgba(90,130,240,0.18)'
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="rgba(120,160,255,0.85)" strokeWidth="1.5" strokeLinejoin="round" />
+                      <path d="M12 22V12" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
+                      <path d="M21 7l-9 5-9-5" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.01em' }}>
+                      Memory Card
+                    </p>
+                    <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                      Perfil + memória persistida
+                    </p>
+                  </div>
+                </div>
+                {memorySummary && (
+                  <span
+                    className="px-2.5 py-1 rounded-full text-[10px] font-medium"
+                    style={{
+                      background: 'rgba(90,130,240,0.12)',
+                      color: 'rgba(130,170,255,0.9)',
+                      border: '1px solid rgba(90,130,240,0.15)'
+                    }}
+                  >
+                    {memorySummary.item_count} memórias
+                  </span>
+                )}
+              </div>
             </div>
 
+            {/* Summary rows */}
             {memorySummary && (
-              <div className="mt-4">
+              <div className="px-5">
                 <SettingsRow label="Dono" value={memorySummary.owner_name || 'sem nome'} />
                 <SettingsRow label="Perfil" value={memorySummary.profile_summary} />
                 <SettingsRow label="Impacto" value={memorySummary.impact_summary} last />
               </div>
             )}
 
+            {/* Embeddings sub-card */}
             {memoryEmbeddingStatus && (
               <div
-                className="mt-4 rounded-[18px] p-3.5"
+                className="mx-4 mt-3 rounded-[14px] p-4"
                 style={{
-                  background: 'rgba(255,255,255,0.022)',
+                  background: 'rgba(255,255,255,0.025)',
                   border: '1px solid rgba(255,255,255,0.06)'
                 }}
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.86)' }}>
-                      OpenAI embeddings
+                    <p className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.88)' }}>
+                      Embeddings
                     </p>
-                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+                    <p className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.40)' }}>
                       {memoryEmbeddingStatus.embedding_model}
                     </p>
                   </div>
                   <span
-                    className="px-2 py-1 rounded-full text-[10px]"
+                    className="px-2 py-0.5 rounded-full text-[9px] font-medium"
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'rgba(255,255,255,0.66)',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      background: memoryEmbeddingStatus.state === 'ready'
+                        ? 'rgba(52,199,89,0.12)'
+                        : 'rgba(255,204,0,0.12)',
+                      color: memoryEmbeddingStatus.state === 'ready'
+                        ? 'rgba(52,199,89,0.9)'
+                        : 'rgba(255,214,51,0.9)',
+                      border: `1px solid ${memoryEmbeddingStatus.state === 'ready'
+                        ? 'rgba(52,199,89,0.18)'
+                        : 'rgba(255,204,0,0.18)'}`
                     }}
                   >
                     {labelEmbeddingState(memoryEmbeddingStatus.state)}
                   </span>
                 </div>
 
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <SettingsRow
                     label="Itens indexados"
                     value={String(memoryEmbeddingStatus.indexed_count)}
@@ -1142,46 +1432,47 @@ export function HudExpanded({
                     last={!memoryEmbeddingStatus.error}
                   />
                   {memoryEmbeddingStatus.error ? (
-                    <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.42)', lineHeight: 1.45 }}>
+                    <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,100,100,0.7)', lineHeight: 1.45 }}>
                       {memoryEmbeddingStatus.error}
                     </p>
                   ) : null}
                 </div>
 
-                <div className="mt-3 flex gap-2 flex-wrap">
+                <div className="mt-3 flex gap-2">
                   <button
                     onMouseDown={e => { e.preventDefault(); onSyncEmbeddings() }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    className="px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                     style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'rgba(255,255,255,0.72)',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      background: 'rgba(90,130,240,0.14)',
+                      color: 'rgba(130,170,255,0.92)',
+                      border: '1px solid rgba(90,130,240,0.2)'
                     }}
                   >
                     sincronizar
                   </button>
                   <button
                     onMouseDown={e => { e.preventDefault(); onRebuildEmbeddings() }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    className="px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                     style={{
                       background: 'rgba(255,255,255,0.04)',
-                      color: 'rgba(255,255,255,0.56)',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      color: 'rgba(255,255,255,0.52)',
+                      border: '1px solid rgba(255,255,255,0.07)'
                     }}
                   >
-                    reindexar memoria
+                    reindexar
                   </button>
                 </div>
               </div>
             )}
 
+            {/* Highlights */}
             {memorySummary?.highlight_texts?.length ? (
-              <div className="mt-4 flex flex-col gap-2">
+              <div className="mx-5 mt-4 flex flex-col gap-1.5">
                 {memorySummary.highlight_texts.map(text => (
                   <p
                     key={text}
                     className="text-[11px]"
-                    style={{ color: 'rgba(255,255,255,0.48)', lineHeight: 1.45 }}
+                    style={{ color: 'rgba(255,255,255,0.44)', lineHeight: 1.5 }}
                   >
                     {text}
                   </p>
@@ -1189,45 +1480,50 @@ export function HudExpanded({
               </div>
             ) : null}
 
-            <div className="mt-4 flex gap-2 flex-wrap">
+            {/* Action buttons */}
+            <div
+              className="px-5 py-4 mt-3 flex gap-2.5 flex-wrap"
+              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+            >
               <button
                 onMouseDown={e => { e.preventDefault(); onExportMemory() }}
-                className="px-3 py-1.5 rounded-full text-[10px]"
+                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                 style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  color: 'rgba(255,255,255,0.86)',
-                  border: '1px solid rgba(255,255,255,0.12)'
+                  background: 'linear-gradient(135deg, rgba(90,130,240,0.2), rgba(90,130,240,0.1))',
+                  color: 'rgba(140,175,255,0.95)',
+                  border: '1px solid rgba(90,130,240,0.22)'
                 }}
               >
-                exportar memória
+                Exportar
               </button>
               <button
                 onMouseDown={e => { e.preventDefault(); onSelectImportCard() }}
-                className="px-3 py-1.5 rounded-full text-[10px]"
+                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'rgba(255,255,255,0.06)',
                   color: 'rgba(255,255,255,0.72)',
-                  border: '1px solid rgba(255,255,255,0.08)'
+                  border: '1px solid rgba(255,255,255,0.1)'
                 }}
               >
-                importar memória
+                Importar
               </button>
               <button
                 onMouseDown={e => { e.preventDefault(); onClearPersistedMemory() }}
-                className="px-3 py-1.5 rounded-full text-[10px]"
+                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  color: 'rgba(255,255,255,0.46)',
-                  border: '1px solid rgba(255,255,255,0.06)'
+                  background: 'rgba(255,69,58,0.08)',
+                  color: 'rgba(255,105,97,0.82)',
+                  border: '1px solid rgba(255,69,58,0.14)'
                 }}
               >
-                limpar memória local
+                Limpar
               </button>
             </div>
 
+            {/* Import preview */}
             {memoryImportPreview && (
               <div
-                className="mt-4 rounded-[18px] p-4"
+                className="mx-4 mb-4 rounded-[14px] p-4"
                 style={{
                   background: 'rgba(255,255,255,0.025)',
                   border: '1px solid rgba(255,255,255,0.06)'
@@ -1235,26 +1531,32 @@ export function HudExpanded({
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                    <p className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.92)' }}>
                       {memoryImportPreview.file_name}
                     </p>
-                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
                       {memoryImportPreview.summary.profile_summary}
                     </p>
                   </div>
                   <span
-                    className="px-2 py-1 rounded-full text-[10px]"
+                    className="px-2 py-0.5 rounded-full text-[9px] font-medium"
                     style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'rgba(255,255,255,0.66)',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      background: memoryImportPreview.conflicts > 0
+                        ? 'rgba(255,159,10,0.12)'
+                        : 'rgba(52,199,89,0.12)',
+                      color: memoryImportPreview.conflicts > 0
+                        ? 'rgba(255,179,64,0.9)'
+                        : 'rgba(52,199,89,0.9)',
+                      border: `1px solid ${memoryImportPreview.conflicts > 0
+                        ? 'rgba(255,159,10,0.18)'
+                        : 'rgba(52,199,89,0.18)'}`
                     }}
                   >
                     {memoryImportPreview.conflicts} conflitos
                   </span>
                 </div>
 
-                <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)', lineHeight: 1.45 }}>
+                <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)', lineHeight: 1.5 }}>
                   {memoryImportPreview.summary.impact_summary}
                 </p>
 
@@ -1269,35 +1571,36 @@ export function HudExpanded({
                   <Toggle on={memoryIncludeProfile} />
                 </button>
 
-                <div className="mt-3 flex gap-2 flex-wrap">
+                <div className="mt-3 flex gap-2.5">
                   <button
                     onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('merge') }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                     style={{
-                      background: 'rgba(255,255,255,0.08)',
-                      color: 'rgba(255,255,255,0.86)',
-                      border: '1px solid rgba(255,255,255,0.12)'
+                      background: 'linear-gradient(135deg, rgba(52,199,89,0.18), rgba(52,199,89,0.08))',
+                      color: 'rgba(80,220,110,0.92)',
+                      border: '1px solid rgba(52,199,89,0.2)'
                     }}
                   >
-                    mesclar
+                    Mesclar
                   </button>
                   <button
                     onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('replace') }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
+                    className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
                     style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'rgba(255,255,255,0.68)',
-                      border: '1px solid rgba(255,255,255,0.08)'
+                      background: 'rgba(255,159,10,0.1)',
+                      color: 'rgba(255,179,64,0.88)',
+                      border: '1px solid rgba(255,159,10,0.16)'
                     }}
                   >
-                    substituir
+                    Substituir
                   </button>
                 </div>
               </div>
             )}
 
+            {/* Feedback */}
             {memoryFeedback && (
-              <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
+              <p className="mx-5 mb-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>
                 {memoryFeedback}
               </p>
             )}
@@ -1874,5 +2177,5 @@ export function HudExpanded({
       </div>
     </div>
   )
-}
+})
 

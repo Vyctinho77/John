@@ -58,3 +58,13 @@ export interface TestAIProviderResult {
   message: string
   snapshot: AIProviderSnapshot
 }
+
+export interface AICostSnapshot {
+  date: string
+  dailyLimitUsd: number | null
+  spentUsd: number
+  remainingUsd: number | null
+  openaiSpentUsd: number
+  lastUpdatedAt: number | null
+  blocked: boolean
+}

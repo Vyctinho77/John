@@ -4,13 +4,14 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
   analyzeOnce, startSession, stopSession,
   configurePerception,
-  setPrivateMode, listSources, onCaptureStateChange, shutdown,
+  setPrivateMode, listSources, onCaptureStateChange, onSnapshotUpdate, shutdown,
   getContextSnapshot, updateUserProfile, clearSessionMemory, resumeAfterSensitiveBlock
 } from './services/perception'
 import { checkScreenPermission, requestScreenPermission } from './services/permission'
 import { generateTutorResponse } from './services/tutor'
 import { getAppSettings, resetAppSettings, updateAppSettings } from './services/settings'
 import {
+  getAICosts,
   getAISettingsSnapshot,
   removeAIProvider,
   resetAISettings,
@@ -53,8 +54,10 @@ import {
 import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
+let screenshotModeTimer: ReturnType<typeof setTimeout> | null = null
 
 const HUD_COMPACT = { width: 488, height: 55 }
+const SCREENSHOT_MODE_DURATION_MS = 30_000
 
 function getInitialPosition(width: number) {
   const display = screen.getPrimaryDisplay()
@@ -104,6 +107,10 @@ function createHudWindow(): void {
     hudWindow?.webContents.send('proactive:hint', hint)
   })
   hudWindow.on('closed', unsubscribeProactive)
+  const unsubscribeSnapshot = onSnapshotUpdate(snapshot => {
+    hudWindow?.webContents.send('perception:snapshot-update', snapshot)
+  })
+  hudWindow.on('closed', unsubscribeSnapshot)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     hudWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -153,6 +160,50 @@ ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number
   hudWindow.setBounds({ x: newX, y: newY, width, height }, false)
 })
 
+// ─── Screenshot mode ─────────────────────────────────────────────────────────
+
+function exitScreenshotMode(): void {
+  if (!hudWindow) return
+  hudWindow.setContentProtection(true)
+  hudWindow.webContents.send('hud:screenshot-mode', false)
+  if (screenshotModeTimer) {
+    clearTimeout(screenshotModeTimer)
+    screenshotModeTimer = null
+  }
+}
+
+ipcMain.handle('hud:screenshot-mode', async (_e, enabled: boolean) => {
+  if (!hudWindow) return false
+
+  if (enabled) {
+    // Pause perception while the HUD is visible in captures
+    stopSession()
+    hudWindow.setContentProtection(false)
+    hudWindow.webContents.send('hud:screenshot-mode', true)
+
+    // Auto-restore after timeout
+    if (screenshotModeTimer) clearTimeout(screenshotModeTimer)
+    screenshotModeTimer = setTimeout(() => {
+      exitScreenshotMode()
+      // Resume perception if it was running before
+      startSession()
+      screenshotModeTimer = null
+    }, SCREENSHOT_MODE_DURATION_MS)
+  } else {
+    exitScreenshotMode()
+    startSession()
+  }
+
+  void recordDiagnosticEvent({
+    type: 'audit',
+    source: 'settings',
+    action: enabled ? 'screenshot_mode_on' : 'screenshot_mode_off',
+    details: { autoRestoreMs: enabled ? SCREENSHOT_MODE_DURATION_MS : 0 }
+  })
+
+  return enabled
+})
+
 // ─── Perception IPC ───────────────────────────────────────────────────────────
 
 ipcMain.handle('perception:check-permission', async () => {
@@ -195,6 +246,10 @@ ipcMain.handle('tutor:respond', async (_e, request) => {
 
 ipcMain.handle('ai:get-settings', async () => {
   return getAISettingsSnapshot()
+})
+
+ipcMain.handle('ai:get-costs', async () => {
+  return getAICosts()
 })
 
 ipcMain.handle('ai:save-provider', async (_e, input) => {

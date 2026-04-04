@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysVisible: true,
   minimalMode: false,
   passiveSuggestions: true,
+  dailyCostLimitUsd: null,
   featureFlags: DEFAULT_FEATURE_FLAGS,
   captureScope: DEFAULT_CAPTURE_SCOPE,
   typography: DEFAULT_TYPOGRAPHY,
@@ -153,6 +154,7 @@ function normalizeStoredSettings(settings: Partial<StoredSettings>): StoredSetti
     alwaysVisible: settings.alwaysVisible ?? DEFAULT_SETTINGS.alwaysVisible,
     minimalMode: settings.minimalMode ?? DEFAULT_SETTINGS.minimalMode,
     passiveSuggestions: settings.passiveSuggestions ?? DEFAULT_SETTINGS.passiveSuggestions,
+    dailyCostLimitUsd: normalizeDailyCostLimit(settings.dailyCostLimitUsd),
     captureScope: {
       mode: settings.captureScope?.mode ?? DEFAULT_CAPTURE_SCOPE.mode,
       selectedSourceId: settings.captureScope?.selectedSourceId ?? DEFAULT_CAPTURE_SCOPE.selectedSourceId,
@@ -184,11 +186,18 @@ function toPublicSettings(settings: StoredSettings): AppSettings {
     alwaysVisible: settings.alwaysVisible,
     minimalMode: settings.minimalMode,
     passiveSuggestions: settings.passiveSuggestions,
+    dailyCostLimitUsd: settings.dailyCostLimitUsd,
     featureFlags: resolveEffectiveFeatureFlags(settings.installationId, settings.requestedFeatureFlags),
     captureScope: settings.captureScope,
     typography: settings.typography,
     updatedAt: settings.updatedAt
   }
+}
+
+function normalizeDailyCostLimit(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) return null
+  return Math.min(1_000, Math.max(0, Number(value.toFixed(2))))
 }
 
 async function persistSettings(settings: StoredSettings): Promise<void> {

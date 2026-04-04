@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
@@ -12,7 +13,7 @@ interface HudCompactProps {
   hasProactiveHint: boolean
 }
 
-export function HudCompact({
+export const HudCompact = memo(function HudCompact({
   onExpand,
   onExpandFull,
   onActivity,
@@ -94,4 +95,4 @@ export function HudCompact({
       </button>
     </div>
   )
-}
+})

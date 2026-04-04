@@ -7,6 +7,12 @@ import {
 } from '../src/main/services/tutor-prompt.ts'
 import type { PerceptionContextSnapshot, TutorMode, TutorRequest, UserProfile } from '../src/shared/perception.types.ts'
 
+type ContextOverrides = Partial<Omit<PerceptionContextSnapshot, 'semanticState' | 'sessionMemory' | 'userProfile'>> & {
+  semanticState?: Partial<PerceptionContextSnapshot['semanticState']>
+  sessionMemory?: Partial<PerceptionContextSnapshot['sessionMemory']>
+  userProfile?: Partial<UserProfile>
+}
+
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
     display_name: 'Victor',
@@ -20,7 +26,7 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   }
 }
 
-function makeContext(overrides: Partial<PerceptionContextSnapshot> = {}): PerceptionContextSnapshot {
+function makeContext(overrides: ContextOverrides = {}): PerceptionContextSnapshot {
   const base: PerceptionContextSnapshot = {
     semanticState: {
       detected_text: 'TypeError: undefined is not a function',

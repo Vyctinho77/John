@@ -11,6 +11,7 @@ import type {
   TutorResponse
 } from '@shared/perception.types'
 import type { AIProviderId, AISettingsSnapshot, SaveAIProviderInput } from '@shared/ai-provider.types'
+import type { AICostSnapshot } from '@shared/ai-provider.types'
 import type { ProactiveHint } from '@shared/proactive.types'
 import type {
   MemoryCardSummary,
@@ -57,9 +58,10 @@ function streamText(
       return
     }
 
-    onChunk(text.slice(0, i + 1))
-    i += Math.floor(Math.random() * 4) + 1
-  }, 28)
+    // Advance by larger chunks at a slower rate to reduce re-renders
+    i = Math.min(i + Math.floor(Math.random() * 8) + 3, text.length)
+    onChunk(text.slice(0, i))
+  }, 55)
 }
 
 export function HUD() {
@@ -72,12 +74,14 @@ export function HUD() {
   const [privacy, setPrivacy] = useState<PrivacySnapshot | null>(null)
   const [lastDeletion, setLastDeletion] = useState<DataDeletionSummary | null>(null)
   const [aiSettings, setAISettings] = useState<AISettingsSnapshot | null>(null)
+  const [aiCosts, setAICosts] = useState<AICostSnapshot | null>(null)
   const [proactiveHint, setProactiveHint] = useState<ProactiveHint | null>(null)
   const [memorySummary, setMemorySummary] = useState<MemoryCardSummary | null>(null)
   const [memoryEmbeddingStatus, setMemoryEmbeddingStatus] = useState<MemoryEmbeddingStatus | null>(null)
   const [memoryImportPreview, setMemoryImportPreview] = useState<MemoryImportPreview | null>(null)
   const [memoryIncludeProfile, setMemoryIncludeProfile] = useState(true)
   const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
+  const [screenshotMode, setScreenshotMode] = useState(false)
   const prevVisual = useRef<HudVisual>('compact')
 
   const {
@@ -110,6 +114,7 @@ export function HUD() {
       nextDiagnostics,
       nextPrivacy,
       nextAISettings,
+      nextAICosts,
       nextMemorySummary,
       nextEmbeddingStatus
     ] = await Promise.all([
@@ -118,6 +123,7 @@ export function HUD() {
       window.settingsAPI.getDiagnostics(),
       window.settingsAPI.getPrivacy(),
       window.aiAPI.getSettings(),
+      window.aiAPI.getCosts(),
       window.memoryAPI.getSummary(),
       window.memoryAPI.getEmbeddingStatus()
     ])
@@ -127,6 +133,7 @@ export function HUD() {
     setDiagnostics(nextDiagnostics)
     setPrivacy(nextPrivacy)
     setAISettings(nextAISettings)
+    setAICosts(nextAICosts)
     setMemorySummary(nextMemorySummary)
     setMemoryEmbeddingStatus(nextEmbeddingStatus)
   }, [])
@@ -139,6 +146,17 @@ export function HUD() {
     window.memoryAPI.getSummary().then(setMemorySummary).catch(() => {})
     window.memoryAPI.getEmbeddingStatus().then(setMemoryEmbeddingStatus).catch(() => {})
   }, [userProfile?.updated_at, sessionMemory?.updated_at])
+
+  useEffect(() => {
+    const unsub = window.hudAPI.onScreenshotModeChange(active => setScreenshotMode(active))
+    return () => unsub()
+  }, [])
+
+  const handleToggleScreenshotMode = useCallback(async () => {
+    const next = !screenshotMode
+    await window.hudAPI.setScreenshotMode(next)
+    setScreenshotMode(next)
+  }, [screenshotMode])
 
   useEffect(() => {
     window.proactiveAPI.getState().then(state => setProactiveHint(state.currentHint))
@@ -154,6 +172,13 @@ export function HUD() {
     ping()
     window.proactiveAPI.markActivity(type)
   }, [ping])
+
+  // Stable callback refs to avoid breaking memo on children
+  const handleActivityExpand = useCallback(() => handleActivity('expand'), [handleActivity])
+  const handleActivityEngage = useCallback(() => handleActivity('engage'), [handleActivity])
+  const handleActivityTyping = useCallback((value: string) => { setInputValue(value); handleActivity('typing') }, [handleActivity])
+  const handleInputFocus = useCallback(() => setInputFocused(true), [setInputFocused])
+  const handleInputBlur = useCallback(() => setInputFocused(false), [setInputFocused])
 
   const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
     const next = await window.settingsAPI.update(patch)
@@ -222,6 +247,7 @@ export function HUD() {
       ? await window.memoryAPI.rebuildEmbeddings()
       : await window.memoryAPI.syncEmbeddings()
     setMemoryEmbeddingStatus(status)
+    setAICosts(await window.aiAPI.getCosts())
     setMemoryFeedback(force ? 'Indice semantico reindexado.' : 'Embeddings sincronizados.')
   }, [])
 
@@ -406,7 +432,7 @@ export function HUD() {
             <HudCompact
               onExpand={expand}
               onExpandFull={expandFull}
-              onActivity={() => handleActivity('expand')}
+              onActivity={handleActivityExpand}
               isCapturing={isCapturing}
               minimalMode={settings?.minimalMode ?? false}
               passiveSuggestion={passiveSuggestion}
@@ -417,11 +443,11 @@ export function HUD() {
           {visual === 'intermediate' && (
             <HudIntermediate
               inputValue={inputValue}
-              onInputChange={value => { setInputValue(value); handleActivity('typing') }}
+              onInputChange={handleActivityTyping}
               onSubmit={handleSubmit}
-              onInputFocus={() => setInputFocused(true)}
-              onInputBlur={() => setInputFocused(false)}
-              onActivity={() => handleActivity('engage')}
+              onInputFocus={handleInputFocus}
+              onInputBlur={handleInputBlur}
+              onActivity={handleActivityEngage}
               onCollapse={collapse}
               response={latestResponse}
               responseMeta={latestResponseMeta}
@@ -440,11 +466,11 @@ export function HUD() {
           {visual === 'expanded' && (
             <HudExpanded
               inputValue={inputValue}
-              onInputChange={value => { setInputValue(value); handleActivity('typing') }}
+              onInputChange={handleActivityTyping}
               onSubmit={handleSubmit}
-              onInputFocus={() => setInputFocused(true)}
-              onInputBlur={() => setInputFocused(false)}
-              onActivity={() => handleActivity('engage')}
+              onInputFocus={handleInputFocus}
+              onInputBlur={handleInputBlur}
+              onActivity={handleActivityEngage}
               onCollapse={collapse}
               messages={messages}
               isStreaming={isStreaming}
@@ -547,7 +573,10 @@ export function HUD() {
               onApplyMemoryImport={mode => { void handleApplyMemoryImport(mode) }}
               onToggleMemoryImportProfile={() => setMemoryIncludeProfile(prev => !prev)}
               onClearPersistedMemory={() => { void handleClearPersistedMemory() }}
+              screenshotMode={screenshotMode}
+              onToggleScreenshotMode={handleToggleScreenshotMode}
               aiSettings={aiSettings}
+              aiCosts={aiCosts}
               onRefreshAISettings={refreshAISettings}
               onSaveProvider={input => { void handleSaveProvider(input) }}
               onRemoveProvider={providerId => { void handleRemoveProvider(providerId) }}
@@ -561,6 +590,9 @@ export function HUD() {
                     ...patch
                   }
                 })
+              }}
+              onUpdateDailyCostLimit={value => {
+                void updateSettings({ dailyCostLimitUsd: value })
               }}
               onShowStage1={collapse}
               onShowStage2={showIntermediate}

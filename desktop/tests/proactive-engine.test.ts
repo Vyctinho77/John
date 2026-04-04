@@ -9,11 +9,18 @@ import {
 import type { PerceptionContextSnapshot } from '../src/shared/perception.types.ts'
 import type { ProactiveState } from '../src/shared/proactive.types.ts'
 
+type SnapshotOverrides = Partial<Omit<PerceptionContextSnapshot, 'semanticState' | 'sessionMemory' | 'userProfile'>> & {
+  semanticState?: Partial<PerceptionContextSnapshot['semanticState']>
+  sessionMemory?: Partial<PerceptionContextSnapshot['sessionMemory']>
+  userProfile?: Partial<PerceptionContextSnapshot['userProfile']>
+}
+
 const baseSettings = {
   telemetryOptIn: false,
   alwaysVisible: true,
   minimalMode: false,
   passiveSuggestions: true,
+  dailyCostLimitUsd: null,
   featureFlags: {
     passiveSuggestions: true,
     advancedPerception: false,
@@ -53,7 +60,7 @@ function makeState(overrides: Partial<ProactiveState> = {}): ProactiveState {
   }
 }
 
-function makeSnapshot(overrides: Partial<PerceptionContextSnapshot> = {}): PerceptionContextSnapshot {
+function makeSnapshot(overrides: SnapshotOverrides = {}): PerceptionContextSnapshot {
   const now = 100_000
   const base: PerceptionContextSnapshot = {
     semanticState: {

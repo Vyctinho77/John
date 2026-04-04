@@ -1,5 +1,3 @@
-import { motion } from 'framer-motion'
-
 interface CaptureIndicatorProps {
   isCapturing: boolean
   isPrivate: boolean
@@ -23,19 +21,26 @@ export function CaptureIndicator({ isCapturing, isPrivate, onTogglePrivate }: Ca
         </svg>
       ) : (
         <>
-          {/* Pulsing dot when capturing */}
+          {/* Pulsing dot — pure CSS animation, no JS overhead */}
           <span className="relative flex h-2 w-2">
             {isCapturing && (
-              <motion.span
+              <span
                 className="absolute inline-flex h-full w-full rounded-full"
-                style={{ background: 'rgba(74,213,130,0.5)' }}
-                animate={{ scale: [1, 1.8], opacity: [0.6, 0] }}
-                transition={{ duration: 1.2, repeat: Infinity }}
+                style={{
+                  background: 'rgba(74,213,130,0.5)',
+                  animation: 'capture-pulse 1.2s ease-out infinite'
+                }}
               />
             )}
             <span className="relative inline-flex rounded-full h-2 w-2"
               style={{ background: isCapturing ? '#4ad582' : 'rgba(255,255,255,0.2)' }} />
           </span>
+          <style>{`
+            @keyframes capture-pulse {
+              0% { transform: scale(1); opacity: 0.6; }
+              100% { transform: scale(1.8); opacity: 0; }
+            }
+          `}</style>
         </>
       )}
     </button>

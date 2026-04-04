@@ -150,6 +150,7 @@ export interface AppSettings {
   alwaysVisible: boolean
   minimalMode: boolean
   passiveSuggestions: boolean
+  dailyCostLimitUsd: number | null
   featureFlags: FeatureFlags
   captureScope: CaptureScopeSettings
   typography: TypographySettings

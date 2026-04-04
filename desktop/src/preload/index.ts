@@ -6,6 +6,7 @@ import type {
   UserProfile
 } from '../shared/perception.types'
 import type {
+  AICostSnapshot,
   AIRoutingSettings,
   AISettingsSnapshot,
   AIProviderId,
@@ -33,6 +34,13 @@ const hudAPI = {
   onToggle:  (cb: (visible: boolean) => void) => {
     ipcRenderer.on('hud:toggle', (_e, visible) => cb(visible))
     return () => ipcRenderer.removeAllListeners('hud:toggle')
+  },
+  setScreenshotMode: (enabled: boolean): Promise<boolean> =>
+    ipcRenderer.invoke('hud:screenshot-mode', enabled),
+  onScreenshotModeChange: (cb: (active: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, active: boolean) => cb(active)
+    ipcRenderer.on('hud:screenshot-mode', handler)
+    return () => ipcRenderer.removeListener('hud:screenshot-mode', handler)
   }
 }
 
@@ -66,6 +74,12 @@ const perceptionAPI = {
     const handler = (_e: Electron.IpcRendererEvent, v: boolean) => cb(v)
     ipcRenderer.on('perception:capture-state', handler)
     return () => ipcRenderer.removeListener('perception:capture-state', handler)
+  },
+
+  onSnapshotUpdate: (cb: (snapshot: import('../shared/perception.types').PerceptionContextSnapshot) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, snapshot: import('../shared/perception.types').PerceptionContextSnapshot) => cb(snapshot)
+    ipcRenderer.on('perception:snapshot-update', handler)
+    return () => ipcRenderer.removeListener('perception:snapshot-update', handler)
   }
 }
 
@@ -83,6 +97,7 @@ const settingsAPI = {
 
 const aiAPI = {
   getSettings: (): Promise<AISettingsSnapshot> => ipcRenderer.invoke('ai:get-settings'),
+  getCosts: (): Promise<AICostSnapshot> => ipcRenderer.invoke('ai:get-costs'),
   saveProvider: (input: SaveAIProviderInput): Promise<AISettingsSnapshot> =>
     ipcRenderer.invoke('ai:save-provider', input),
   removeProvider: (providerId: AIProviderId): Promise<AISettingsSnapshot> =>

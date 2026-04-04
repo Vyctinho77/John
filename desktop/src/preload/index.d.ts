@@ -12,6 +12,7 @@ import type {
   UserProfile
 } from '../shared/perception.types'
 import type {
+  AICostSnapshot,
   AIRoutingSettings,
   AIProviderId,
   AISettingsSnapshot,
@@ -40,6 +41,8 @@ declare global {
       dragStart: (screenX: number, screenY: number) => void
       dragMove:  (screenX: number, screenY: number) => void
       onToggle: (cb: (visible: boolean) => void) => () => void
+      setScreenshotMode: (enabled: boolean) => Promise<boolean>
+      onScreenshotModeChange: (cb: (active: boolean) => void) => () => void
     }
     perceptionAPI: {
       checkPermission:   () => Promise<'granted' | 'denied' | 'not-determined'>
@@ -54,6 +57,7 @@ declare global {
       clearSessionMemory: () => Promise<SessionMemory>
       resumeSensitiveBlock: () => Promise<PerceptionContextSnapshot>
       onCaptureStateChange: (cb: (isCapturing: boolean) => void) => () => void
+      onSnapshotUpdate: (cb: (snapshot: PerceptionContextSnapshot) => void) => () => void
     }
     tutorAPI: {
       respond: (request: TutorRequest) => Promise<TutorResponse>
@@ -67,6 +71,7 @@ declare global {
     }
     aiAPI: {
       getSettings: () => Promise<AISettingsSnapshot>
+      getCosts: () => Promise<AICostSnapshot>
       saveProvider: (input: SaveAIProviderInput) => Promise<AISettingsSnapshot>
       removeProvider: (providerId: AIProviderId) => Promise<AISettingsSnapshot>
       testProvider: (providerId: AIProviderId) => Promise<TestAIProviderResult>

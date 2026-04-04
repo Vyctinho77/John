@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { nativeImage } from 'electron'
 import Tesseract, { Worker } from 'tesseract.js'
 import type { PerceptionResult, TextRegion } from '../../shared/perception.types'
@@ -5,6 +6,8 @@ import type { PerceptionResult, TextRegion } from '../../shared/perception.types
 let worker: Worker | null = null
 let initializing = false
 let initPromise: Promise<void> | null = null
+let lastImageHash: string | null = null
+let lastOcrResult: PerceptionResult | null = null
 
 const OCR_DPI = '110'
 
@@ -46,6 +49,15 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
     return emptyResult(startedAt)
   }
 
+  // Fast hash comparison — skip OCR if screenshot is identical
+  const pngBuf = image.toPNG()
+  const imageHash = createHash('md5').update(pngBuf).digest('hex')
+  if (imageHash === lastImageHash && lastOcrResult) {
+    console.log('[ocr] Frame unchanged, reusing cached result.')
+    return { ...lastOcrResult, capturedAt: startedAt }
+  }
+  lastImageHash = imageHash
+
   const normalizedDataUrl = image.toDataURL()
   const w = await getWorker()
   const { data } = await w.recognize(normalizedDataUrl)
@@ -81,12 +93,14 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   console.log(`[ocr] Done in ${Date.now() - startedAt}ms, confidence: ${avgConfidence.toFixed(1)}`)
 
-  return {
+  const result: PerceptionResult = {
     rawText: data.text,
     confidence: avgConfidence,
     regions,
     capturedAt: startedAt
   }
+  lastOcrResult = result
+  return result
 }
 
 function emptyResult(capturedAt: number): PerceptionResult {
