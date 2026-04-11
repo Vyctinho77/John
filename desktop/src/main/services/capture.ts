@@ -1,12 +1,13 @@
-import { desktopCapturer, screen } from 'electron'
+import { createHash } from 'crypto'
+import { desktopCapturer, nativeImage, screen } from 'electron'
 import type { CaptureSource } from '../../shared/perception.types'
 import { getActiveWindowTitle, normalizeWindowTitle } from './active-window'
 import { evaluateCaptureSource } from './capture-scope'
 import { getAppSettings } from './settings'
 
-// 960x540 is sufficient for OCR while reducing PNG encode overhead ~45%
-const THUMBNAIL_W = 960
-const THUMBNAIL_H = 540
+// 1280x720 balances Vision LLM accuracy (price axes, small text) with encode cost
+const THUMBNAIL_W = 1280
+const THUMBNAIL_H = 720
 
 const EMPTY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
@@ -59,6 +60,29 @@ export async function captureScreen(sourceId?: string): Promise<string | null> {
     console.error('[capture] captureScreen error:', err)
     return null
   }
+}
+
+export interface CaptureFrame {
+  dataUrl: string
+  hash: string
+  windowTitle: string | null
+}
+
+/**
+ * Lightweight capture that returns the screenshot + its hash + the active
+ * window title.  No OCR, no Vision LLM — designed for fast polling.
+ */
+export async function captureFrame(sourceId?: string): Promise<CaptureFrame | null> {
+  const dataUrl = await captureScreen(sourceId)
+  if (!dataUrl) return null
+
+  const image = nativeImage.createFromDataURL(dataUrl)
+  if (image.isEmpty()) return null
+
+  const hash = createHash('md5').update(image.toPNG()).digest('hex')
+  const windowTitle = await getActiveWindowTitle()
+
+  return { dataUrl, hash, windowTitle }
 }
 
 function pickBestWindowSource(

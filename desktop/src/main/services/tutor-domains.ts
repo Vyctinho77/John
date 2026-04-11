@@ -61,27 +61,58 @@ export function runDomainTutor(input: DomainTutorInput): DomainTutorOutput | nul
 
 function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
   const { semanticState, sessionMemory } = input.context
-  const cue = semanticState.detected_text || semanticState.probable_user_focus
-  const topics = semanticState.pedagogical_topics
+  const cc = semanticState.code_context
 
-  const body = input.mode === 'step_by_step'
-    ? [
-        'Leitura de código em etapas:',
-        `1. O trecho central parece ser: ${cue}.`,
-        '2. Identifique a responsabilidade dessa funcao, bloco ou contrato.',
-        `3. Compare com a mudanca recente da tela: ${sessionMemory.incremental_summary}`,
-        topics[0] ? `4. O ponto tecnico que mais vale destrinchar agora e ${topics[0]}.` : '4. Se quiser, eu decomponho o fluxo linha por linha.'
-      ].join('\n')
-    : [
-        `A tela parece mostrar código com foco em ${cue}.`,
-        topics.length ? `Os conceitos técnicos mais prováveis aqui são: ${topics.join(', ')}.` : '',
-        'Posso explicar a responsabilidade do trecho, o fluxo de dados ou os tradeoffs da implementacao.'
-      ].filter(Boolean).join('\n')
+  // Build rich context lines from vision data when available
+  const contextParts: string[] = []
+
+  if (cc) {
+    if (cc.file_path || cc.file_name) {
+      contextParts.push(`Arquivo ativo: ${cc.file_path || cc.file_name}`)
+    }
+    if (cc.language) contextParts.push(`Linguagem: ${cc.language}`)
+    if (cc.active_function) contextParts.push(`Escopo visível: ${cc.active_function}`)
+    if (cc.visible_line_range) contextParts.push(`Linhas: ${cc.visible_line_range}`)
+
+    if (cc.errors.length) {
+      contextParts.push(`Erros visíveis: ${cc.errors.map(e => {
+        const loc = e.line != null ? `linha ${e.line}: ` : ''
+        return `[${e.severity}] ${loc}${e.message}`
+      }).join(' | ')}`)
+    }
+
+    if (cc.terminal_output) {
+      contextParts.push(`Terminal: ${cc.terminal_output}`)
+    }
+
+    if (cc.cursor_area) {
+      contextParts.push(`Cursor em: ${cc.cursor_area}`)
+    }
+  }
+
+  // Fallback to basic context if no vision code_context
+  if (!contextParts.length) {
+    const cue = semanticState.detected_text || semanticState.probable_user_focus
+    contextParts.push(`Foco visível: ${cue}`)
+  }
+
+  contextParts.push(`Mudança recente: ${sessionMemory.incremental_summary}`)
+
+  const body = contextParts.join('\n')
+
+  // Smarter follow-ups based on what's visible
+  const followUps: string[] = []
+  if (cc?.errors.length) followUps.push('Explica esse erro')
+  if (cc?.active_function) followUps.push(`O que ${cc.active_function} faz?`)
+  if (cc?.terminal_output) followUps.push('O que o terminal tá dizendo?')
+  followUps.push('Explica o fluxo')
+  if (followUps.length < 4) followUps.push('Resume o trecho')
+  if (followUps.length < 4) followUps.push('Mostra tradeoffs')
 
   return {
     domain: 'code',
     content: body,
-    suggested_follow_ups: ['Explica linha por linha', 'Mostra fluxo de dados', 'Quais tradeoffs existem?', 'Resume o trecho']
+    suggested_follow_ups: followUps.slice(0, 4)
   }
 }
 

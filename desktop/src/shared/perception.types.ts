@@ -21,6 +21,8 @@ export interface PerceptionResult {
   capturedAt: number
 }
 
+export type EmotionalSignal = 'neutral' | 'frustrated' | 'focused' | 'exploring' | 'confused'
+
 export interface SemanticState {
   detected_text: string
   visual_summary: string
@@ -34,6 +36,53 @@ export interface SemanticState {
   sensitivity_reason: string | null
   uncertainty: number
   capturedAt: number
+
+  // Vision-enriched fields (populated when Vision LLM is available)
+  ui_elements?: string[]
+  visual_context?: string | null
+  app_identifier?: string | null
+  emotional_signal?: EmotionalSignal | null
+  key_values?: Record<string, string>
+  code_context?: CodeContext | null
+}
+
+export interface CodeContext {
+  file_name: string | null
+  file_path: string | null
+  language: string | null
+  visible_line_range: string | null
+  active_function: string | null
+  errors: CodeDiagnostic[]
+  terminal_output: string | null
+  git_indicators: string | null
+  open_tabs: string[]
+  cursor_area: string | null
+}
+
+export interface CodeDiagnostic {
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  line: number | null
+}
+
+export interface VisionAnalysis {
+  surface_type: SurfaceType
+  visual_summary: string
+  detected_text: string
+  focus_region: string
+  probable_user_focus: string
+  inferred_intent: string
+  pedagogical_topics: string[]
+  change_summary: ChangeSummary | null
+  uncertainty: number
+  is_sensitive: boolean
+  sensitivity_reason: string | null
+  ui_elements: string[]
+  visual_context: string | null
+  app_identifier: string | null
+  emotional_signal: EmotionalSignal | null
+  key_values: Record<string, string>
+  code_context: CodeContext | null
 }
 
 export interface SessionMemoryEntry {
@@ -45,6 +94,8 @@ export interface SessionMemoryEntry {
   probable_user_focus: string
   inferred_intent: string
   uncertainty: number
+  app_identifier?: string | null
+  emotional_signal?: EmotionalSignal | null
 }
 
 export interface SessionMemory {
@@ -71,12 +122,19 @@ export interface UserProfile {
   updated_at: number
 }
 
+export interface IntermediateThought {
+  primary: string
+  secondary: string | null
+  confidence: number
+}
+
 export interface PerceptionContextSnapshot {
   semanticState: SemanticState
   sessionMemory: SessionMemory
   userProfile: UserProfile
   persisted_memory_summary: string
   persisted_memory_highlights: string[]
+  intermediateThought: IntermediateThought
   screenshotDataUrl: string | null
 }
 
@@ -247,4 +305,5 @@ export interface PerceptionConfig {
   targetSourceId: string | null
   sessionTtlMs: number
   memoryLimit: number
+  useVisionLLM: boolean
 }

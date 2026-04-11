@@ -7,6 +7,8 @@ export type ProactiveEventType =
   | 'possible-doubt'
   | 'revisit-focus'
   | 'ocr-conflict'
+  | 'user-frustrated'
+  | 'app-switch'
 
 export type ProactiveInterventionLevel = 'hint'
 
@@ -58,6 +60,9 @@ export interface ProactiveSourceSignals {
   domainSignal: string | null
   semanticFocus: string
   topic: string | null
+  emotionalSignal: string | null
+  appIdentifier: string | null
+  appSwitchDetected: boolean
 }
 
 export interface ProactiveHint {

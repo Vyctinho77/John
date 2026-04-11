@@ -9,6 +9,18 @@ import {
   composeResponse,
   inferWarning
 } from './tutor-prompt'
+import {
+  calibrateDepth,
+  applyDepthCalibration,
+  detectSimplificationSignal,
+  detectDepthSignal
+} from './depth-calibrator'
+import {
+  recordInteractionSignal,
+  getBehaviorPattern,
+  getBehaviorPatternSummary,
+  flushBehaviorToMemory
+} from './behavior-tracker'
 import type {
   PerceptionContextSnapshot,
   TutorMode,
@@ -17,40 +29,99 @@ import type {
   UserProfile
 } from '../../shared/perception.types'
 
+/** Track how many responses have been generated this process session for flush scheduling */
+let responseCountSinceFlush = 0
+const FLUSH_EVERY_N_RESPONSES = 5
+
 export async function generateTutorResponse(request: TutorRequest): Promise<TutorResponse> {
   const startedAt = Date.now()
 
   try {
     const context = request.context ?? await getContextSnapshot()
-    const mode = inferMode(request, context.userProfile)
+
+    // ─── Depth calibration ───────────────────────────────────────────────────
+    const behaviorPattern = await getBehaviorPattern()
+    const calibration = calibrateDepth({
+      prompt: request.prompt,
+      conversationLength: request.conversation.length,
+      profile: context.userProfile,
+      behaviorPattern,
+      domain: 'general', // resolved below; used here for cross-session depth only
+      modeUsed: 'direct' // placeholder; updated after inferMode
+    })
+
+    // Build an effective profile that reflects calibrated depth for THIS response
+    const effectiveProfile: UserProfile = {
+      ...context.userProfile,
+      user_level: calibration.effective_level,
+      preferred_explanation_style: calibration.effective_style,
+      response_tone: calibration.effective_tone
+    }
+
+    const effectiveContext: PerceptionContextSnapshot = {
+      ...context,
+      userProfile: effectiveProfile
+    }
+
+    // ─── Behavior pattern summary for prompt injection ────────────────────────
+    const behaviorSummaryLines = await getBehaviorPatternSummary()
+
+    // ─── Core tutor pipeline ─────────────────────────────────────────────────
+    const mode = inferMode(request, effectiveProfile)
     const uncertainty = context.semanticState.uncertainty
     const baseWarning = inferWarning(context)
-    const needsVisualConfirmation = uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown'
+    const offScreen = isOffScreenQuestion(request.prompt, context)
+    const needsVisualConfirmation = !offScreen && (uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown')
     const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
-    const domainOutput = runDomainTutor({ request, context, mode })
+    const domainOutput = runDomainTutor({ request, context: effectiveContext, mode })
     const relevantPersistentMemory = await retrieveRelevantMemories({
       query: buildPersistentMemoryQuery(request.prompt, context),
       limit: 4
     })
     const localContent = composeResponse({
       mode,
-      context,
+      context: effectiveContext,
       shouldAskConfirmation,
       warning: domainOutput?.warning ?? baseWarning,
       domainBody: domainOutput?.content ?? null
     })
     const remoteResult = await generateRemoteText({
       sensitive: Boolean(domainOutput?.warning ?? baseWarning),
-      system: buildRemoteSystemPrompt(mode, context, domainOutput?.warning ?? baseWarning),
+      system: buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen),
       prompt: buildRemoteUserPrompt(
         request,
-        context,
+        effectiveContext,
         domainOutput?.content ?? null,
-        relevantPersistentMemory
+        [...relevantPersistentMemory, ...behaviorSummaryLines],
+        offScreen
       ),
       imageDataUrl: context.screenshotDataUrl ?? null
     })
     const content = remoteResult?.text?.trim() || localContent
+
+    // ─── Post-response: record behavior signal ────────────────────────────────
+    recordInteractionSignal({
+      domain: domainOutput?.domain ?? 'general',
+      mode,
+      surface: context.semanticState.surface_type,
+      askedForSimplification: detectSimplificationSignal(request.prompt),
+      askedForDepth: detectDepthSignal(request.prompt),
+      askedForSteps: /\bpasso\b|\betapas\b/i.test(request.prompt),
+      askedForDirect: /\bdireto\b|\bresposta direta\b|\bcurto\b/i.test(request.prompt),
+      followUpCount: request.conversation.filter(m => m.role === 'user').length,
+      topics: context.semanticState.pedagogical_topics,
+      sessionId: context.sessionMemory.session_id
+    })
+
+    // ─── Post-response: apply depth calibration to profile if warranted ───────
+    void applyDepthCalibration(calibration)
+
+    // ─── Periodic flush of behavior patterns to memory ───────────────────────
+    responseCountSinceFlush++
+    if (responseCountSinceFlush >= FLUSH_EVERY_N_RESPONSES) {
+      responseCountSinceFlush = 0
+      void flushBehaviorToMemory()
+    }
 
     void recordDiagnosticEvent({
       type: 'trace',
@@ -63,7 +134,9 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         provider: remoteResult?.providerId ?? 'local',
         model: remoteResult?.model ?? 'local',
         uncertainty: Number(uncertainty.toFixed(2)),
-        asksConfirmation: shouldAskConfirmation
+        asksConfirmation: shouldAskConfirmation,
+        calibratedLevel: calibration.effective_level,
+        calibrationReason: calibration.reason
       }
     })
 
@@ -82,7 +155,7 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       uncertainty,
       should_ask_confirmation: shouldAskConfirmation,
       needs_visual_confirmation: needsVisualConfirmation,
-      suggested_follow_ups: domainOutput?.suggested_follow_ups ?? buildFollowUps(mode, context),
+      suggested_follow_ups: domainOutput?.suggested_follow_ups ?? buildFollowUps(mode, effectiveContext),
       warning: domainOutput?.warning ?? baseWarning
     }
   } catch (error) {
@@ -143,6 +216,41 @@ function buildFollowUps(mode: TutorMode, context: PerceptionContextSnapshot): st
 }
 
 export { buildRemoteSystemPrompt, buildRemoteUserPrompt, composeResponse }
+
+/**
+ * Returns true when the user's prompt is topically unrelated to what's on screen.
+ * Detection is intentionally conservative: any screen deictic reference or meaningful
+ * word overlap keeps it as a screen-anchored question.
+ */
+function isOffScreenQuestion(prompt: string, context: PerceptionContextSnapshot): boolean {
+  // Explicit screen deictic references → always screen-anchored
+  if (/\b(isso|aqui|essa tela|o que (está|aparece|to vendo|tô vendo|estou vendo)|esse (gráfico|código|texto|arquivo|dashboard|painel))\b/i.test(prompt)) {
+    return false
+  }
+
+  // Build a set of meaningful words from screen context (len > 3 to skip noise)
+  const screenText = [
+    context.semanticState.visual_summary,
+    context.semanticState.probable_user_focus,
+    context.semanticState.surface_type,
+    context.semanticState.detected_text ?? '',
+    ...context.semanticState.pedagogical_topics
+  ].join(' ').toLowerCase()
+
+  const screenWords = new Set(
+    screenText.split(/\W+/).filter(w => w.length > 3)
+  )
+
+  // Count how many non-trivial prompt words appear in screen context
+  const promptWords = prompt.toLowerCase().split(/\W+/).filter(w => w.length > 3)
+  if (promptWords.length === 0) return false
+
+  const overlap = promptWords.filter(w => screenWords.has(w)).length
+  const overlapRatio = overlap / promptWords.length
+
+  // Less than 20% topical overlap → treat as an off-screen question
+  return overlapRatio < 0.20
+}
 
 function buildPersistentMemoryQuery(
   prompt: string,

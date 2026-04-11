@@ -51,6 +51,7 @@ import {
   rebuildMemoryEmbeddings,
   syncMemoryEmbeddings
 } from './services/memory-embeddings'
+import { loadConversation, saveConversation } from './services/conversation-store'
 import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -337,6 +338,7 @@ ipcMain.handle('privacy:delete-local-data', async () => {
   await resetAppSettings()
   await resetAISettings()
   await applyWindowSettings()
+  await saveConversation([], null)
   markDataDeletion()
 
   const summary: DataDeletionSummary = {
@@ -407,6 +409,16 @@ ipcMain.handle('memory:sync-embeddings', async () => {
 
 ipcMain.handle('memory:rebuild-embeddings', async () => {
   return rebuildMemoryEmbeddings()
+})
+
+// ─── Conversation persistence ─────────────────────────────────────────────────
+
+ipcMain.handle('conversation:load', async () => {
+  return loadConversation()
+})
+
+ipcMain.handle('conversation:save', async (_e, data: { messages: unknown[]; summary: string | null }) => {
+  await saveConversation(data.messages as Parameters<typeof saveConversation>[0], data.summary)
 })
 
 ipcMain.on('perception:start-session', () => startSession())

@@ -32,6 +32,7 @@ import type {
   MemoryExportResult,
   MemoryImportPreview
 } from '../shared/memory.types'
+import type { StoredMessage } from '../main/services/conversation-store'
 
 declare global {
   interface Window {
@@ -94,6 +95,10 @@ declare global {
       clearPersisted: () => Promise<MemoryCardSummary>
       syncEmbeddings: () => Promise<MemoryEmbeddingStatus>
       rebuildEmbeddings: () => Promise<MemoryEmbeddingStatus>
+    }
+    conversationAPI: {
+      load: () => Promise<{ messages: StoredMessage[]; summary: string | null } | null>
+      save: (data: { messages: StoredMessage[]; summary: string | null }) => Promise<void>
     }
   }
 }

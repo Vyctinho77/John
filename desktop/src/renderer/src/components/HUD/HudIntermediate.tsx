@@ -2,10 +2,14 @@ import { motion } from 'framer-motion'
 import { useEffect, useRef, KeyboardEvent } from 'react'
 import { CaptureIndicator } from './CaptureIndicator'
 import { LogoMark } from './LogoMark'
-import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
-import type { SemanticState, SessionMemory, TutorResponse } from '@shared/perception.types'
+import type {
+  IntermediateThought,
+  SemanticState,
+  SessionMemory,
+  TutorResponse
+} from '@shared/perception.types'
 
 interface HudIntermediateProps {
   inputValue: string
@@ -20,6 +24,7 @@ interface HudIntermediateProps {
   isStreaming: boolean
   semanticState: SemanticState | null
   sessionMemory: SessionMemory | null
+  intermediateThought: IntermediateThought | null
   isCapturing: boolean
   isPrivate: boolean
   onTogglePrivate: () => void
@@ -32,12 +37,12 @@ export function HudIntermediate({
   inputValue, onInputChange, onSubmit,
   onInputFocus, onInputBlur, onActivity,
   onCollapse, response, responseMeta: _responseMeta, isStreaming,
-  semanticState, sessionMemory, isCapturing, isPrivate, onTogglePrivate,
+  semanticState, sessionMemory, intermediateThought, isCapturing, isPrivate, onTogglePrivate,
   onShowStage1, onShowStage2, onShowStage3
 }: HudIntermediateProps) {
   const { handleMouseDown } = useDragWindow()
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const previewText = response ? summarizeIntermediateResponse(response) : null
+  const hasFullResponse = Boolean(response?.trim())
 
   const surface = semanticState?.surface_type ?? 'unknown'
   const inputPlaceholder =
@@ -123,28 +128,47 @@ export function HudIntermediate({
         </button>
       </div>
 
-      {previewText && !isStreaming && (
+      {intermediateThought && !isStreaming && (
         <div className="flex-1 px-4 overflow-hidden">
-          <div
-            className="h-full overflow-hidden"
-            style={{
-              maskImage: 'linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 72%, rgba(0,0,0,0) 100%)'
-            }}
-          >
-            <MessageBody content={previewText} compact />
-            <button
-              onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
-              onClick={e => { e.stopPropagation(); onShowStage3() }}
-              className="mt-3 text-[12px] transition-opacity duration-150 hover:opacity-80"
-              style={{ color: 'rgba(255,255,255,0.46)' }}
+          <div className="h-full overflow-hidden flex flex-col justify-center">
+            <p
+              className="text-[13px] leading-[1.5] selectable"
+              style={{
+                color: 'rgba(214,214,214,0.72)',
+                fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
+                letterSpacing: '-0.005em'
+              }}
             >
-              ver resposta completa
-            </button>
+              {intermediateThought.primary}
+            </p>
+
+            {intermediateThought.secondary && (
+              <p
+                className="mt-2 text-[12px] leading-[1.5] selectable"
+                style={{
+                  color: 'rgba(174,174,174,0.54)',
+                  fontSize: 'calc(var(--hud-font-size, 15px) - 2px)'
+                }}
+              >
+                {intermediateThought.secondary}
+              </p>
+            )}
+
+            {hasFullResponse && (
+              <button
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
+                onClick={e => { e.stopPropagation(); onShowStage3() }}
+                className="mt-3 text-[12px] transition-opacity duration-150 hover:opacity-80 self-start"
+                style={{ color: 'rgba(255,255,255,0.38)' }}
+              >
+                abrir resposta completa
+              </button>
+            )}
           </div>
         </div>
       )}
 
-      {!previewText && !isStreaming && sessionMemory && (
+      {!intermediateThought && !isStreaming && sessionMemory && (
         <div className="flex-1 px-4 overflow-hidden">
           <p className="text-[12px] leading-relaxed line-clamp-3 selectable"
             style={{ color: 'rgba(255,255,255,0.58)', fontSize: 'var(--hud-font-size, 15px)' }}>
@@ -153,7 +177,7 @@ export function HudIntermediate({
         </div>
       )}
 
-      {!previewText && !isStreaming && !sessionMemory && <div className="flex-1" />}
+      {!intermediateThought && !isStreaming && !sessionMemory && <div className="flex-1" />}
 
       <div className="flex-shrink-0 px-4 pb-3.5 pt-3">
         <div
@@ -197,37 +221,4 @@ export function HudIntermediate({
       </div>
     </div>
   )
-}
-
-function summarizeIntermediateResponse(content: string): string {
-  const normalized = content.replace(/\r\n/g, '\n').trim()
-  if (!normalized) return ''
-
-  const blocks = normalized
-    .split(/\n\s*\n/)
-    .map(block => block.trim())
-    .filter(Boolean)
-
-  const selectedBlocks: string[] = []
-
-  for (const block of blocks) {
-    if (selectedBlocks.length >= 2) break
-
-    if (block.startsWith('```')) {
-      const language = block.split('\n')[0].replace(/```/, '').trim() || 'code'
-      const codeBody = block
-        .split('\n')
-        .slice(1)
-        .filter(line => line.trim() && line.trim() !== '```')
-      const previewLines = codeBody.slice(0, 4).join('\n')
-      selectedBlocks.push(`\`\`\`${language}\n${previewLines}${codeBody.length > 4 ? '\n...' : ''}\n\`\`\``)
-      continue
-    }
-
-    const lines = block.split('\n').filter(line => line.trim())
-    const shortBlock = lines.slice(0, 4).join('\n')
-    selectedBlocks.push(shortBlock)
-  }
-
-  return selectedBlocks.join('\n\n')
 }

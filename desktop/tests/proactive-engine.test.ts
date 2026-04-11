@@ -132,6 +132,11 @@ function makeSnapshot(overrides: SnapshotOverrides = {}): PerceptionContextSnaps
     },
     persisted_memory_summary: 'Perfil Victor · beginner · step_by_step · didactic.',
     persisted_memory_highlights: ['Objetivo de estudo: javascript.'],
+    intermediateThought: {
+      primary: 'ele está tentando resolver esse código, mas o teste está falhando nesse ponto',
+      secondary: 'deve fechar quando alinhar a expectativa do teste com a mudança recente desse fluxo',
+      confidence: 0.76
+    },
     screenshotDataUrl: null
   }
 
@@ -286,7 +291,10 @@ test('decideOpportunity allows new topic after cooldown window', () => {
             majorChangeDetected: true,
             domainSignal: 'code-error',
             semanticFocus: 'typeerror',
-            topic: 'leitura de codigo'
+            topic: 'leitura de codigo',
+            emotionalSignal: null,
+            appIdentifier: null,
+            appSwitchDetected: false
           },
           reasonCodes: ['emitted'],
           outcome: 'ignored',

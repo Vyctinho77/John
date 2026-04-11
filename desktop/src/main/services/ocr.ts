@@ -39,6 +39,11 @@ async function getWorker(): Promise<Worker> {
   return worker!
 }
 
+// OCR works best at 960x540 — downscale higher-res captures to avoid
+// Tesseract bbox overflow errors and keep recognition speed reasonable.
+const OCR_MAX_WIDTH = 960
+const OCR_MAX_HEIGHT = 540
+
 export async function recognizeImage(dataUrl: string): Promise<PerceptionResult> {
   const image = nativeImage.createFromDataURL(dataUrl)
   const { width, height } = image.getSize()
@@ -58,7 +63,13 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
   }
   lastImageHash = imageHash
 
-  const normalizedDataUrl = image.toDataURL()
+  // Downscale to OCR-optimal resolution if needed
+  const ocrImage = (width > OCR_MAX_WIDTH || height > OCR_MAX_HEIGHT)
+    ? image.resize({ width: OCR_MAX_WIDTH, height: OCR_MAX_HEIGHT, quality: 'good' })
+    : image
+  const ocrSize = ocrImage.getSize()
+
+  const normalizedDataUrl = ocrImage.toDataURL()
   const w = await getWorker()
   const { data } = await w.recognize(normalizedDataUrl)
 
@@ -72,8 +83,8 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
           x1: b.bbox.x1,
           y1: b.bbox.y1
         },
-        width,
-        height
+        ocrSize.width,
+        ocrSize.height
       )
 
       if (!bbox) return null

@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect } from 'react'
 import { HudVisual } from '@renderer/hooks/useHudStateMachine'
+import { GlasswingBackground, AgentState } from './GlasswingBackground'
 
 const DIMS: Record<HudVisual, { width: number; height: number; radius: number }> = {
   compact:      { width: 488,  height: 55,  radius: 22 },
@@ -25,16 +26,19 @@ function getDuration(from: HudVisual, to: HudVisual) {
 interface HudShellProps {
   visual: HudVisual
   prevVisual: HudVisual
+  agentState?: AgentState
   children: React.ReactNode
 }
 
-export function HudShell({ visual, prevVisual, children }: HudShellProps) {
+export function HudShell({ visual, prevVisual, agentState = 'idle', children }: HudShellProps) {
   const { width, height, radius } = DIMS[visual]
   const duration = getDuration(prevVisual, visual)
 
   useEffect(() => {
     window.hudAPI?.resize(width, height)
   }, [visual, width, height])
+
+  const expandedDims = DIMS.expanded
 
   return (
     <motion.div
@@ -56,7 +60,31 @@ export function HudShell({ visual, prevVisual, children }: HudShellProps) {
       animate={{ width, height, borderRadius: radius, opacity: 1, scale: 1 }}
       transition={{ duration, ease: EASE }}
     >
-      {children}
+      {/* Glasswing grid — only in expanded stage */}
+      <AnimatePresence>
+        {visual === 'expanded' && (
+          <motion.div
+            key="glasswing"
+            className="absolute inset-0"
+            style={{ zIndex: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <GlasswingBackground
+              width={expandedDims.width}
+              height={expandedDims.height}
+              agentState={agentState}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Content sits on top of the grid */}
+      <div className="absolute inset-0" style={{ zIndex: 1 }}>
+        {children}
+      </div>
     </motion.div>
   )
 }

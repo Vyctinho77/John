@@ -118,6 +118,12 @@ export function usePerception({
     const memory = await window.perceptionAPI?.clearSessionMemory()
     if (!memory) return
 
+    const snapshot = await window.perceptionAPI?.getContext()
+    if (snapshot) {
+      setContextSnapshot(snapshot)
+      return
+    }
+
     setContextSnapshot(prev =>
       prev
         ? {

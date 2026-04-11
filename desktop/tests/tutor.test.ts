@@ -58,6 +58,11 @@ function makeContext(overrides: ContextOverrides = {}): PerceptionContextSnapsho
     userProfile: makeProfile(),
     persisted_memory_summary: 'Perfil Victor · beginner · step_by_step · didactic. 3 memorias prontas para reutilizacao.',
     persisted_memory_highlights: ['Objetivo de estudo: javascript.', 'Estilo preferido: step_by_step.'],
+    intermediateThought: {
+      primary: 'ele está tentando resolver esse código, mas alguma chamada está quebrando nessa função',
+      secondary: 'deve fechar quando alinhar o valor recebido com a função que deveria existir ali',
+      confidence: 0.78
+    },
     screenshotDataUrl: null
   }
 
@@ -120,8 +125,8 @@ test('buildRemoteSystemPrompt adapts uncertainty and tone directives', () => {
   assert.match(system, /Move quickly to mechanism, trade-offs, and implications/)
   assert.match(system, /Increase conceptual density and precision/)
   assert.match(system, /Safety warning to respect: alto risco\./)
-  assert.match(system, /Think more Jensen Huang/)
-  assert.match(system, /Think like Kasparov on process/)
+  assert.match(system, /First line = the answer or stance\. Always\./)
+  assert.match(system, /Structure: key point/)
   assert.match(system, /Think like Steven Pinker on explanation/)
 })
 
@@ -139,9 +144,9 @@ test('buildRemoteSystemPrompt adds market voice for chart contexts', () => {
   const system = buildRemoteSystemPrompt('direct', marketContext, null)
 
   assert.match(system, /\[MarketVoice\]/)
-  assert.match(system, /sound like a sharp trader reading the screen live/)
-  assert.match(system, /Start with the practical stance in one short line/)
-  assert.match(system, /Example tone: "Não entraria agora/)
+  assert.match(system, /You are reading the chart LIVE with the user/)
+  assert.match(system, /Open with the stance in one short punchy line/)
+  assert.match(system, /GOOD example:/)
 })
 
 test('buildRemoteUserPrompt reinforces main read and next step', () => {

@@ -31,7 +31,9 @@ const SCORE_THRESHOLDS: Record<ProactiveEventType, number> = {
   'user-lingering': 0.59,
   'possible-doubt': 0.58,
   'revisit-focus': 0.6,
-  'ocr-conflict': 0.62
+  'ocr-conflict': 0.62,
+  'user-frustrated': 0.56,
+  'app-switch': 0.63
 }
 
 interface OpportunityCandidate {
@@ -307,6 +309,16 @@ export function detectSignals(
   const majorChangeDetected = semanticState.change_summary === 'major'
   const domainSignal = detectDomainSignal(semanticState.surface_type, semanticState.detected_text)
   const topic = semanticState.pedagogical_topics[0] ?? null
+  const emotionalSignal = semanticState.emotional_signal ?? null
+  const appIdentifier = semanticState.app_identifier ?? null
+
+  // Detect app switch by comparing current app with the most recent session entry
+  const lastEntry = sessionMemory.recent_states[sessionMemory.recent_states.length - 1]
+  const previousApp = lastEntry?.app_identifier ?? null
+  const appSwitchDetected = Boolean(
+    appIdentifier && previousApp && appIdentifier !== previousApp
+  )
+
   const eventTypes = new Set<ProactiveEventType>()
 
   if (domainSignal) eventTypes.add('interesting-pattern')
@@ -329,6 +341,14 @@ export function detectSignals(
     eventTypes.add('possible-doubt')
   }
 
+  // Vision-enriched signals
+  if (emotionalSignal === 'frustrated' || emotionalSignal === 'confused') {
+    eventTypes.add('user-frustrated')
+  }
+  if (appSwitchDetected && majorChangeDetected) {
+    eventTypes.add('app-switch')
+  }
+
   const rapidInteractions = currentState.recentBlockReasons.filter(
     reason => reason === 'recent-user-activity' && now - currentState.lastUserActivityAt < RAPID_ACTIVITY_WINDOW_MS
   ).length
@@ -344,6 +364,9 @@ export function detectSignals(
     domainSignal,
     semanticFocus: currentFocus,
     topic,
+    emotionalSignal,
+    appIdentifier,
+    appSwitchDetected,
     eventTypes: [...eventTypes]
   }
 }
@@ -357,17 +380,21 @@ export function scoreCandidate(
   const confidence = clamp(1 - snapshot.semanticState.uncertainty)
   const relevance =
     eventType === 'interesting-pattern' ? 0.86
+    : eventType === 'user-frustrated' ? 0.88
     : eventType === 'new-content' ? 0.78
-    : eventType === 'revisit-focus' ? 0.7
     : eventType === 'ocr-conflict' ? 0.73
+    : eventType === 'revisit-focus' ? 0.7
     : eventType === 'user-lingering' ? 0.67
+    : eventType === 'app-switch' ? 0.72
     : 0.65
 
   const userInterruptCost =
     currentState.lastActivityType === 'typing' ? 0.82
     : currentState.lastActivityType === 'scroll' ? 0.7
+    : eventType === 'user-frustrated' ? 0.18
     : eventType === 'interesting-pattern' ? 0.26
     : eventType === 'new-content' ? 0.42
+    : eventType === 'app-switch' ? 0.38
     : 0.34
 
   const novelty = clamp(
@@ -461,6 +488,13 @@ function buildHintText(
   }
   if (eventType === 'possible-doubt' && topic) {
     return `isso costuma confundir em ${topic}`
+  }
+  if (eventType === 'user-frustrated') {
+    return 'parece que voce ta travado, posso ajudar?'
+  }
+  if (eventType === 'app-switch') {
+    const app = signals.appIdentifier
+    return app ? `voce mudou pra ${app}, quer contexto?` : 'parece que voce mudou de contexto'
   }
   return 'isso aqui parece importante'
 }

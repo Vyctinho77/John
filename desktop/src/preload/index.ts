@@ -134,6 +134,15 @@ const memoryAPI = {
   rebuildEmbeddings: (): Promise<MemoryEmbeddingStatus> => ipcRenderer.invoke('memory:rebuild-embeddings')
 }
 
+import type { StoredMessage } from '../main/services/conversation-store'
+
+const conversationAPI = {
+  load: (): Promise<{ messages: StoredMessage[]; summary: string | null } | null> =>
+    ipcRenderer.invoke('conversation:load'),
+  save: (data: { messages: StoredMessage[]; summary: string | null }): Promise<void> =>
+    ipcRenderer.invoke('conversation:save', data)
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
@@ -144,6 +153,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('aiAPI', aiAPI)
     contextBridge.exposeInMainWorld('proactiveAPI', proactiveAPI)
     contextBridge.exposeInMainWorld('memoryAPI', memoryAPI)
+    contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
   } catch (e) {
     console.error(e)
   }
@@ -164,4 +174,6 @@ if (process.contextIsolated) {
   window.proactiveAPI = proactiveAPI
   // @ts-ignore
   window.memoryAPI = memoryAPI
+  // @ts-ignore
+  window.conversationAPI = conversationAPI
 }

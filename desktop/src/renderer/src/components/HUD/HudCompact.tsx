@@ -20,7 +20,7 @@ export const HudCompact = memo(function HudCompact({
   isCapturing,
   minimalMode,
   passiveSuggestion,
-  hasProactiveHint
+  hasProactiveHint: _hasProactiveHint
 }: HudCompactProps) {
   const { handleMouseDown, wasDragged } = useDragWindow()
   const label =
@@ -41,14 +41,8 @@ export const HudCompact = memo(function HudCompact({
       role="button"
       aria-label="Abrir HUD"
     >
-      <div className="w-9 h-full flex-shrink-0 flex items-center justify-center relative">
+      <div className="w-9 h-full flex-shrink-0 flex items-center justify-center">
         <LogoMark className="h-[26px] w-[10px] text-white" />
-        {hasProactiveHint && (
-          <span
-            className="absolute ml-6 w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ background: 'rgba(255,255,255,0.84)', boxShadow: '0 0 10px rgba(255,255,255,0.35)' }}
-          />
-        )}
       </div>
 
       <div

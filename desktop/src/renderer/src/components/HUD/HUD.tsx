@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { AgentState } from './GlasswingBackground'
 import { useHudStateMachine, HudVisual } from '@renderer/hooks/useHudStateMachine'
 import { usePerception } from '@renderer/hooks/usePerception'
 import type {
@@ -23,6 +24,24 @@ import { HudShell, HudContent } from './HudShell'
 import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
+
+// ─── Conversation context window ─────────────────────────────────
+const CONVO_WINDOW       = 10   // active messages kept in memory
+const CONVO_SUMMARIZE_AT = 18   // trigger compression when messages exceed this
+
+/** Compresses older messages into a rolling text block (no AI call needed). */
+function buildConversationSummary(existing: string | null, toCompress: Message[]): string {
+  const lines = toCompress.map(m => {
+    const speaker = m.role === 'user' ? 'Victor' : 'John'
+    const text    = m.content.length > 180 ? m.content.slice(0, 180) + '…' : m.content
+    return `${speaker}: ${text}`
+  })
+  const block  = lines.join('\n')
+  const prefix = existing ? `${existing}\n` : ''
+  const full   = `${prefix}${block}`
+  // Tail-truncate to 900 chars so the summary doesn't grow unbounded
+  return full.length > 900 ? full.slice(full.length - 900) : full
+}
 
 const FONT_FAMILY_MAP = {
   'system-sans': '"SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
@@ -67,6 +86,7 @@ function streamText(
 export function HUD() {
   const [inputValue, setInputValue] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
+  const [conversationSummary, setConversationSummary] = useState<string | null>(null)
   const [streamingContent, setChunk] = useState('')
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [sources, setSources] = useState<CaptureSource[]>([])
@@ -83,6 +103,17 @@ export function HUD() {
   const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
   const [screenshotMode, setScreenshotMode] = useState(false)
   const prevVisual = useRef<HudVisual>('compact')
+  const [agentState, setAgentState] = useState<AgentState>('idle')
+  const prevStreaming = useRef(false)
+
+  // ── Load conversation from disk on mount ──
+  useEffect(() => {
+    window.conversationAPI.load().then(saved => {
+      if (!saved || saved.messages.length === 0) return
+      setMessages(saved.messages)
+      setConversationSummary(saved.summary)
+    }).catch(() => {})
+  }, [])
 
   const {
     visual, isStreaming,
@@ -166,6 +197,32 @@ export function HUD() {
 
   useEffect(() => {
     window.proactiveAPI.setStreaming(isStreaming)
+  }, [isStreaming])
+
+  // ── Auto-save conversation to disk (debounced 500ms) ──
+  useEffect(() => {
+    const t = setTimeout(() => {
+      window.conversationAPI.save({ messages, summary: conversationSummary }).catch(() => {})
+    }, 500)
+    return () => clearTimeout(t)
+  }, [messages, conversationSummary])
+
+  // Map isStreaming → agentState for the Glasswing background
+  useEffect(() => {
+    let doneTimeout: ReturnType<typeof setTimeout> | null = null
+
+    if (isStreaming && !prevStreaming.current) {
+      setAgentState('responding')
+    } else if (!isStreaming && prevStreaming.current) {
+      setAgentState('done')
+      doneTimeout = setTimeout(() => setAgentState('idle'), 2500)
+      prevStreaming.current = false
+    }
+    prevStreaming.current = isStreaming
+
+    return () => {
+      if (doneTimeout) clearTimeout(doneTimeout)
+    }
   }, [isStreaming])
 
   const handleActivity = useCallback((type: 'mouse-move' | 'scroll' | 'typing' | 'submit' | 'expand' | 'collapse' | 'engage' = 'engage') => {
@@ -332,11 +389,15 @@ export function HUD() {
     if (!inputValue.trim() || isStreaming) return
 
     const userMsg = inputValue.trim()
+
+    // Build the conversation with sliding window + optional summary block
+    const activeMessages = messages.slice(-CONVO_WINDOW)
     const conversation: TutorMessage[] = [
-      ...messages.map(message => ({
-        role: message.role,
-        content: message.content
-      })),
+      ...(conversationSummary ? [
+        { role: 'user'      as const, content: `[Resumo da nossa conversa até aqui:\n${conversationSummary}]` },
+        { role: 'assistant' as const, content: 'Certo, continuo a partir daí.' }
+      ] : []),
+      ...activeMessages.map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMsg }
     ]
 
@@ -367,14 +428,19 @@ export function HUD() {
           setChunk(chunk)
         },
         () => {
-          setMessages(prev => [
-            ...prev,
-            {
-              role: 'assistant',
-              content: accumulated,
-              meta: tutorResponse
+          setMessages(prev => {
+            const next = [
+              ...prev,
+              { role: 'assistant' as const, content: accumulated, meta: tutorResponse }
+            ]
+            // Compress when conversation grows beyond the window threshold
+            if (next.length > CONVO_SUMMARIZE_AT) {
+              const toCompress = next.slice(0, next.length - CONVO_WINDOW)
+              setConversationSummary(s => buildConversationSummary(s, toCompress))
+              return next.slice(-CONVO_WINDOW)
             }
-          ])
+            return next
+          })
           setChunk('')
           setStreaming(false)
           void refreshPrivacyState()
@@ -402,7 +468,7 @@ export function HUD() {
       setChunk('')
       setStreaming(false)
     }
-  }, [contextSnapshot, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming])
+  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming])
 
   const latestAssistant = [...messages].reverse().find(message => message.role === 'assistant')
   const latestResponse = latestAssistant?.content ?? ''
@@ -426,7 +492,7 @@ export function HUD() {
 
   return (
     <div className="w-screen h-screen flex items-start justify-center hud-typography" style={hudTypographyStyle}>
-      <HudShell visual={visual} prevVisual={prevVisual.current}>
+      <HudShell visual={visual} prevVisual={prevVisual.current} agentState={agentState}>
         <HudContent id={visual}>
           {visual === 'compact' && (
             <HudCompact
@@ -454,6 +520,7 @@ export function HUD() {
               isStreaming={isStreaming}
               semanticState={semanticState}
               sessionMemory={sessionMemory}
+              intermediateThought={contextSnapshot?.intermediateThought ?? null}
               isCapturing={isCapturing}
               isPrivate={privateMode}
               onTogglePrivate={handleTogglePrivate}

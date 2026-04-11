@@ -1,15 +1,18 @@
-import { captureScreen, getWindowSources } from './capture'
+import { captureFrame, captureScreen, getWindowSources } from './capture'
+import type { CaptureFrame } from './capture'
 import { recognizeImage, terminateWorker } from './ocr'
 import { detectSensitiveSurface } from './privacy-guards'
 import { evaluateProactiveOpportunity } from './proactive-engine'
 import { getUserProfile, updateUserProfile as persistUserProfile } from './user-profile'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 import { getMemoryContext, syncPersistedMemory } from './memory-card'
+import { buildIntermediateThought } from './intermediate-thought'
 import {
   effectiveObservationText,
   estimateUncertainty,
   extractPrimaryContentText
 } from './perception-helpers'
+import { analyzeScreenWithVision, buildSemanticStateFromVision } from './vision-analyzer'
 import type {
   CaptureSource,
   ChangeSummary,
@@ -23,24 +26,44 @@ import type {
   UserProfile
 } from '../../shared/perception.types'
 
-const BASE_INTERVAL_MS = 10_000
-const IDLE_INTERVAL_MS = 20_000
-const ACTIVE_INTERVAL_MS = 8_000
-const MAX_CONSECUTIVE_UNCHANGED = 3
+// ---------------------------------------------------------------------------
+// Perception state machine
+// ---------------------------------------------------------------------------
+//
+//  IDLE ──(frame changed)──→ WATCHING ──(2+ stable frames)──→ SETTLED → analyze
+//   ↑                           │                                  │
+//   │   3+ unchanged polls      │ each poll detects change         │
+//   └───────────────────────────┘  (scroll/typing = stay watching) │
+//   ↑                                                              │
+//   └──────── analysis complete, cooldown 8s ──────────────────────┘
+//
+// IDLE:      poll every 12s  (cheap hash-only check)
+// WATCHING:  poll every 2s   (cheap hash-only, waiting for settle)
+// SETTLED:   run full analyzeOnce(), then → IDLE with cooldown
+// ---------------------------------------------------------------------------
+
+type PerceptionPhase = 'idle' | 'watching' | 'settled' | 'analyzing'
+
+const FAST_POLL_MS = 2_000
+const IDLE_POLL_MS = 12_000
+const POST_ANALYSIS_COOLDOWN_MS = 8_000
+const SETTLE_THRESHOLD = 2
+const MAX_WATCHING_WITHOUT_SETTLE = 15 // safety: force analysis after 30s of watching
 
 const DEFAULT_CONFIG: PerceptionConfig = {
   enabled: false,
   privateMode: false,
-  intervalMs: BASE_INTERVAL_MS,
-  thumbnailWidth: 960,
-  thumbnailHeight: 540,
+  intervalMs: IDLE_POLL_MS,
+  thumbnailWidth: 1280,
+  thumbnailHeight: 720,
   targetSourceId: null,
   sessionTtlMs: 15 * 60_000,
-  memoryLimit: 6
+  memoryLimit: 6,
+  useVisionLLM: true
 }
 
 let config: PerceptionConfig = { ...DEFAULT_CONFIG }
-let sessionInterval: ReturnType<typeof setInterval> | null = null
+let pollTimer: ReturnType<typeof setTimeout> | null = null
 let captureStateListeners: ((isCapturing: boolean) => void)[] = []
 let snapshotListeners: ((snapshot: PerceptionContextSnapshot) => void)[] = []
 let lastRawText = ''
@@ -48,6 +71,15 @@ let consecutiveUnchanged = 0
 let sessionMemory = createSessionMemory()
 let latestSnapshot: PerceptionContextSnapshot | null = null
 let sensitiveSurfaceBlocked = false
+
+// State machine state
+let phase: PerceptionPhase = 'idle'
+let lastFrameHash: string | null = null
+let lastWindowTitle: string | null = null
+let stableFrameCount = 0
+let watchingPollCount = 0
+let pendingFrame: CaptureFrame | null = null
+let appSwitchDetected = false
 
 export function configurePerception(patch: Partial<PerceptionConfig>): void {
   config = { ...config, ...patch }
@@ -60,21 +92,116 @@ export function setPrivateMode(enabled: boolean): void {
   if (enabled) stopSession()
 }
 
-function getAdaptiveInterval(): number {
-  if (consecutiveUnchanged >= MAX_CONSECUTIVE_UNCHANGED) return IDLE_INTERVAL_MS
-  if (consecutiveUnchanged === 0) return ACTIVE_INTERVAL_MS
-  return BASE_INTERVAL_MS
+function getPhaseInterval(): number {
+  switch (phase) {
+    case 'watching': return FAST_POLL_MS
+    case 'idle': return IDLE_POLL_MS
+    default: return IDLE_POLL_MS
+  }
 }
 
-function scheduleNextTick(): void {
+function scheduleNextPoll(): void {
   if (!config.enabled || config.privateMode) return
-  if (sessionInterval) clearTimeout(sessionInterval)
+  if (pollTimer) clearTimeout(pollTimer)
 
-  sessionInterval = setTimeout(async () => {
+  pollTimer = setTimeout(async () => {
     if (!config.enabled || config.privateMode) return
-    await analyzeOnce()
-    scheduleNextTick()
-  }, getAdaptiveInterval())
+    await pollFrame()
+    scheduleNextPoll()
+  }, getPhaseInterval())
+}
+
+/**
+ * Lightweight poll — capture + hash + window title comparison.
+ * No OCR, no Vision LLM. Drives the state machine.
+ */
+async function pollFrame(): Promise<void> {
+  if (phase === 'analyzing') return
+
+  const frame = await captureFrame(config.targetSourceId ?? undefined)
+  if (!frame) return
+
+  const hashChanged = lastFrameHash !== null && frame.hash !== lastFrameHash
+  const titleChanged = lastWindowTitle !== null && frame.windowTitle !== null
+    && frame.windowTitle !== lastWindowTitle
+
+  // --- State transitions ---
+
+  if (hashChanged || titleChanged) {
+    // Screen or app changed — enter watching mode
+    appSwitchDetected = titleChanged
+    stableFrameCount = 0
+    watchingPollCount = 0
+    pendingFrame = frame
+    lastFrameHash = frame.hash
+    lastWindowTitle = frame.windowTitle
+
+    if (phase !== 'watching') {
+      phase = 'watching'
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'perception',
+        action: 'phase_watching',
+        details: {
+          trigger: titleChanged ? 'app_switch' : 'frame_changed',
+          windowTitle: frame.windowTitle ?? 'unknown'
+        }
+      })
+    }
+
+    return
+  }
+
+  // Hash unchanged
+  lastFrameHash = frame.hash
+  lastWindowTitle = frame.windowTitle
+
+  if (phase === 'watching') {
+    stableFrameCount++
+    watchingPollCount++
+
+    const shouldSettle = stableFrameCount >= SETTLE_THRESHOLD
+      || watchingPollCount >= MAX_WATCHING_WITHOUT_SETTLE
+
+    if (shouldSettle) {
+      // Screen settled — run full analysis
+      phase = 'analyzing'
+      pendingFrame = pendingFrame ?? frame
+
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'perception',
+        action: 'phase_settled',
+        details: {
+          stableFrames: stableFrameCount,
+          watchingPolls: watchingPollCount,
+          appSwitch: appSwitchDetected
+        }
+      })
+
+      try {
+        await analyzeOnce(pendingFrame.dataUrl)
+      } finally {
+        pendingFrame = null
+        appSwitchDetected = false
+        stableFrameCount = 0
+        watchingPollCount = 0
+        phase = 'idle'
+
+        // Post-analysis cooldown — pause before next poll
+        if (pollTimer) clearTimeout(pollTimer)
+        pollTimer = setTimeout(() => {
+          if (config.enabled && !config.privateMode) {
+            scheduleNextPoll()
+          }
+        }, POST_ANALYSIS_COOLDOWN_MS)
+      }
+      return
+    }
+  } else {
+    // Idle, nothing changed
+    consecutiveUnchanged++
+  }
 }
 
 export function startSession(): void {
@@ -82,20 +209,30 @@ export function startSession(): void {
   config.enabled = true
   ensureActiveSession()
   notifyCaptureState(true)
-  if (sessionInterval) return
-  scheduleNextTick()
+  phase = 'idle'
+  lastFrameHash = null
+  lastWindowTitle = null
+  stableFrameCount = 0
+  watchingPollCount = 0
+  if (pollTimer) return
+  // First analysis immediately, then switch to polling
+  void (async () => {
+    await analyzeOnce()
+    scheduleNextPoll()
+  })()
 }
 
 export function stopSession(): void {
   config.enabled = false
   notifyCaptureState(false)
-  if (sessionInterval) {
-    clearTimeout(sessionInterval)
-    sessionInterval = null
+  phase = 'idle'
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
   }
 }
 
-export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
+export async function analyzeOnce(preloadedDataUrl?: string): Promise<PerceptionContextSnapshot> {
   const startedAt = Date.now()
   const userProfile = await getUserProfile()
 
@@ -113,7 +250,8 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
 
     ensureActiveSession()
 
-    const dataUrl = await captureScreen(config.targetSourceId ?? undefined)
+    // Use pre-captured frame from polling if available, otherwise capture fresh
+    const dataUrl = preloadedDataUrl ?? await captureScreen(config.targetSourceId ?? undefined)
     if (!dataUrl) {
       const snapshot = await buildEmptySnapshot('capture failed - check screen recording permission', userProfile)
       latestSnapshot = snapshot
@@ -125,19 +263,44 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
       return snapshot
     }
 
+    // Run OCR in parallel — it serves as fallback and supplies detected_text
     const perception = await recognizeImage(dataUrl)
-    if (!perception.rawText.trim() && perception.regions.length === 0) {
-      const snapshot = await buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
-      latestSnapshot = snapshot
-      void recordPerformanceTrace({
-        operation: 'perception.analyze',
-        durationMs: Date.now() - startedAt,
-        status: 'ok'
-      })
-      return snapshot
+
+    // --- Vision LLM path (primary) ---
+    let semanticState: SemanticState | null = null
+    let analysisSource: 'vision' | 'heuristic' = 'heuristic'
+
+    if (config.useVisionLLM) {
+      const ocrText = perception.rawText.trim()
+      const visionResult = await analyzeScreenWithVision(
+        dataUrl,
+        ocrText,
+        lastRawText,
+        userProfile
+      )
+
+      if (visionResult) {
+        semanticState = buildSemanticStateFromVision(visionResult, perception, lastRawText)
+        analysisSource = 'vision'
+      }
     }
 
-    const semanticState = buildSemanticState(perception, userProfile)
+    // --- Heuristic fallback ---
+    if (!semanticState) {
+      if (!perception.rawText.trim() && perception.regions.length === 0) {
+        const snapshot = await buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
+        latestSnapshot = snapshot
+        void recordPerformanceTrace({
+          operation: 'perception.analyze',
+          durationMs: Date.now() - startedAt,
+          status: 'ok'
+        })
+        return snapshot
+      }
+
+      semanticState = buildSemanticStateHeuristic(perception, userProfile)
+      analysisSource = 'heuristic'
+    }
 
     if (semanticState.capture_policy === 'blocked-sensitive') {
       sensitiveSurfaceBlocked = true
@@ -157,6 +320,11 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
 
     await syncPersistedMemory({ userProfile, sessionMemory })
     const memoryContext = await getMemoryContext()
+    const intermediateThought = buildIntermediateThought({
+      semanticState,
+      sessionMemory,
+      persistedMemoryHighlights: memoryContext.highlights
+    })
 
     const snapshot = {
       semanticState,
@@ -164,6 +332,7 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
       userProfile,
       persisted_memory_summary: memoryContext.summary,
       persisted_memory_highlights: memoryContext.highlights,
+      intermediateThought,
       screenshotDataUrl: dataUrl
     }
 
@@ -178,7 +347,8 @@ export async function analyzeOnce(): Promise<PerceptionContextSnapshot> {
       details: {
         surfaceType: semanticState.surface_type,
         changeSummary: semanticState.change_summary,
-        uncertainty: Number(semanticState.uncertainty.toFixed(2))
+        uncertainty: Number(semanticState.uncertainty.toFixed(2)),
+        analysisSource
       }
     })
 
@@ -224,6 +394,11 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
     latestSnapshot?.semanticState ?? buildEmptySemanticState('waiting for first capture')
   await syncPersistedMemory({ userProfile, sessionMemory })
   const memoryContext = await getMemoryContext()
+  const intermediateThought = buildIntermediateThought({
+    semanticState,
+    sessionMemory,
+    persistedMemoryHighlights: memoryContext.highlights
+  })
 
   const snapshot = {
     semanticState,
@@ -231,6 +406,7 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
     userProfile,
     persisted_memory_summary: memoryContext.summary,
     persisted_memory_highlights: memoryContext.highlights,
+    intermediateThought,
     screenshotDataUrl: latestSnapshot?.screenshotDataUrl ?? null
   }
 
@@ -253,9 +429,15 @@ export function clearSessionMemory(): SessionMemory {
   sessionMemory = createSessionMemory()
 
   if (latestSnapshot) {
+    const intermediateThought = buildIntermediateThought({
+      semanticState: latestSnapshot.semanticState,
+      sessionMemory,
+      persistedMemoryHighlights: latestSnapshot.persisted_memory_highlights
+    })
     latestSnapshot = {
       ...latestSnapshot,
-      sessionMemory
+      sessionMemory,
+      intermediateThought
     }
   }
 
@@ -311,7 +493,7 @@ export async function shutdown(): Promise<void> {
   await terminateWorker()
 }
 
-function buildSemanticState(
+function buildSemanticStateHeuristic(
   perception: PerceptionResult,
   userProfile: UserProfile
 ): SemanticState {
@@ -359,6 +541,11 @@ async function buildEmptySnapshot(
   const semanticState = buildEmptySemanticState(reason)
   sessionMemory = updateSessionMemory(sessionMemory, semanticState)
   const memoryContext = await getMemoryContext()
+  const intermediateThought = buildIntermediateThought({
+    semanticState,
+    sessionMemory,
+    persistedMemoryHighlights: memoryContext.highlights
+  })
 
   return {
     semanticState,
@@ -366,6 +553,7 @@ async function buildEmptySnapshot(
     userProfile,
     persisted_memory_summary: memoryContext.summary,
     persisted_memory_highlights: memoryContext.highlights,
+    intermediateThought,
     screenshotDataUrl: null
   }
 }
@@ -569,7 +757,9 @@ function updateSessionMemory(current: SessionMemory, semanticState: SemanticStat
       visual_summary: semanticState.visual_summary,
       probable_user_focus: semanticState.probable_user_focus,
       inferred_intent: semanticState.inferred_intent,
-      uncertainty: semanticState.uncertainty
+      uncertainty: semanticState.uncertainty,
+      app_identifier: semanticState.app_identifier ?? null,
+      emotional_signal: semanticState.emotional_signal ?? null
     }
   ].slice(-config.memoryLimit)
 
