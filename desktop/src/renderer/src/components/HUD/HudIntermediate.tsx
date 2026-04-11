@@ -130,7 +130,7 @@ export function HudIntermediate({
 
       {intermediateThought && !isStreaming && (
         <div className="flex-1 px-4 overflow-hidden">
-          <div className="h-full overflow-hidden flex flex-col justify-center">
+          <div className="h-full overflow-y-auto scrollbar-none flex flex-col justify-center pr-1">
             <p
               className="text-[13px] leading-[1.5] selectable"
               style={{

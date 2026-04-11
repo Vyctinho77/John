@@ -133,25 +133,76 @@ async function applyWindowSettings(): Promise<void> {
   hudWindow.setVisibleOnAllWorkspaces(settings.alwaysVisible, { visibleOnFullScreen: false })
 }
 
-// ─── Drag ─────────────────────────────────────────────────────────────────────
+// ─── Drag + sidebar snap ──────────────────────────────────────────────────────
 
-let dragOffset = { x: 0, y: 0 }
+const SNAP_THRESHOLD = 80   // px from edge to trigger sidebar snap
+const SIDEBAR_WIDTH  = 320
+
+let dragOffset    = { x: 0, y: 0 }
+let sidebarDocked: 'left' | 'right' | null = null
 
 ipcMain.on('window:drag-start', (_e, { screenX, screenY }: { screenX: number; screenY: number }) => {
-  if (!hudWindow) return
+  if (!hudWindow || sidebarDocked) return
   const { x, y } = hudWindow.getBounds()
   dragOffset = { x: screenX - x, y: screenY - y }
 })
 
 ipcMain.on('window:drag-move', (_e, { screenX, screenY }: { screenX: number; screenY: number }) => {
-  if (!hudWindow) return
+  if (!hudWindow || sidebarDocked) return
   hudWindow.setPosition(Math.round(screenX - dragOffset.x), Math.round(screenY - dragOffset.y))
+})
+
+// On drag release: check if window landed near a screen edge and snap to sidebar
+ipcMain.on('window:drag-end', () => {
+  if (!hudWindow || sidebarDocked) return
+  const bounds  = hudWindow.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const { x: wx, y: wy, width: sw, height: sh } = display.workArea
+
+  const distLeft  = bounds.x - wx
+  const distRight = (wx + sw) - (bounds.x + bounds.width)
+
+  if (distLeft <= SNAP_THRESHOLD) {
+    sidebarDocked = 'left'
+    hudWindow.setBounds({ x: wx, y: wy, width: SIDEBAR_WIDTH, height: sh }, true)
+    hudWindow.webContents.send('hud:sidebar-docked', 'left')
+  } else if (distRight <= SNAP_THRESHOLD) {
+    sidebarDocked = 'right'
+    hudWindow.setBounds({ x: wx + sw - SIDEBAR_WIDTH, y: wy, width: SIDEBAR_WIDTH, height: sh }, true)
+    hudWindow.webContents.send('hud:sidebar-docked', 'right')
+  }
+})
+
+// Undock: return to compact at screen center
+ipcMain.handle('hud:undock-sidebar', () => {
+  if (!hudWindow) return
+  sidebarDocked = null
+  const display = screen.getDisplayMatching(hudWindow.getBounds())
+  const { x: wx, y: wy, width: sw } = display.workArea
+  const x = wx + Math.round((sw - HUD_COMPACT.width) / 2)
+  hudWindow.setBounds({ x, y: wy + 24, width: HUD_COMPACT.width, height: HUD_COMPACT.height }, true)
+})
+
+// ─── Sidebar width resize (user drag on free edge) ────────────────────────────
+
+ipcMain.on('window:sidebar-resize', (_e, { width }: { width: number }) => {
+  if (!hudWindow || !sidebarDocked) return
+  const clampedWidth = Math.max(240, Math.min(640, width))
+  const bounds  = hudWindow.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const { x: wx, width: sw } = display.workArea
+
+  if (sidebarDocked === 'left') {
+    hudWindow.setBounds({ x: wx, y: bounds.y, width: clampedWidth, height: bounds.height }, false)
+  } else {
+    hudWindow.setBounds({ x: wx + sw - clampedWidth, y: bounds.y, width: clampedWidth, height: bounds.height }, false)
+  }
 })
 
 // ─── HUD resize ───────────────────────────────────────────────────────────────
 
 ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number }) => {
-  if (!hudWindow) return
+  if (!hudWindow || sidebarDocked) return   // sidebar manages its own bounds
   const display = screen.getDisplayMatching(hudWindow.getBounds())
   const { width: sw, height: sh } = display.workArea
   const { x: cx, y: cy } = hudWindow.getBounds()

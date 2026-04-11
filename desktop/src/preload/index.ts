@@ -31,6 +31,7 @@ const hudAPI = {
   resize:    (width: number, height: number) => ipcRenderer.send('hud:resize', { width, height }),
   dragStart: (screenX: number, screenY: number) => ipcRenderer.send('window:drag-start', { screenX, screenY }),
   dragMove:  (screenX: number, screenY: number) => ipcRenderer.send('window:drag-move',  { screenX, screenY }),
+  dragEnd:   () => ipcRenderer.send('window:drag-end'),
   onToggle:  (cb: (visible: boolean) => void) => {
     ipcRenderer.on('hud:toggle', (_e, visible) => cb(visible))
     return () => ipcRenderer.removeAllListeners('hud:toggle')
@@ -41,6 +42,13 @@ const hudAPI = {
     const handler = (_e: Electron.IpcRendererEvent, active: boolean) => cb(active)
     ipcRenderer.on('hud:screenshot-mode', handler)
     return () => ipcRenderer.removeListener('hud:screenshot-mode', handler)
+  },
+  sidebarResize: (width: number) => ipcRenderer.send('window:sidebar-resize', { width }),
+  undockSidebar: (): Promise<void> => ipcRenderer.invoke('hud:undock-sidebar'),
+  onSidebarDocked: (cb: (side: 'left' | 'right') => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, side: 'left' | 'right') => cb(side)
+    ipcRenderer.on('hud:sidebar-docked', handler)
+    return () => ipcRenderer.removeListener('hud:sidebar-docked', handler)
   }
 }
 

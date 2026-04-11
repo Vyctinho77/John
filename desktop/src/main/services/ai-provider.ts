@@ -62,6 +62,7 @@ interface RemoteChatRequest {
   system: string
   prompt: string
   imageDataUrl?: string | null
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
 let cachedSettings: StoredAISettings | null = null
@@ -248,6 +249,7 @@ export async function generateRemoteText(input: {
   system: string
   prompt: string
   imageDataUrl?: string | null
+  messages?: Array<{ role: 'user' | 'assistant'; content: string }>
 }): Promise<ProviderExecutionResult | null> {
   const settings = await getStoredSettings()
   const providerOrder = buildProviderOrder(settings.routing)
@@ -255,7 +257,8 @@ export async function generateRemoteText(input: {
   const chatRequest: RemoteChatRequest = {
     system: input.system,
     prompt: input.prompt,
-    imageDataUrl: input.imageDataUrl
+    imageDataUrl: input.imageDataUrl,
+    messages: input.messages
   }
 
   if (settings.routing.preferLocalForSensitive && input.sensitive) {
@@ -625,6 +628,7 @@ async function sendOpenAIChat(
       temperature: 0.35,
       messages: [
         { role: 'system', content: request.system },
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userContent }
       ]
     })
@@ -694,7 +698,10 @@ async function sendAnthropicChat(
       model: provider.selectedModel ?? 'claude-sonnet-4-6',
       max_tokens: 900,
       system: request.system,
-      messages: [{ role: 'user', content: userContent }]
+      messages: [
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: userContent }
+      ]
     })
   })
   if (!response.ok) {
@@ -734,6 +741,10 @@ async function sendGeminiChat(
         parts: [{ text: request.system }]
       },
       contents: [
+        ...(request.messages ?? []).map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        })),
         {
           role: 'user',
           parts: [
@@ -792,6 +803,7 @@ async function sendOllamaChat(
       stream: false,
       messages: [
         { role: 'system', content: request.system },
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: request.prompt }
       ]
     })

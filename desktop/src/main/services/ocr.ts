@@ -27,8 +27,9 @@ async function getWorker(): Promise<Worker> {
       logger: () => {}
     })
     await worker.setParameters({
-      // Screenshots behave more like sparse UI text than scanned documents.
-      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+      // PSM.AUTO handles mixed UI content (text, icons, charts) without triggering
+      // the Leptonica bbox overflow errors that SPARSE_TEXT causes on graphical frames.
+      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
       user_defined_dpi: OCR_DPI
     })
     console.log('[ocr] Worker ready.')
@@ -63,10 +64,27 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
   }
   lastImageHash = imageHash
 
-  // Downscale to OCR-optimal resolution if needed
-  const ocrImage = (width > OCR_MAX_WIDTH || height > OCR_MAX_HEIGHT)
-    ? image.resize({ width: OCR_MAX_WIDTH, height: OCR_MAX_HEIGHT, quality: 'good' })
-    : image
+  // Skip OCR on graphical/uniform frames — they always return confidence 0.0
+  // and trigger Leptonica internal errors (pixScanForForeground, boxClipToRectangle).
+  // PNG size is a free entropy proxy: text screens compress to ~0.15+ bytes/pixel,
+  // charts and dark UIs compress to ~0.03–0.10 bytes/pixel.
+  const bytesPerPixel = pngBuf.length / (width * height)
+  if (bytesPerPixel < 0.12) {
+    return emptyResult(startedAt)
+  }
+
+  // Downscale to OCR-optimal resolution if needed, preserving aspect ratio.
+  // Specifying both width+height in nativeImage.resize() forces a distorted stretch —
+  // instead we compute the limiting dimension and let the other scale proportionally.
+  const ocrImage = (() => {
+    if (width <= OCR_MAX_WIDTH && height <= OCR_MAX_HEIGHT) return image
+    const scale = Math.min(OCR_MAX_WIDTH / width, OCR_MAX_HEIGHT / height)
+    return image.resize({
+      width:   Math.round(width  * scale),
+      height:  Math.round(height * scale),
+      quality: 'good'
+    })
+  })()
   const ocrSize = ocrImage.getSize()
 
   const normalizedDataUrl = ocrImage.toDataURL()

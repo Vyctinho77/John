@@ -466,6 +466,7 @@ export const HudExpanded = memo(function HudExpanded({
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { handleMouseDown } = useDragWindow()
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSpinTurns, setSettingsSpinTurns] = useState(0)
   const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general')
   const [activeProviderId, setActiveProviderId] = useState<AIProviderId>('openai')
   const [providerDrafts, setProviderDrafts] = useState<ProviderDraftMap>(createEmptyProviderDrafts())
@@ -1913,6 +1914,7 @@ export const HudExpanded = memo(function HudExpanded({
         <button
           onMouseDown={e => {
             e.preventDefault()
+            setSettingsSpinTurns(prev => prev + 1)
             setSettingsOpen(prev => {
               if (!prev) setActiveSettingsTab('general')
               return !prev
@@ -1922,7 +1924,13 @@ export const HudExpanded = memo(function HudExpanded({
           style={{ color: settingsOpen ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.76)' }}
           aria-label="Configurações"
         >
-          <ConfigIcon className="h-[18px] w-auto" />
+          <motion.span
+            className="inline-flex"
+            animate={{ rotate: settingsSpinTurns * 360 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <ConfigIcon className="h-[18px] w-auto" />
+          </motion.span>
         </button>
       </div>
 

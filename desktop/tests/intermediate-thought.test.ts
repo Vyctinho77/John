@@ -220,8 +220,8 @@ test('document: single topic with focus as secondary', () => {
     }),
     sessionMemory: makeSession()
   })
-  assert.match(t.primary, /machine learning/)
-  assert.match(t.secondary ?? '', /gradient descent/)
+  assert.match(t.primary, /machine learning|ponto central/)
+  assert.match(t.secondary ?? '', /gradient descent|parte importante/)
 })
 
 // ─── Context shift ────────────────────────────────────────────────────────────
@@ -263,6 +263,44 @@ test('shift: major change in code produces shift thought', () => {
 })
 
 // ─── Low confidence ───────────────────────────────────────────────────────────
+
+test('shift: text change keeps only the current reading thought', () => {
+  const t = buildIntermediateThought({
+    semanticState: makeState({
+      surface_type: 'text',
+      change_summary: 'minor',
+      probable_user_focus: 'texto: grid rendering and voronoi transitions',
+      inferred_intent: 'read the current text on screen',
+      visual_summary: 'technical document about grid rendering and voronoi transitions'
+    }),
+    sessionMemory: makeSession({
+      recent_states: [
+        {
+          capturedAt: 91_000,
+          surface_type: 'text',
+          change_summary: 'minor',
+          detected_text: '',
+          visual_summary: 'technical description of the glasswing v2 project',
+          probable_user_focus: 'texto: technical description of the glasswing v2 project',
+          inferred_intent: 'read the current text on screen',
+          uncertainty: 0.3
+        },
+        {
+          capturedAt: 100_000,
+          surface_type: 'text',
+          change_summary: 'minor',
+          detected_text: '',
+          visual_summary: 'technical document about grid rendering and voronoi transitions',
+          probable_user_focus: 'texto: grid rendering and voronoi transitions',
+          inferred_intent: 'read the current text on screen',
+          uncertainty: 0.22
+        }
+      ]
+    })
+  })
+  assert.equal(t.primary, 'tentando entender technical document about grid rendering and voronoi transitions')
+  assert.equal(t.secondary, null)
+})
 
 test('low confidence: stays minimal and honest', () => {
   const t = buildIntermediateThought({

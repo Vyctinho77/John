@@ -8,8 +8,9 @@ export type HudState =
   | 'expanded'
   | 'soft-idle'
   | 'closing'
+  | 'sidebar'
 
-export type HudVisual = 'compact' | 'intermediate' | 'expanded'
+export type HudVisual = 'compact' | 'intermediate' | 'expanded' | 'sidebar'
 
 const ANIM_TO_MID = 200
 const ANIM_TO_FULL = 260
@@ -23,6 +24,7 @@ export interface HudStateMachineResult {
   state: HudState
   visual: HudVisual
   isStreaming: boolean
+  sidebarSide: 'left' | 'right' | null
   expand: () => void
   expandFull: () => void
   showIntermediate: () => void
@@ -31,11 +33,14 @@ export interface HudStateMachineResult {
   ping: () => void
   setStreaming: (v: boolean) => void
   setInputFocused: (v: boolean) => void
+  dockSidebar: (side: 'left' | 'right') => void
+  undockSidebar: () => void
 }
 
 export function useHudStateMachine(): HudStateMachineResult {
   const [state, setState] = useState<HudState>('compact')
   const [isStreaming, setStreamingState] = useState(false)
+  const [sidebarSide, setSidebarSide] = useState<'left' | 'right' | null>(null)
 
   const streamingRef = useRef(false)
   const inputFocusRef = useRef(false)
@@ -199,12 +204,25 @@ export function useHudStateMachine(): HudStateMachineResult {
     }
   }, [clearIdle, startIdleForExpanded, startIdleForIntermediate])
 
+  const dockSidebar = useCallback((side: 'left' | 'right') => {
+    clearIdle()
+    setSidebarSide(side)
+    setState('sidebar')
+  }, [clearIdle])
+
+  const undockSidebar = useCallback(() => {
+    setSidebarSide(null)
+    setState('compact')
+  }, [])
+
   const visual: HudVisual =
-    state === 'compact' || state === 'closing'
-      ? 'compact'
-      : state === 'opening-full' || state === 'expanded'
-        ? 'expanded'
-        : 'intermediate'
+    state === 'sidebar'
+      ? 'sidebar'
+      : state === 'compact' || state === 'closing'
+        ? 'compact'
+        : state === 'opening-full' || state === 'expanded'
+          ? 'expanded'
+          : 'intermediate'
 
   useEffect(() => {
     return () => {
@@ -217,6 +235,7 @@ export function useHudStateMachine(): HudStateMachineResult {
     state,
     visual,
     isStreaming,
+    sidebarSide,
     expand,
     expandFull,
     showIntermediate,
@@ -224,6 +243,8 @@ export function useHudStateMachine(): HudStateMachineResult {
     collapse,
     ping,
     setStreaming,
-    setInputFocused
+    setInputFocused,
+    dockSidebar,
+    undockSidebar
   }
 }

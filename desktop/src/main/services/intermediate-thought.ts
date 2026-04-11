@@ -184,34 +184,31 @@ function buildDashboardThought(
 
 function buildTextThought(
   state: SemanticState,
-  session: SessionMemory,
+  _session: SessionMemory,
   confidence: number
 ): IntermediateThought {
   const topics = state.pedagogical_topics
   const summary = state.visual_summary
-  const shift = buildContextShift(state, session)
-
-  // Context shift is the loudest signal
-  if (shift) return { ...shift, confidence }
+  const focusPart = simplifyFocus(state.probable_user_focus)
 
   // Academic/educational document — lead with topic
   if (topics.length >= 2) {
-    const primary = `lendo sobre ${topics[0]} e ${topics[1]}`
-    const secondary = summary ? compactSummary(summary) : null
+    const primary = `tentando ligar ${topics[0]} com ${topics[1]}`
+    const secondary = summary ? `isso parece falar de ${compactSummary(summary)}` : null
     return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
   }
 
   if (topics.length === 1) {
-    const focusPart = simplifyFocus(state.probable_user_focus)
     return {
-      primary: finalize(`lendo sobre ${topics[0]}`),
-      secondary: confidence >= 0.42 ? finalize(`foco específico: ${focusPart}`) : null,
+      primary: finalize(`acho que o ponto central aqui é ${topics[0]}`),
+      secondary: confidence >= 0.42 && focusPart ? finalize(`a parte importante parece ser ${focusPart}`) : null,
       confidence
     }
   }
 
   // No clean topics — use summary directly
-  const primary = summary ? compactSummary(summary) : `lendo ${simplifyFocus(state.probable_user_focus)}`
+  const gist = summary ? compactSummary(summary) : focusPart
+  const primary = gist ? `tentando entender ${gist}` : 'tentando entender melhor esse trecho'
   return { primary: finalize(primary), secondary: null, confidence }
 }
 
@@ -231,8 +228,8 @@ function buildGenericThought(
   const topic = state.pedagogical_topics[0]
 
   return {
-    primary: finalize(`olhando${appPart} — ${focus}`),
-    secondary: topic ? finalize(`tema central: ${topic}`) : null,
+    primary: finalize(focus ? `tentando entender o que está em foco${appPart}: ${focus}` : `tentando entender melhor essa tela${appPart}`),
+    secondary: topic ? finalize(`talvez isso esteja girando em torno de ${topic}`) : null,
     confidence
   }
 }
@@ -265,7 +262,7 @@ function buildContextShift(
   if (prevFocus === currFocus || state.change_summary === 'none') return null
 
   const primary = buildShiftPrimary(prevFocus, currFocus, state)
-  const secondary = buildShiftSecondary(state, currFocus)
+  const secondary = buildShiftSecondary(state)
   return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null }
 }
 
@@ -284,26 +281,26 @@ function buildShiftPrimary(from: string, to: string, state: SemanticState): stri
   if (change_summary === 'major') {
     if (surface_type === 'code') return `saiu de "${from}" e abriu "${to}"`
     if (surface_type === 'graphic') return `viewport mudou — de "${from}" para "${to}"`
-    return `pulou de "${from}" para "${to}"`
+    return `agora ele parece focado em ${to}`
   }
 
   if (surface_type === 'document' || surface_type === 'text') {
-    return `estava em "${from}", a leitura foi para "${to}"`
+    return `acho que a parte importante agora é ${to}`
   }
   if (surface_type === 'graphic' || surface_type === 'dashboard') {
-    return `o olho saiu de "${from}" e foi para "${to}"`
+    return `ele mudou o olhar para ${to}`
   }
 
-  return `de "${from}" para "${to}"`
+  return `agora ele parece focado em ${to}`
 }
 
-function buildShiftSecondary(state: SemanticState, currentFocus: string): string | null {
+function buildShiftSecondary(state: SemanticState): string | null {
   const topic = state.pedagogical_topics[0]
   if (state.surface_type === 'code') {
     return topic ? `conceito em jogo: ${topic}` : null
   }
   if (state.surface_type === 'document' || state.surface_type === 'text') {
-    return `isso muda a leitura — o foco é ${currentFocus} agora`
+    return null
   }
   return null
 }

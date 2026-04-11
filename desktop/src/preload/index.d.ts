@@ -41,9 +41,13 @@ declare global {
       resize: (width: number, height: number) => void
       dragStart: (screenX: number, screenY: number) => void
       dragMove:  (screenX: number, screenY: number) => void
+      dragEnd:   () => void
       onToggle: (cb: (visible: boolean) => void) => () => void
       setScreenshotMode: (enabled: boolean) => Promise<boolean>
       onScreenshotModeChange: (cb: (active: boolean) => void) => () => void
+      sidebarResize:   (width: number) => void
+      undockSidebar:   () => Promise<void>
+      onSidebarDocked: (cb: (side: 'left' | 'right') => void) => () => void
     }
     perceptionAPI: {
       checkPermission:   () => Promise<'granted' | 'denied' | 'not-determined'>

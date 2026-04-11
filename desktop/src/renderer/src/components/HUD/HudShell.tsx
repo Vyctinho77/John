@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { HudVisual } from '@renderer/hooks/useHudStateMachine'
 import { GlasswingBackground, AgentState } from './GlasswingBackground'
 
-const DIMS: Record<HudVisual, { width: number; height: number; radius: number }> = {
+const DIMS: Record<Exclude<HudVisual, 'sidebar'>, { width: number; height: number; radius: number }> = {
   compact:      { width: 488,  height: 55,  radius: 22 },
   intermediate: { width: 640,  height: 220, radius: 28 },
   expanded:     { width: 840,  height: 560, radius: 30 }
@@ -20,24 +20,65 @@ const DURATIONS: Record<string, number> = {
 }
 
 function getDuration(from: HudVisual, to: HudVisual) {
+  if (from === 'sidebar' || to === 'sidebar') return 0
   return DURATIONS[`${from}-${to}`] ?? 0.22
 }
 
 interface HudShellProps {
   visual: HudVisual
   prevVisual: HudVisual
+  sidebarSide?: 'left' | 'right' | null
   agentState?: AgentState
   children: React.ReactNode
 }
 
-export function HudShell({ visual, prevVisual, agentState = 'idle', children }: HudShellProps) {
-  const { width, height, radius } = DIMS[visual]
-  const duration = getDuration(prevVisual, visual)
+export function HudShell({ visual, prevVisual, sidebarSide = null, agentState = 'idle', children }: HudShellProps) {
+  const isSidebar = visual === 'sidebar'
 
+  // Only call resize for normal (non-sidebar) states — sidebar bounds are managed by main process
   useEffect(() => {
+    if (isSidebar) return
+    const { width, height } = DIMS[visual as Exclude<HudVisual, 'sidebar'>]
     window.hudAPI?.resize(width, height)
-  }, [visual, width, height])
+  }, [visual, isSidebar])
 
+  // ── Sidebar mode ──────────────────────────────────────────────────
+  if (isSidebar) {
+    const attachedLeft = sidebarSide === 'left'
+    const border = attachedLeft
+      ? { borderRight: '1px solid rgba(255,255,255,0.07)' }
+      : { borderLeft:  '1px solid rgba(255,255,255,0.07)' }
+    const borderRadius = attachedLeft ? '0 14px 14px 0' : '14px 0 0 14px'
+
+    return (
+      <div
+        className="relative overflow-hidden"
+        style={{
+          width:        '100vw',
+          height:       '100vh',
+          background:   'linear-gradient(180deg, rgba(3,3,5,0.99) 0%, rgba(0,0,0,0.99) 100%)',
+          borderRadius,
+          ...border,
+          boxShadow: attachedLeft
+            ? '4px 0 32px rgba(0,0,0,0.6)'
+            : '-4px 0 32px rgba(0,0,0,0.6)'
+        }}
+      >
+        <GlasswingBackground
+          width={window.innerWidth}
+          height={window.innerHeight}
+          agentState={agentState}
+        />
+        <div className="absolute inset-0" style={{ zIndex: 1 }}>
+          {children}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Normal mode ───────────────────────────────────────────────────
+  const { width, height, radius } = DIMS[visual as Exclude<HudVisual, 'sidebar'>]
+  const duration = getDuration(prevVisual, visual)
   const expandedDims = DIMS.expanded
 
   return (
@@ -60,7 +101,6 @@ export function HudShell({ visual, prevVisual, agentState = 'idle', children }: 
       animate={{ width, height, borderRadius: radius, opacity: 1, scale: 1 }}
       transition={{ duration, ease: EASE }}
     >
-      {/* Glasswing grid — only in expanded stage */}
       <AnimatePresence>
         {visual === 'expanded' && (
           <motion.div
@@ -81,7 +121,6 @@ export function HudShell({ visual, prevVisual, agentState = 'idle', children }: 
         )}
       </AnimatePresence>
 
-      {/* Content sits on top of the grid */}
       <div className="absolute inset-0" style={{ zIndex: 1 }}>
         {children}
       </div>

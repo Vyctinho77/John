@@ -24,6 +24,7 @@ import { HudShell, HudContent } from './HudShell'
 import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
+import { HudSidebar } from './HudSidebar'
 
 // ─── Conversation context window ─────────────────────────────────
 const CONVO_WINDOW       = 10   // active messages kept in memory
@@ -116,9 +117,9 @@ export function HUD() {
   }, [])
 
   const {
-    visual, isStreaming,
+    visual, isStreaming, sidebarSide,
     expand, expandFull, showIntermediate, showExpanded, collapse, ping,
-    setStreaming, setInputFocused
+    setStreaming, setInputFocused, dockSidebar, undockSidebar
   } = useHudStateMachine()
 
   const sessionActive = visual !== 'compact'
@@ -207,23 +208,16 @@ export function HUD() {
     return () => clearTimeout(t)
   }, [messages, conversationSummary])
 
-  // Map isStreaming → agentState for the Glasswing background
+  // Listen for sidebar dock events from main process
   useEffect(() => {
-    let doneTimeout: ReturnType<typeof setTimeout> | null = null
+    const unsub = window.hudAPI.onSidebarDocked(side => dockSidebar(side))
+    return () => unsub()
+  }, [dockSidebar])
 
-    if (isStreaming && !prevStreaming.current) {
-      setAgentState('responding')
-    } else if (!isStreaming && prevStreaming.current) {
-      setAgentState('done')
-      doneTimeout = setTimeout(() => setAgentState('idle'), 2500)
-      prevStreaming.current = false
-    }
-    prevStreaming.current = isStreaming
-
-    return () => {
-      if (doneTimeout) clearTimeout(doneTimeout)
-    }
-  }, [isStreaming])
+  const handleUnsnap = useCallback(() => {
+    undockSidebar()
+    void window.hudAPI.undockSidebar()
+  }, [undockSidebar])
 
   const handleActivity = useCallback((type: 'mouse-move' | 'scroll' | 'typing' | 'submit' | 'expand' | 'collapse' | 'engage' = 'engage') => {
     ping()
@@ -407,11 +401,12 @@ export function HUD() {
     window.proactiveAPI.dismissHint('consumed')
 
     setMessages(prev => {
-      if (prev.length === 0) expandFull()
+      if (prev.length === 0 && visual !== 'sidebar') expandFull()
       return [...prev, { role: 'user', content: userMsg }]
     })
 
     setStreaming(true)
+    setAgentState('thinking')   // pixel flood while waiting for the AI
 
     try {
       const tutorResponse = await window.tutorAPI.respond({
@@ -419,6 +414,8 @@ export function HUD() {
         conversation,
         context: contextSnapshot
       })
+
+      setAgentState('responding')   // response arrived — wave animation
 
       let accumulated = ''
       streamText(
@@ -433,7 +430,6 @@ export function HUD() {
               ...prev,
               { role: 'assistant' as const, content: accumulated, meta: tutorResponse }
             ]
-            // Compress when conversation grows beyond the window threshold
             if (next.length > CONVO_SUMMARIZE_AT) {
               const toCompress = next.slice(0, next.length - CONVO_WINDOW)
               setConversationSummary(s => buildConversationSummary(s, toCompress))
@@ -443,6 +439,8 @@ export function HUD() {
           })
           setChunk('')
           setStreaming(false)
+          setAgentState('done')
+          setTimeout(() => setAgentState('idle'), 2500)
           void refreshPrivacyState()
         }
       )
@@ -467,8 +465,9 @@ export function HUD() {
       ])
       setChunk('')
       setStreaming(false)
+      setAgentState('idle')
     }
-  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming])
+  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual])
 
   const latestAssistant = [...messages].reverse().find(message => message.role === 'assistant')
   const latestResponse = latestAssistant?.content ?? ''
@@ -492,7 +491,7 @@ export function HUD() {
 
   return (
     <div className="w-screen h-screen flex items-start justify-center hud-typography" style={hudTypographyStyle}>
-      <HudShell visual={visual} prevVisual={prevVisual.current} agentState={agentState}>
+      <HudShell visual={visual} prevVisual={prevVisual.current} sidebarSide={sidebarSide} agentState={agentState}>
         <HudContent id={visual}>
           {visual === 'compact' && (
             <HudCompact
@@ -527,6 +526,22 @@ export function HUD() {
               onShowStage1={collapse}
               onShowStage2={showIntermediate}
               onShowStage3={showExpanded}
+            />
+          )}
+
+          {visual === 'sidebar' && (
+            <HudSidebar
+              side={sidebarSide ?? 'right'}
+              messages={messages}
+              isStreaming={isStreaming}
+              streamingContent={streamingContent}
+              inputValue={inputValue}
+              onInputChange={handleActivityTyping}
+              onSubmit={handleSubmit}
+              onInputFocus={handleInputFocus}
+              onInputBlur={handleInputBlur}
+              onActivity={handleActivityEngage}
+              onUnsnap={handleUnsnap}
             />
           )}
 

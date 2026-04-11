@@ -41,7 +41,10 @@ export function useDragWindow({ onDragStart, onDragEnd }: UseDragWindowOptions =
       dragging.current = false
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
-      if (moved.current) onDragEnd?.()
+      if (moved.current) {
+        window.hudAPI?.dragEnd()   // trigger sidebar snap detection in main process
+        onDragEnd?.()
+      }
     }
 
     window.addEventListener('mousemove', onMove)

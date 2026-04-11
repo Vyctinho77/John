@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glasswing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #080808;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: Georgia, serif;
+    color: #fff;
+    gap: 1.2rem;
+  }
+  .title { text-align: center; }
+  .title h1 { font-size: 2rem; font-weight: 400; letter-spacing: -0.02em; }
+  .title p { font-size: 0.72rem; color: #3a3a3a; letter-spacing: 0.12em; text-transform: uppercase; margin-top: 0.3rem; }
+  #wrap { position: relative; width: 560px; height: 560px; }
+  canvas { position: absolute; top: 0; left: 0; }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <h1>Projeto Glasswing</h1>
+  <p>Garantindo a segurança de softwares críticos para a era da IA</p>
+</div>
+
+<div id="wrap">
+  <canvas id="cGrid"></canvas>
+  <canvas id="cVoronoi"></canvas>
+</div>
+
+<script>
+const SIZE = 560;
+const CELL = 8;
+const COLS = SIZE / CELL; // 70
+const ROWS = SIZE / CELL; // 70
+const TOTAL = COLS * ROWS;
+
+const cg = document.getElementById('cGrid');
+const cv = document.getElementById('cVoronoi');
+cg.width = cv.width = SIZE;
+cg.height = cv.height = SIZE;
+const gx = cg.getContext('2d');
+const vx = cv.getContext('2d');
+
+// ─── Timing ───────────────────────────────────────────────────────
+// 0  → 3s   PHASE 1: chess cells pop in randomly until grid is full
+// 3s → 5.5s PHASE 2: voronoi fades in, grid flickers alive
+const T_FLOOD_END   = 3.0;
+const T_VORONOI_END = 5.5;
+
+// ─── Grid state ───────────────────────────────────────────────────
+const filled     = new Uint8Array(TOTAL);
+const brightness = new Float32Array(TOTAL);
+const flickTarget = new Float32Array(TOTAL);
+const flickSpeed  = new Float32Array(TOTAL);
+
+function idx(x, y) { return y * COLS + x; }
+
+// Chess pattern: only cells where (x+y) is even light up
+function isChess(x, y) { return (x + y) % 2 === 0; }
+
+// Pre-shuffle all chess cells — reveal in random order
+const chessOrder = [];
+(function buildChessOrder() {
+  for (let y = 0; y < ROWS; y++)
+    for (let x = 0; x < COLS; x++)
+      if (isChess(x, y)) chessOrder.push(idx(x, y));
+  for (let i = chessOrder.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [chessOrder[i], chessOrder[j]] = [chessOrder[j], chessOrder[i]];
+  }
+})();
+
+// ─── PHASE 2: flicker system ──────────────────────────────────────
+// Each filled cell has an independent random oscillation
+function initFlicker() {
+  for (let i = 0; i < TOTAL; i++) {
+    flickTarget[i] = 0.15 + Math.random() * 0.55;
+    flickSpeed[i]  = 0.008 + Math.random() * 0.018;
+  }
+}
+
+function updateFlicker() {
+  for (let i = 0; i < TOTAL; i++) {
+    if (!filled[i]) continue;
+    // Lerp toward target
+    brightness[i] += (flickTarget[i] - brightness[i]) * flickSpeed[i];
+    // When close to target, pick a new random target
+    if (Math.abs(brightness[i] - flickTarget[i]) < 0.02) {
+      // Some cells go dark briefly, most stay lit dimly
+      const gosDark = Math.random() < 0.25;
+      flickTarget[i] = gosDark
+        ? 0.02 + Math.random() * 0.08          // dim out
+        : 0.15 + Math.random() * 0.55;         // bright
+      flickSpeed[i] = 0.005 + Math.random() * 0.015;
+    }
+  }
+}
+
+// ─── Diagonal wave ────────────────────────────────────────────────
+// Retorna 0..1 — a crista acende os blocos por onde passa
+// d = posição do pixel na diagonal (0 = top-left, 1 = bottom-right)
+// A crista viaja de d=0 até d=1 no período WAVE_PERIOD segundos
+const WAVE_PERIOD = 8; // segundos por ciclo completo
+const WAVE_WIDTH  = 0.18; // largura da crista (0..1 do espaço diagonal)
+
+function wave(x, y, t) {
+  const d = (x / COLS + y / ROWS) / 2; // 0..1
+  const crest = (t / WAVE_PERIOD) % 1; // posição da crista 0..1
+  const dist = Math.abs(d - crest);
+  const wrapped = Math.min(dist, 1 - dist); // wrap cíclico
+  if (wrapped > WAVE_WIDTH) return 0;
+  // sino suave: 1 no centro, 0 nas bordas
+  return Math.pow(Math.cos((wrapped / WAVE_WIDTH) * Math.PI * 0.5), 2);
+}
+
+// ─── Draw grid ────────────────────────────────────────────────────
+function drawGrid(t) {
+  gx.fillStyle = '#080808';
+  gx.fillRect(0, 0, SIZE, SIZE);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if ((x + y) % 2 !== 0) continue; // só casas do xadrez
+      const b = brightness[idx(x, y)];
+      const w = wave(x, y, t);
+      // base do flicker + boost da onda (onda acende mesmo células escuras)
+      const combined = Math.min(1, b + w * 0.22);
+      if (combined < 0.015) continue;
+      const v = Math.floor(combined * 80);
+      gx.fillStyle = `rgb(${v},${v},${v})`;
+      gx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 1, CELL - 1);
+    }
+  }
+
+  // Grid lines
+  gx.strokeStyle = 'rgba(255,255,255,0.055)';
+  gx.lineWidth = 0.5;
+  for (let x = 0; x <= COLS; x++) {
+    gx.beginPath(); gx.moveTo(x * CELL, 0); gx.lineTo(x * CELL, SIZE); gx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    gx.beginPath(); gx.moveTo(0, y * CELL); gx.lineTo(SIZE, y * CELL); gx.stroke();
+  }
+
+
+}
+
+// ─── Voronoi ──────────────────────────────────────────────────────
+const N_PTS = 38;
+const pts = Array.from({ length: N_PTS }, () => ({
+  x: Math.random() * SIZE,
+  y: Math.random() * SIZE,
+  vx: (Math.random() - 0.5) * 0.3,
+  vy: (Math.random() - 0.5) * 0.3,
+}));
+
+// Compute Voronoi edges as line segments using Fortune's approximation:
+// sample points along each potential edge between neighboring seeds
+function computeEdgeSegments() {
+  const segments = []; // {x1,y1,x2,y2}
+  const STEP = 3; // sample every N pixels along scan
+
+  // For each pair of pts, find the perpendicular bisector clipped to canvas
+  // Then walk that bisector and collect edge pixels as segments
+  // Simpler: scan the canvas, collect edge pixels, group into segments by angle
+  // We use the pixel approach: collect all edge pixels then cluster into runs
+  const edgePx = [];
+  for (let y = 0; y < SIZE; y += STEP) {
+    for (let x = 0; x < SIZE; x += STEP) {
+      let m1 = Infinity, m2 = Infinity, mi1 = -1, mi2 = -1;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = x - pts[i].x, dy = y - pts[i].y;
+        const dist = dx * dx + dy * dy;
+        if (dist < m1) { m2 = m1; mi2 = mi1; m1 = dist; mi1 = i; }
+        else if (dist < m2) { m2 = dist; mi2 = i; }
+      }
+      const edge = Math.sqrt(m2) - Math.sqrt(m1);
+      if (edge < STEP * 1.5) {
+        edgePx.push({ x, y, a: Math.min(mi1, mi2), b: Math.max(mi1, mi2) });
+      }
+    }
+  }
+
+  // Group pixels by (a,b) pair = same Voronoi edge
+  const edgeMap = new Map();
+  for (const p of edgePx) {
+    const key = `${p.a}-${p.b}`;
+    if (!edgeMap.has(key)) edgeMap.set(key, []);
+    edgeMap.get(key).push(p);
+  }
+
+  // For each group, build one or more segments (first→last point sorted by x+y)
+  for (const [, pixels] of edgeMap) {
+    if (pixels.length < 2) continue;
+    pixels.sort((a, b) => (a.x + a.y) - (b.x + b.y));
+    // Split into runs (gap > STEP*4 = new segment)
+    let run = [pixels[0]];
+    for (let i = 1; i < pixels.length; i++) {
+      const dx = pixels[i].x - pixels[i-1].x;
+      const dy = pixels[i].y - pixels[i-1].y;
+      if (Math.hypot(dx, dy) > STEP * 5) {
+        if (run.length >= 2)
+          segments.push({ x1: run[0].x, y1: run[0].y, x2: run[run.length-1].x, y2: run[run.length-1].y });
+        run = [];
+      }
+      run.push(pixels[i]);
+    }
+    if (run.length >= 2)
+      segments.push({ x1: run[0].x, y1: run[0].y, x2: run[run.length-1].x, y2: run[run.length-1].y });
+  }
+
+  // Shuffle so segments are drawn in random order (teia de aranha)
+  for (let i = segments.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [segments[i], segments[j]] = [segments[j], segments[i]];
+  }
+
+  return segments;
+}
+
+let edgeSegments = [];      // array of {x1,y1,x2,y2}
+let weaveProgress = 0;      // 0..1 how much of the web has been drawn
+let weaveComplete = false;  // true when all segments drawn, switch to pixel render
+let voronoiDirty = true;
+
+// Offscreen for the final pixel-based voronoi (used after weave completes)
+const voronoiBuf = document.createElement('canvas');
+voronoiBuf.width = voronoiBuf.height = SIZE;
+const vb = voronoiBuf.getContext('2d');
+
+function computeVoronoiPixels() {
+  const img = vb.createImageData(SIZE, SIZE);
+  const d = img.data;
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      let m1 = Infinity, m2 = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const dx = x - pts[i].x, dy = y - pts[i].y;
+        const dist = dx * dx + dy * dy;
+        if (dist < m1) { m2 = m1; m1 = dist; }
+        else if (dist < m2) { m2 = dist; }
+      }
+      const edge = Math.sqrt(m2) - Math.sqrt(m1);
+      if (edge < 2.5) {
+        const tt = Math.max(0, 1 - edge / 2.5);
+        const v = Math.floor(255 * tt);
+        const i4 = (y * SIZE + x) * 4;
+        d[i4] = v; d[i4+1] = v; d[i4+2] = v; d[i4+3] = Math.floor(230 * tt);
+      }
+    }
+  }
+  vb.putImageData(img, 0, 0);
+  voronoiDirty = false;
+}
+
+function updatePts() {
+  pts.forEach(p => {
+    p.x += p.vx; p.y += p.vy;
+    if (p.x < 0)    { p.x = 0;    p.vx *= -1; }
+    if (p.x > SIZE) { p.x = SIZE; p.vx *= -1; }
+    if (p.y < 0)    { p.y = 0;    p.vy *= -1; }
+    if (p.y > SIZE) { p.y = SIZE; p.vy *= -1; }
+  });
+  voronoiDirty = true;
+}
+
+// Draw the web being woven — segments appear one by one, each grows from midpoint out
+function drawWeave(progress, ctx) {
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  const totalSegs = edgeSegments.length;
+  const segsToShow = Math.floor(progress * totalSegs);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+
+  for (let i = 0; i < segsToShow; i++) {
+    const seg = edgeSegments[i];
+    // Full segments already drawn
+    ctx.beginPath();
+    ctx.moveTo(seg.x1, seg.y1);
+    ctx.lineTo(seg.x2, seg.y2);
+    ctx.stroke();
+  }
+
+  // The currently-drawing segment grows from its midpoint outward
+  if (segsToShow < totalSegs) {
+    const seg = edgeSegments[segsToShow];
+    const segProgress = (progress * totalSegs) - segsToShow; // 0..1
+    const mx = (seg.x1 + seg.x2) / 2, my = (seg.y1 + seg.y2) / 2;
+    const t = segProgress;
+    ctx.globalAlpha = 0.6 + t * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(mx + (seg.x1 - mx) * t, my + (seg.y1 - my) * t);
+    ctx.lineTo(mx + (seg.x2 - mx) * t, my + (seg.y2 - my) * t);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ─── Main loop ────────────────────────────────────────────────────
+let startTime = null;
+let lastVoronoi = 0;
+let flickerInited = false;
+
+// Weave timing: starts at T_FLOOD_END, takes T_WEAVE_DUR seconds
+const T_WEAVE_DUR = 2.5;
+
+function loop(ts) {
+  if (!startTime) startTime = ts;
+  const elapsed = (ts - startTime) / 1000;
+
+  // ── PHASE 1: reveal chess cells in random order ──
+  if (elapsed < T_FLOOD_END) {
+    const progress = elapsed / T_FLOOD_END;
+    const target = Math.floor(progress * chessOrder.length);
+    for (let i = 0; i < target; i++) {
+      const ci = chessOrder[i];
+      if (!filled[ci]) {
+        filled[ci] = 1;
+        brightness[ci] = 0.2 + Math.random() * 0.6;
+      }
+    }
+  }
+
+  // ── PHASE 2: flicker + weave ──
+  if (elapsed >= T_FLOOD_END) {
+    if (!flickerInited) {
+      initFlicker();
+      flickerInited = true;
+      // Compute edge segments now that pts are stable
+      edgeSegments = computeEdgeSegments();
+    }
+    updateFlicker();
+  }
+
+  // Slowly move pts after weave completes
+  if (elapsed > T_FLOOD_END + T_WEAVE_DUR && ts - lastVoronoi > 50) {
+    updatePts();
+    lastVoronoi = ts;
+  }
+
+  drawGrid(elapsed);
+
+  // ── Weave animation ──
+  if (elapsed >= T_FLOOD_END) {
+    const weaveElapsed = elapsed - T_FLOOD_END;
+
+    if (!weaveComplete) {
+      weaveProgress = Math.min(1, weaveElapsed / T_WEAVE_DUR);
+      drawWeave(weaveProgress, vx);
+      if (weaveProgress >= 1) {
+        weaveComplete = true;
+        computeVoronoiPixels(); // switch to pixel render
+      }
+    } else {
+      // After weave: use pixel-based render (smooth & moving)
+      if (voronoiDirty) computeVoronoiPixels();
+      vx.clearRect(0, 0, SIZE, SIZE);
+      vx.drawImage(voronoiBuf, 0, 0);
+    }
+  }
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

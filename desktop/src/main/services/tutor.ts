@@ -95,6 +95,9 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         [...relevantPersistentMemory, ...behaviorSummaryLines],
         offScreen
       ),
+      // Conversation history: all turns except the last user message,
+      // which is already embedded in the rich `prompt` above.
+      messages: request.conversation.slice(0, -1),
       imageDataUrl: context.screenshotDataUrl ?? null
     })
     const content = remoteResult?.text?.trim() || localContent
