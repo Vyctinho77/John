@@ -1,0 +1,9 @@
+.claude/settings.local.json
+
+desktop/node_modules/
+desktop/out/
+desktop/*.tsbuildinfo
+
+*.log
+.DS_Store
+Thumbs.db
