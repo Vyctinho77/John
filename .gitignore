@@ -3,6 +3,10 @@
 desktop/node_modules/
 desktop/out/
 desktop/*.tsbuildinfo
+packages/*/node_modules/
+packages/*/out/
+packages/*.vsix
+packages/*/*.vsix
 
 *.log
 .DS_Store

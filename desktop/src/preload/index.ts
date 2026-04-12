@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
+  ConnectorStatus,
   TutorRequest,
   UserProfile
 } from '../shared/perception.types'
@@ -143,6 +144,42 @@ const memoryAPI = {
 }
 
 import type { StoredMessage } from '../main/services/conversation-store'
+import type { Chat, ChatMeta } from '../main/services/chat-store'
+
+const chatAPI = {
+  listMetas: (): Promise<ChatMeta[]> =>
+    ipcRenderer.invoke('chat:list-metas'),
+  getActive: (): Promise<{ chat: Chat; activeChatId: string }> =>
+    ipcRenderer.invoke('chat:get-active'),
+  create: (): Promise<{ chat: Chat; metas: ChatMeta[] }> =>
+    ipcRenderer.invoke('chat:create'),
+  load: (id: string): Promise<Chat | null> =>
+    ipcRenderer.invoke('chat:load', id),
+  save: (id: string, messages: StoredMessage[], summary: string | null): Promise<void> =>
+    ipcRenderer.invoke('chat:save', id, messages, summary),
+  delete: (id: string): Promise<ChatMeta[]> =>
+    ipcRenderer.invoke('chat:delete', id),
+  rename: (id: string, title: string): Promise<void> =>
+    ipcRenderer.invoke('chat:rename', id, title),
+  setActive: (id: string): Promise<void> =>
+    ipcRenderer.invoke('chat:set-active', id),
+  generateTitle: (id: string, firstMessage: string): Promise<string | null> =>
+    ipcRenderer.invoke('chat:generate-title', id, firstMessage)
+}
+
+const bridgeAPI = {
+  getStatuses: (): Promise<ConnectorStatus[]> =>
+    ipcRenderer.invoke('bridge:get-statuses'),
+
+  installVSCodeConnector: (): Promise<{ ok: boolean; message: string }> =>
+    ipcRenderer.invoke('bridge:install-vscode-connector'),
+
+  onStatusUpdate: (cb: (status: ConnectorStatus) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: ConnectorStatus) => cb(s)
+    ipcRenderer.on('bridge:status-update', handler)
+    return () => ipcRenderer.removeListener('bridge:status-update', handler)
+  }
+}
 
 const conversationAPI = {
   load: (): Promise<{ messages: StoredMessage[]; summary: string | null } | null> =>
@@ -161,6 +198,8 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('aiAPI', aiAPI)
     contextBridge.exposeInMainWorld('proactiveAPI', proactiveAPI)
     contextBridge.exposeInMainWorld('memoryAPI', memoryAPI)
+    contextBridge.exposeInMainWorld('chatAPI', chatAPI)
+    contextBridge.exposeInMainWorld('bridgeAPI', bridgeAPI)
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
   } catch (e) {
     console.error(e)
@@ -182,6 +221,10 @@ if (process.contextIsolated) {
   window.proactiveAPI = proactiveAPI
   // @ts-ignore
   window.memoryAPI = memoryAPI
+  // @ts-ignore
+  window.chatAPI = chatAPI
+  // @ts-ignore
+  window.bridgeAPI = bridgeAPI
   // @ts-ignore
   window.conversationAPI = conversationAPI
 }

@@ -63,6 +63,14 @@ interface Message {
   meta?: TutorResponse
 }
 
+interface ChatMeta {
+  id: string
+  title: string | null
+  createdAt: number
+  updatedAt: number
+  messageCount: number
+}
+
 function streamText(
   text: string,
   onChunk: (chunk: string) => void,
@@ -88,6 +96,9 @@ export function HUD() {
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationSummary, setConversationSummary] = useState<string | null>(null)
   const [streamingContent, setChunk] = useState('')
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [chatMetas, setChatMetas] = useState<ChatMeta[]>([])
+  const activeChatIdRef = useRef<string | null>(null)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [sources, setSources] = useState<CaptureSource[]>([])
   const [diagnostics, setDiagnostics] = useState<DiagnosticsSnapshot | null>(null)
@@ -105,13 +116,20 @@ export function HUD() {
   const prevVisual = useRef<HudVisual>('compact')
 
 
-  // ── Load conversation from disk on mount ──
+  // ── Keep activeChatIdRef in sync ──
   useEffect(() => {
-    window.conversationAPI.load().then(saved => {
-      if (!saved || saved.messages.length === 0) return
-      setMessages(saved.messages)
-      setConversationSummary(saved.summary)
+    activeChatIdRef.current = activeChatId
+  }, [activeChatId])
+
+  // ── Load active chat on mount ──
+  useEffect(() => {
+    window.chatAPI.getActive().then(({ chat, activeChatId: id }) => {
+      setActiveChatId(id)
+      activeChatIdRef.current = id
+      if (chat.messages.length > 0) setMessages(chat.messages)
+      setConversationSummary(chat.summary)
     }).catch(() => {})
+    window.chatAPI.listMetas().then(setChatMetas).catch(() => {})
   }, [])
 
   const {
@@ -203,13 +221,14 @@ export function HUD() {
     window.proactiveAPI.setStreaming(isStreaming)
   }, [isStreaming])
 
-  // ── Auto-save conversation to disk (debounced 500ms) ──
+  // ── Auto-save active chat (debounced 500ms) ──
   useEffect(() => {
+    if (!activeChatId) return
     const t = setTimeout(() => {
-      window.conversationAPI.save({ messages, summary: conversationSummary }).catch(() => {})
+      window.chatAPI.save(activeChatId, messages, conversationSummary).catch(() => {})
     }, 500)
     return () => clearTimeout(t)
-  }, [messages, conversationSummary])
+  }, [messages, conversationSummary, activeChatId])
 
   // Listen for sidebar dock events from main process
   useEffect(() => {
@@ -221,6 +240,59 @@ export function HUD() {
     undockSidebar()
     void window.hudAPI.undockSidebar()
   }, [undockSidebar])
+
+  const handleNewChat = useCallback(async () => {
+    const id = activeChatIdRef.current
+    if (id) await window.chatAPI.save(id, messages, conversationSummary).catch(() => {})
+    const { chat, metas } = await window.chatAPI.create()
+    setActiveChatId(chat.id)
+    setMessages([])
+    setConversationSummary(null)
+    setChatMetas(metas)
+    setInputValue('')
+    setChunk('')
+  }, [conversationSummary, messages])
+
+  const handleSelectChat = useCallback(async (id: string) => {
+    if (id === activeChatIdRef.current) return
+    const cur = activeChatIdRef.current
+    if (cur) await window.chatAPI.save(cur, messages, conversationSummary).catch(() => {})
+    await window.chatAPI.setActive(id)
+    const chat = await window.chatAPI.load(id)
+    if (!chat) return
+    setActiveChatId(id)
+    setMessages(chat.messages)
+    setConversationSummary(chat.summary)
+    setInputValue('')
+    setChunk('')
+  }, [conversationSummary, messages])
+
+  const handleDeleteChat = useCallback(async (id: string) => {
+    const metas = await window.chatAPI.delete(id)
+    setChatMetas(metas)
+    if (id !== activeChatIdRef.current) return
+    if (metas.length > 0) {
+      const next = await window.chatAPI.load(metas[0].id)
+      if (next) {
+        setActiveChatId(next.id)
+        setMessages(next.messages)
+        setConversationSummary(next.summary)
+      }
+    } else {
+      const { chat, metas: newMetas } = await window.chatAPI.create()
+      setActiveChatId(chat.id)
+      setMessages([])
+      setConversationSummary(null)
+      setChatMetas(newMetas)
+    }
+    setInputValue('')
+    setChunk('')
+  }, [])
+
+  const handleRenameChat = useCallback(async (id: string, title: string) => {
+    await window.chatAPI.rename(id, title)
+    setChatMetas(prev => prev.map(m => m.id === id ? { ...m, title } : m))
+  }, [])
 
   const handleActivity = useCallback((type: 'mouse-move' | 'scroll' | 'typing' | 'submit' | 'expand' | 'collapse' | 'engage' = 'engage') => {
     ping()
@@ -386,6 +458,7 @@ export function HUD() {
     if (!inputValue.trim() || isStreaming) return
 
     const userMsg = inputValue.trim()
+    const isFirstMessage = messages.length === 0
 
     // Build the conversation with sliding window + optional summary block
     const activeMessages = messages.slice(-CONVO_WINDOW)
@@ -440,6 +513,14 @@ export function HUD() {
           setChunk('')
           setStreaming(false)
           void refreshPrivacyState()
+          if (isFirstMessage) {
+            const chatId = activeChatIdRef.current
+            if (chatId) {
+              window.chatAPI.generateTitle(chatId, userMsg).then(title => {
+                if (title) setChatMetas(prev => prev.map(m => m.id === chatId ? { ...m, title } : m))
+              }).catch(() => {})
+            }
+          }
         }
       )
     } catch (error) {
@@ -464,7 +545,7 @@ export function HUD() {
       setChunk('')
       setStreaming(false)
     }
-  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual])
+  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual, setChatMetas])
 
   const latestAssistant = [...messages].reverse().find(message => message.role === 'assistant')
   const latestResponse = latestAssistant?.content ?? ''
@@ -544,6 +625,12 @@ export function HUD() {
 
           {visual === 'expanded' && (
             <HudExpanded
+              activeChatId={activeChatId}
+              chatMetas={chatMetas}
+              onNewChat={() => { void handleNewChat() }}
+              onSelectChat={id => { void handleSelectChat(id) }}
+              onDeleteChat={id => { void handleDeleteChat(id) }}
+              onRenameChat={(id, title) => { void handleRenameChat(id, title) }}
               inputValue={inputValue}
               onInputChange={handleActivityTyping}
               onSubmit={handleSubmit}

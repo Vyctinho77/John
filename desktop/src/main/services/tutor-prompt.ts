@@ -32,7 +32,8 @@ export function buildRemoteUserPrompt(
   context: PerceptionContextSnapshot,
   domainBody: string | null,
   relevantPersistentMemory: string[] = [],
-  offScreen = false
+  offScreen = false,
+  vsCodeContext?: string
 ): string {
   const { semanticState, sessionMemory } = context
   const keyValuesLine = formatKeyValues(semanticState.key_values)
@@ -74,6 +75,7 @@ export function buildRemoteUserPrompt(
     semanticState.pedagogical_topics.length
       ? `Topics: ${semanticState.pedagogical_topics.join(', ')}`
       : '',
+    vsCodeContext ?? '',
     domainBody ? `Domain guidance: ${domainBody}` : '',
     'Open with the main reading or recommendation first.',
     'Prioritize the next useful step before extra detail.',
@@ -86,6 +88,78 @@ export function buildRemoteUserPrompt(
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+export function formatVSCodeConnectorContext(data: unknown): string {
+  if (!data || typeof data !== 'object') return ''
+
+  const { editor, diagnostics, git, terminal } = data as {
+    editor: {
+      filename: string
+      filepath: string
+      language: string
+      cursorLine: number
+      selectedText: string | null
+      visibleRange: { start: number; end: number }
+      surroundingCode: string
+    } | null
+    diagnostics: {
+      hasErrors: boolean
+      errorCount: number
+      items: Array<{ message: string; severity: number; line: number; source?: string }>
+    } | null
+    git: {
+      branch?: string
+      ahead: number
+      behind: number
+      changedFiles: number
+      stagedFiles: number
+    } | null
+    terminal: {
+      lastOutput: string
+      activeTerminalName: string | null
+    } | null
+  }
+
+  const lines: string[] = ['--- VS Code (live connector) ---']
+
+  if (editor) {
+    lines.push(`File: ${editor.filepath || editor.filename}`)
+    lines.push(`Language: ${editor.language}`)
+    lines.push(`Cursor: line ${editor.cursorLine}  |  visible: ${editor.visibleRange.start}–${editor.visibleRange.end}`)
+    if (editor.selectedText) lines.push(`Selection: ${editor.selectedText.slice(0, 300)}`)
+  }
+
+  if (git) {
+    const changes = `${git.changedFiles} changed, ${git.stagedFiles} staged`
+    const sync = git.ahead || git.behind ? ` (↑${git.ahead} ↓${git.behind})` : ''
+    lines.push(`Git: ${git.branch ?? 'unknown'}${sync} — ${changes}`)
+  }
+
+  if (diagnostics?.hasErrors) {
+    lines.push(`Errors (${diagnostics.errorCount}):`)
+    for (const item of diagnostics.items.filter(i => i.severity === 0).slice(0, 5)) {
+      lines.push(`  [error] line ${item.line}: ${item.message}`)
+    }
+  }
+
+  if (editor?.surroundingCode) {
+    lines.push(`Code around cursor (±20 lines):`)
+    lines.push('```' + editor.language)
+    lines.push(editor.surroundingCode.slice(0, 2000))
+    lines.push('```')
+  }
+
+  if (terminal?.lastOutput?.trim()) {
+    const name = terminal.activeTerminalName ? ` (${terminal.activeTerminalName})` : ''
+    lines.push(`Terminal${name}:`)
+    lines.push('```')
+    lines.push(terminal.lastOutput.trim().slice(-1500))
+    lines.push('```')
+  }
+
+  lines.push('--- End VS Code context ---')
+  return lines.join('\n')
 }
 
 function formatKeyValues(keyValues?: Record<string, string>): string {

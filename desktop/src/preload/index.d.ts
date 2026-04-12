@@ -2,6 +2,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
   CaptureSource,
+  ConnectorStatus,
   DataDeletionSummary,
   DiagnosticsSnapshot,
   PerceptionContextSnapshot,
@@ -33,6 +34,7 @@ import type {
   MemoryImportPreview
 } from '../shared/memory.types'
 import type { StoredMessage } from '../main/services/conversation-store'
+import type { Chat, ChatMeta } from '../main/services/chat-store'
 
 declare global {
   interface Window {
@@ -99,6 +101,22 @@ declare global {
       clearPersisted: () => Promise<MemoryCardSummary>
       syncEmbeddings: () => Promise<MemoryEmbeddingStatus>
       rebuildEmbeddings: () => Promise<MemoryEmbeddingStatus>
+    }
+    chatAPI: {
+      listMetas: () => Promise<ChatMeta[]>
+      getActive: () => Promise<{ chat: Chat; activeChatId: string }>
+      create: () => Promise<{ chat: Chat; metas: ChatMeta[] }>
+      load: (id: string) => Promise<Chat | null>
+      save: (id: string, messages: StoredMessage[], summary: string | null) => Promise<void>
+      delete: (id: string) => Promise<ChatMeta[]>
+      rename: (id: string, title: string) => Promise<void>
+      setActive: (id: string) => Promise<void>
+      generateTitle: (id: string, firstMessage: string) => Promise<string | null>
+    }
+    bridgeAPI: {
+      getStatuses: () => Promise<ConnectorStatus[]>
+      installVSCodeConnector: () => Promise<{ ok: boolean; message: string }>
+      onStatusUpdate: (cb: (status: ConnectorStatus) => void) => () => void
     }
     conversationAPI: {
       load: () => Promise<{ messages: StoredMessage[]; summary: string | null } | null>

@@ -296,6 +296,16 @@ export interface CaptureSource {
   selected: boolean
 }
 
+// ─── Biblioteca / Connector types ────────────────────────────────────────────
+
+export type ConnectorID = 'vscode' | 'spotify'
+
+export interface ConnectorStatus {
+  id: ConnectorID
+  connected: boolean
+  connectedAt: number | null
+}
+
 export interface PerceptionConfig {
   enabled: boolean
   privateMode: boolean

@@ -1,0 +1,38 @@
+{
+  "name": "john-connector-vscode",
+  "displayName": "John Connector",
+  "description": "Connects VS Code to John — seu tutor de IA residente",
+  "version": "0.1.0",
+  "publisher": "john-ai",
+  "engines": { "vscode": "^1.74.0" },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "john.connect",
+        "title": "John: Conectar ao HUD"
+      },
+      {
+        "command": "john.disconnect",
+        "title": "John: Desconectar"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --format=cjs --sourcemap",
+    "watch": "npm run build -- --watch",
+    "package": "npm run build && npx @vscode/vsce package --no-dependencies -o john-connector.vsix"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.74.0",
+    "@types/ws": "^8.5.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  }
+}

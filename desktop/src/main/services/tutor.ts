@@ -7,8 +7,10 @@ import {
   buildRemoteSystemPrompt,
   buildRemoteUserPrompt,
   composeResponse,
-  inferWarning
+  inferWarning,
+  formatVSCodeConnectorContext
 } from './tutor-prompt'
+import { bridgeServer } from './bridge'
 import {
   calibrateDepth,
   applyDepthCalibration,
@@ -85,6 +87,9 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       warning: domainOutput?.warning ?? baseWarning,
       domainBody: domainOutput?.content ?? null
     })
+    const vsCodeRaw = bridgeServer.getContext('vscode')
+    const vsCodeBlock = vsCodeRaw ? formatVSCodeConnectorContext(vsCodeRaw.data) : undefined
+
     const remoteResult = await generateRemoteText({
       sensitive: Boolean(domainOutput?.warning ?? baseWarning),
       system: buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen),
@@ -93,7 +98,8 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         effectiveContext,
         domainOutput?.content ?? null,
         [...relevantPersistentMemory, ...behaviorSummaryLines],
-        offScreen
+        offScreen,
+        vsCodeBlock
       ),
       // Conversation history: all turns except the last user message,
       // which is already embedded in the rich `prompt` above.

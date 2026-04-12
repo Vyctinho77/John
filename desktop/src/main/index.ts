@@ -1,5 +1,8 @@
 import { app, shell, BrowserWindow, globalShortcut, screen, ipcMain, dialog } from 'electron'
 import { join } from 'path'
+import { homedir } from 'os'
+import { spawn } from 'child_process'
+import { existsSync, readdirSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
   analyzeOnce, startSession, stopSession,
@@ -52,6 +55,11 @@ import {
   syncMemoryEmbeddings
 } from './services/memory-embeddings'
 import { loadConversation, saveConversation } from './services/conversation-store'
+import {
+  listChatMetas, getActiveChat, createChat, loadChat,
+  saveChat, deleteChat, renameChat, setTitleIfEmpty, setActiveChat
+} from './services/chat-store'
+import { bridgeServer } from './services/bridge'
 import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -137,6 +145,8 @@ async function applyWindowSettings(): Promise<void> {
 
 const SNAP_THRESHOLD = 80   // px from edge to trigger sidebar snap
 const SIDEBAR_WIDTH  = 320
+const SIDEBAR_MIN_WIDTH = 44
+const SIDEBAR_MAX_WIDTH = 640
 
 let dragOffset    = { x: 0, y: 0 }
 let sidebarDocked: 'left' | 'right' | null = null
@@ -187,7 +197,7 @@ ipcMain.handle('hud:undock-sidebar', () => {
 
 ipcMain.on('window:sidebar-resize', (_e, { width }: { width: number }) => {
   if (!hudWindow || !sidebarDocked) return
-  const clampedWidth = Math.max(240, Math.min(640, width))
+  const clampedWidth = Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, width))
   const bounds  = hudWindow.getBounds()
   const display = screen.getDisplayMatching(bounds)
   const { x: wx, width: sw } = display.workArea
@@ -512,6 +522,118 @@ function toggleHud(): void {
   }
 }
 
+// ─── Chat (multi-conversation) ───────────────────────────────────────────────
+
+ipcMain.handle('chat:list-metas',    () => listChatMetas())
+ipcMain.handle('chat:get-active',    () => getActiveChat())
+ipcMain.handle('chat:create',        () => createChat())
+ipcMain.handle('chat:load',          (_e, id: string) => loadChat(id))
+ipcMain.handle('chat:save',          (_e, id: string, messages: unknown, summary: string | null) =>
+  saveChat(id, messages as Parameters<typeof saveChat>[1], summary))
+ipcMain.handle('chat:delete',        (_e, id: string) => deleteChat(id))
+ipcMain.handle('chat:rename',        (_e, id: string, title: string) => { renameChat(id, title) })
+ipcMain.handle('chat:set-active',    (_e, id: string) => { setActiveChat(id) })
+ipcMain.handle('chat:generate-title', async (_e, id: string, firstMessage: string) => {
+  const { generateRemoteText } = await import('./services/ai-provider')
+  const result = await generateRemoteText({
+    sensitive: false,
+    system: 'You generate ultra-short conversation titles. Reply with ONLY the title — 3 to 5 words, no quotes, no punctuation at the end.',
+    prompt: `First message: "${firstMessage.slice(0, 200)}"`,
+    messages: [],
+    imageDataUrl: null
+  })
+  const title = result?.text?.trim().replace(/^["']|["']$/g, '') ?? null
+  if (title) setTitleIfEmpty(id, title)
+  return title
+})
+
+// ─── Bridge (Biblioteca connectors) ──────────────────────────────────────────
+
+ipcMain.handle('bridge:get-statuses', () => {
+  return bridgeServer.getStatuses()
+})
+
+const EXTENSION_ID = 'john-ai.john-connector-vscode'
+
+function isExtensionInstalled(): boolean {
+  try {
+    const dir = join(homedir(), '.vscode', 'extensions')
+    return readdirSync(dir).some(entry =>
+      entry.toLowerCase().startsWith(EXTENSION_ID + '-')
+    )
+  } catch {
+    return false
+  }
+}
+
+/** Returns the first code.cmd / code path that exists on disk, or null. */
+function findVSCodeExecutable(): string | null {
+  const candidates = [
+    // Explicit .cmd (avoids shell resolution issues)
+    join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Microsoft VS Code', 'bin', 'code.cmd'),
+    join(process.env['ProgramFiles'] ?? '', 'Microsoft VS Code', 'bin', 'code.cmd'),
+    join(process.env['ProgramW6432'] ?? '', 'Microsoft VS Code', 'bin', 'code.cmd'),
+    // VS Code Insiders
+    join(process.env['LOCALAPPDATA'] ?? '', 'Programs', 'Microsoft VS Code Insiders', 'bin', 'code-insiders.cmd'),
+  ]
+  return candidates.find(p => p && existsSync(p)) ?? null
+}
+
+function spawnInstall(executable: string, vsixPath: string): Promise<{ ok: boolean; message: string }> {
+  return new Promise(resolve => {
+    // Use cmd.exe /c with args as array — handles spaces in paths correctly on Windows
+    const proc = spawn('cmd.exe', ['/c', executable, '--install-extension', vsixPath], {
+      stdio: 'pipe'
+    })
+
+    let stderr = ''
+    proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+
+    const timer = setTimeout(() => {
+      proc.kill()
+      if (isExtensionInstalled()) {
+        resolve({ ok: true, message: 'Instalado. Recarregue o VS Code: Ctrl+Shift+P → "Reload Window".' })
+      } else {
+        resolve({ ok: false, message: `Timeout após 30s. Erro: ${stderr.slice(0, 200) || 'nenhum'}` })
+      }
+    }, 30_000)
+
+    proc.on('close', () => {
+      clearTimeout(timer)
+      if (isExtensionInstalled()) {
+        resolve({ ok: true, message: 'Instalado. Recarregue o VS Code: Ctrl+Shift+P → "Reload Window".' })
+      } else {
+        resolve({ ok: false, message: `Falha. ${stderr.slice(0, 200) || 'Sem mensagem de erro.'}` })
+      }
+    })
+
+    proc.on('error', err => {
+      clearTimeout(timer)
+      resolve({ ok: false, message: `Processo falhou: ${err.message}` })
+    })
+  })
+}
+
+ipcMain.handle('bridge:install-vscode-connector', async (): Promise<{ ok: boolean; message: string }> => {
+  if (isExtensionInstalled()) {
+    return { ok: true, message: 'Extensão já instalada. Recarregue o VS Code: Ctrl+Shift+P → "Reload Window".' }
+  }
+
+  const devPath  = join(__dirname, '../../../packages/connector-vscode/john-connector.vsix')
+  const prodPath = join(process.resourcesPath ?? '', 'john-connector.vsix')
+  const vsixPath = existsSync(devPath) ? devPath : existsSync(prodPath) ? prodPath : null
+
+  if (!vsixPath) {
+    return { ok: false, message: 'VSIX não encontrado. Execute npm run package na extensão primeiro.' }
+  }
+
+  // Prefer explicit path to avoid PATH resolution issues on Windows
+  const explicit = findVSCodeExecutable()
+  const executable = explicit ?? 'code'
+
+  return spawnInstall(executable, vsixPath)
+})
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
@@ -520,6 +642,10 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, w) => optimizer.watchWindowShortcuts(w))
   createHudWindow()
   void applyWindowSettings()
+  bridgeServer.start()
+  bridgeServer.onStatusChange(status => {
+    hudWindow?.webContents.send('bridge:status-update', status)
+  })
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createHudWindow()
@@ -533,6 +659,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', async (event) => {
   event.preventDefault()
   globalShortcut.unregisterAll()
+  bridgeServer.stop()
   await shutdown()
   app.exit(0)
 })
