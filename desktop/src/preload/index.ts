@@ -32,8 +32,8 @@ const hudAPI = {
   dragStart: (screenX: number, screenY: number) => ipcRenderer.send('window:drag-start', { screenX, screenY }),
   dragMove:  (screenX: number, screenY: number) => ipcRenderer.send('window:drag-move',  { screenX, screenY }),
   dragEnd:   () => ipcRenderer.send('window:drag-end'),
-  onToggle:  (cb: (visible: boolean) => void) => {
-    ipcRenderer.on('hud:toggle', (_e, visible) => cb(visible))
+  onToggle:  (cb: () => void) => {
+    ipcRenderer.on('hud:toggle', () => cb())
     return () => ipcRenderer.removeAllListeners('hud:toggle')
   },
   setScreenshotMode: (enabled: boolean): Promise<boolean> =>

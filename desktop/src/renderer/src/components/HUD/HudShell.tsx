@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect } from 'react'
 import { HudVisual } from '@renderer/hooks/useHudStateMachine'
-import { GlasswingBackground, AgentState } from './GlasswingBackground'
 
 const DIMS: Record<Exclude<HudVisual, 'sidebar'>, { width: number; height: number; radius: number }> = {
   compact:      { width: 488,  height: 55,  radius: 22 },
@@ -28,11 +27,10 @@ interface HudShellProps {
   visual: HudVisual
   prevVisual: HudVisual
   sidebarSide?: 'left' | 'right' | null
-  agentState?: AgentState
   children: React.ReactNode
 }
 
-export function HudShell({ visual, prevVisual, sidebarSide = null, agentState = 'idle', children }: HudShellProps) {
+export function HudShell({ visual, prevVisual, sidebarSide = null, children }: HudShellProps) {
   const isSidebar = visual === 'sidebar'
 
   // Only call resize for normal (non-sidebar) states — sidebar bounds are managed by main process
@@ -64,11 +62,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, agentState = 
             : '-4px 0 32px rgba(0,0,0,0.6)'
         }}
       >
-        <GlasswingBackground
-          width={window.innerWidth}
-          height={window.innerHeight}
-          agentState={agentState}
-        />
         <div className="absolute inset-0" style={{ zIndex: 1 }}>
           {children}
         </div>
@@ -79,7 +72,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, agentState = 
   // ── Normal mode ───────────────────────────────────────────────────
   const { width, height, radius } = DIMS[visual as Exclude<HudVisual, 'sidebar'>]
   const duration = getDuration(prevVisual, visual)
-  const expandedDims = DIMS.expanded
 
   return (
     <motion.div
@@ -101,26 +93,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, agentState = 
       animate={{ width, height, borderRadius: radius, opacity: 1, scale: 1 }}
       transition={{ duration, ease: EASE }}
     >
-      <AnimatePresence>
-        {visual === 'expanded' && (
-          <motion.div
-            key="glasswing"
-            className="absolute inset-0"
-            style={{ zIndex: 0 }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            <GlasswingBackground
-              width={expandedDims.width}
-              height={expandedDims.height}
-              agentState={agentState}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="absolute inset-0" style={{ zIndex: 1 }}>
         {children}
       </div>

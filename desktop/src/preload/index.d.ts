@@ -42,7 +42,7 @@ declare global {
       dragStart: (screenX: number, screenY: number) => void
       dragMove:  (screenX: number, screenY: number) => void
       dragEnd:   () => void
-      onToggle: (cb: (visible: boolean) => void) => () => void
+      onToggle: (cb: () => void) => () => void
       setScreenshotMode: (enabled: boolean) => Promise<boolean>
       onScreenshotModeChange: (cb: (active: boolean) => void) => () => void
       sidebarResize:   (width: number) => void

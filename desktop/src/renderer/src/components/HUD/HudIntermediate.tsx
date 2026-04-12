@@ -88,8 +88,7 @@ export function HudIntermediate({
             return (
               <button
                 key={stage}
-                onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
-                onClick={e => { e.stopPropagation(); onPress() }}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="text-[11px] transition-opacity duration-150"
                 style={{ color: stage === 2 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.62)' }}
                 aria-label={`Abrir estágio ${stage}`}

@@ -2,6 +2,7 @@ import { useEffect, useRef, KeyboardEvent } from 'react'
 import type { TutorResponse } from '@shared/perception.types'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
+import { MessageBody } from './MessageBody'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -175,12 +176,8 @@ export function HudSidebar({
         {isStreaming && streamingContent && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <Label>JOHN</Label>
-            <div style={{
-              fontSize: 13, lineHeight: 1.55,
-              color: 'rgba(255,255,255,0.82)',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word'
-            }}>
-              {streamingContent}
+            <div style={{ color: 'rgba(255,255,255,0.82)', maxWidth: '100%' }}>
+              <MessageBody content={streamingContent} compact />
               <span style={{
                 display: 'inline-block', width: 5, height: 13,
                 background: 'rgba(255,255,255,0.45)', marginLeft: 2,
@@ -295,14 +292,10 @@ function MessageBubble({ message }: { message: Message }) {
         background:   isUser ? 'rgba(255,255,255,0.07)' : 'transparent',
         borderRadius: isUser ? '10px 10px 3px 10px' : '10px 10px 10px 3px',
         padding:      isUser ? '7px 11px' : '0',
-        fontSize:     13,
-        lineHeight:   1.55,
         color:        isUser ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.82)',
-        whiteSpace:   'pre-wrap',
-        wordBreak:    'break-word',
         maxWidth:     '100%'
       }}>
-        {message.content}
+        <MessageBody content={message.content} compact />
       </div>
     </div>
   )

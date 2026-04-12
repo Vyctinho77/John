@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { AgentState } from './GlasswingBackground'
 import { useHudStateMachine, HudVisual } from '@renderer/hooks/useHudStateMachine'
 import { usePerception } from '@renderer/hooks/usePerception'
 import type {
@@ -104,8 +103,7 @@ export function HUD() {
   const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
   const [screenshotMode, setScreenshotMode] = useState(false)
   const prevVisual = useRef<HudVisual>('compact')
-  const [agentState, setAgentState] = useState<AgentState>('idle')
-  const prevStreaming = useRef(false)
+
 
   // ── Load conversation from disk on mount ──
   useEffect(() => {
@@ -183,6 +181,11 @@ export function HUD() {
     const unsub = window.hudAPI.onScreenshotModeChange(active => setScreenshotMode(active))
     return () => unsub()
   }, [])
+
+  useEffect(() => {
+    const unsub = window.hudAPI.onToggle(() => collapse())
+    return () => unsub()
+  }, [collapse])
 
   const handleToggleScreenshotMode = useCallback(async () => {
     const next = !screenshotMode
@@ -406,7 +409,6 @@ export function HUD() {
     })
 
     setStreaming(true)
-    setAgentState('thinking')   // pixel flood while waiting for the AI
 
     try {
       const tutorResponse = await window.tutorAPI.respond({
@@ -414,8 +416,6 @@ export function HUD() {
         conversation,
         context: contextSnapshot
       })
-
-      setAgentState('responding')   // response arrived — wave animation
 
       let accumulated = ''
       streamText(
@@ -439,8 +439,6 @@ export function HUD() {
           })
           setChunk('')
           setStreaming(false)
-          setAgentState('done')
-          setTimeout(() => setAgentState('idle'), 2500)
           void refreshPrivacyState()
         }
       )
@@ -465,7 +463,6 @@ export function HUD() {
       ])
       setChunk('')
       setStreaming(false)
-      setAgentState('idle')
     }
   }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual])
 
@@ -491,7 +488,7 @@ export function HUD() {
 
   return (
     <div className="w-screen h-screen flex items-start justify-center hud-typography" style={hudTypographyStyle}>
-      <HudShell visual={visual} prevVisual={prevVisual.current} sidebarSide={sidebarSide} agentState={agentState}>
+      <HudShell visual={visual} prevVisual={prevVisual.current} sidebarSide={sidebarSide}>
         <HudContent id={visual}>
           {visual === 'compact' && (
             <HudCompact

@@ -254,16 +254,16 @@ function SettingsNavItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-left transition-colors duration-150"
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150"
       style={{
         color: active ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.44)',
         background: active ? 'rgba(255,255,255,0.06)' : 'transparent'
       }}
     >
-      <span className="w-[22px] h-[22px] flex items-center justify-center flex-shrink-0 opacity-80">
+      <span className="w-[20px] h-[20px] flex items-center justify-center flex-shrink-0 opacity-80">
         {icon}
       </span>
-      <span className="text-[13px] leading-none" style={{ fontSize: 'var(--hud-font-size, 15px)' }}>{label}</span>
+      <span className="text-[12px] leading-none whitespace-nowrap">{label}</span>
     </button>
   )
 }
@@ -1878,14 +1878,7 @@ export const HudExpanded = memo(function HudExpanded({
             return (
               <button
                 key={stage}
-                onMouseDown={e => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }}
-                onClick={e => {
-                  e.stopPropagation()
-                  onPress()
-                }}
+                onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="text-[11px] transition-opacity duration-150"
                 style={{ color: stage === 3 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.62)' }}
                 aria-label={`Abrir estágio ${stage}`}
@@ -1992,7 +1985,7 @@ export const HudExpanded = memo(function HudExpanded({
           {settingsOpen ? (
             <div className="h-full flex">
               <aside
-                className="w-[164px] flex-shrink-0 px-3.5 pt-5 pb-6"
+                className="w-[200px] flex-shrink-0 px-3 pt-5 pb-6"
                 style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
               >
                 <button

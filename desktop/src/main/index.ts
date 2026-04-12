@@ -504,8 +504,12 @@ ipcMain.on('proactive:set-streaming', (_e, active: boolean) => {
 
 function toggleHud(): void {
   if (!hudWindow) return
-  hudWindow.webContents.send('hud:toggle', !hudWindow.isVisible())
-  if (!hudWindow.isVisible()) hudWindow.show()
+  if (hudWindow.isVisible()) {
+    hudWindow.hide()
+  } else {
+    hudWindow.show()
+    hudWindow.webContents.send('hud:toggle')
+  }
 }
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
