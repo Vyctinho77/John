@@ -27,7 +27,7 @@ export const HudCompact = memo(function HudCompact({
     minimalMode
       ? ''
       : passiveSuggestion
-        ? `Sugestao: ${passiveSuggestion}`
+        ? `Sugestão: ${passiveSuggestion}`
         : 'digite alguma coisa'
 
   return (
