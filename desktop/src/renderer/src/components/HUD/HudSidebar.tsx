@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
-import type { TutorResponse } from '@shared/perception.types'
+import type { TutorAction, TutorResponse } from '@shared/perception.types'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
 import { MessageBody } from './MessageBody'
+import { TutorActionChips } from './TutorActionChips'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -22,6 +23,8 @@ interface HudSidebarProps {
   onInputBlur: () => void
   onActivity: () => void
   onUnsnap: () => void
+  onExecuteAction: (action: TutorAction) => void
+  pendingActionIds: string[]
 }
 
 const COLLAPSED_WIDTH = 44
@@ -38,7 +41,9 @@ export function HudSidebar({
   onInputFocus,
   onInputBlur,
   onActivity,
-  onUnsnap
+  onUnsnap,
+  onExecuteAction,
+  pendingActionIds
 }: HudSidebarProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -234,7 +239,12 @@ export function HudSidebar({
             )}
 
             {messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
+              <MessageBubble
+                key={i}
+                message={msg}
+                onExecuteAction={onExecuteAction}
+                pendingActionIds={pendingActionIds}
+              />
             ))}
 
             {isStreaming && streamingContent && (
@@ -390,7 +400,15 @@ function Label({ children }: { children: React.ReactNode }) {
   )
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onExecuteAction,
+  pendingActionIds
+}: {
+  message: Message
+  onExecuteAction: (action: TutorAction) => void
+  pendingActionIds: string[]
+}) {
   const isUser = message.role === 'user'
   return (
     <div
@@ -412,6 +430,14 @@ function MessageBubble({ message }: { message: Message }) {
         }}
       >
         <MessageBody content={message.content} compact />
+        {!isUser && message.meta?.actions?.length ? (
+          <TutorActionChips
+            actions={message.meta.actions}
+            pendingActionIds={pendingActionIds}
+            compact
+            onExecuteAction={onExecuteAction}
+          />
+        ) : null}
       </div>
     </div>
   )

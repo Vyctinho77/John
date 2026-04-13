@@ -7,6 +7,8 @@ import type {
   DiagnosticsSnapshot,
   PerceptionContextSnapshot,
   PrivacySnapshot,
+  SpotifyActionPayload,
+  SpotifyCommandResult,
   SessionMemory,
   TutorRequest,
   TutorResponse,
@@ -116,11 +118,39 @@ declare global {
     bridgeAPI: {
       getStatuses: () => Promise<ConnectorStatus[]>
       installVSCodeConnector: () => Promise<{ ok: boolean; message: string }>
+      disconnect: (id: string) => Promise<void>
       onStatusUpdate: (cb: (status: ConnectorStatus) => void) => () => void
     }
     conversationAPI: {
       load: () => Promise<{ messages: StoredMessage[]; summary: string | null } | null>
       save: (data: { messages: StoredMessage[]; summary: string | null }) => Promise<void>
     }
+    spotifyAPI: {
+      startAuth:     () => Promise<void>
+      getState:      () => Promise<SpotifyPlaybackState | null>
+      togglePlay:    () => Promise<void>
+      next:          () => Promise<void>
+      prev:          () => Promise<void>
+      setVolume:     (v: number) => Promise<void>
+      setShuffle:    (s: boolean) => Promise<void>
+      setRepeat:     (s: string) => Promise<void>
+      executeAction: (payload: SpotifyActionPayload) => Promise<SpotifyCommandResult>
+      disconnect:    () => Promise<void>
+      onStateUpdate: (cb: (state: SpotifyPlaybackState | null) => void) => () => void
+    }
   }
+}
+
+export interface SpotifyPlaybackState {
+  isPlaying: boolean
+  trackName: string | null
+  artistName: string | null
+  albumName: string | null
+  albumArtUrl: string | null
+  progressMs: number
+  durationMs: number
+  shuffle: boolean
+  repeat: 'off' | 'track' | 'context'
+  deviceName: string | null
+  volumePercent: number | null
 }

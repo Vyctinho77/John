@@ -60,6 +60,8 @@ import {
   saveChat, deleteChat, renameChat, setTitleIfEmpty, setActiveChat
 } from './services/chat-store'
 import { bridgeServer } from './services/bridge'
+import { spotifyService } from './services/spotify'
+import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
 import type { DataDeletionSummary } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -303,6 +305,8 @@ ipcMain.handle('perception:resume-sensitive-block', async () => {
 })
 
 ipcMain.handle('tutor:respond', async (_e, request) => {
+  const spotifyResponse = await maybeHandleSpotifyTutorRequest(request.prompt)
+  if (spotifyResponse) return spotifyResponse
   return generateTutorResponse(request)
 })
 
@@ -553,6 +557,29 @@ ipcMain.handle('bridge:get-statuses', () => {
   return bridgeServer.getStatuses()
 })
 
+ipcMain.handle('bridge:disconnect', (_e, id: string) => {
+  bridgeServer.disconnect(id as import('../shared/perception.types').ConnectorID)
+})
+
+// ─── Spotify IPC ──────────────────────────────────────────────────────────────
+
+ipcMain.handle('spotify:start-auth', async () => {
+  const settings = await getAppSettings()
+  if (!settings.spotifyClientId?.trim()) throw new Error('Spotify Client ID não configurado nas preferências.')
+  await spotifyService.startAuth(settings.spotifyClientId.trim())
+})
+
+ipcMain.handle('spotify:get-state', () => spotifyService.getState())
+
+ipcMain.handle('spotify:toggle-play', () => spotifyService.togglePlayPause())
+ipcMain.handle('spotify:next',        () => spotifyService.next())
+ipcMain.handle('spotify:prev',        () => spotifyService.prev())
+ipcMain.handle('spotify:set-volume',  (_e, v: number) => spotifyService.setVolume(v))
+ipcMain.handle('spotify:set-shuffle', (_e, s: boolean) => spotifyService.setShuffle(s))
+ipcMain.handle('spotify:set-repeat',  (_e, s: string)  => spotifyService.setRepeat(s as 'off' | 'track' | 'context'))
+ipcMain.handle('spotify:execute-action', (_e, payload) => spotifyService.executeAction(payload))
+ipcMain.handle('spotify:disconnect',  () => spotifyService.disconnect())
+
 const EXTENSION_ID = 'john-ai.john-connector-vscode'
 
 function isExtensionInstalled(): boolean {
@@ -645,6 +672,24 @@ app.whenReady().then(() => {
   bridgeServer.start()
   bridgeServer.onStatusChange(status => {
     hudWindow?.webContents.send('bridge:status-update', status)
+  })
+
+  // Wire Spotify service into bridge and renderer
+  spotifyService.onStateChange(state => {
+    bridgeServer.injectContext('spotify', {
+      app: 'spotify',
+      priority: 'low',
+      state: state
+        ? `${state.isPlaying ? 'Tocando' : 'Pausado'}: ${state.trackName ?? 'unknown'}`
+        : 'sem reprodução',
+      data: state,
+      timestamp: Date.now(),
+      sessionId: ''
+    })
+    hudWindow?.webContents.send('spotify:state-update', state)
+  })
+  spotifyService.onAuthChange(connected => {
+    bridgeServer.setInternalStatus('spotify', connected)
   })
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
   app.on('activate', () => {

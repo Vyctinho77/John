@@ -7,6 +7,8 @@ import type {
   DataDeletionSummary,
   DiagnosticsSnapshot,
   PrivacySnapshot,
+  SpotifyCommandResult,
+  TutorAction,
   TutorMessage,
   TutorResponse
 } from '@shared/perception.types'
@@ -113,6 +115,7 @@ export function HUD() {
   const [memoryIncludeProfile, setMemoryIncludeProfile] = useState(true)
   const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
   const [screenshotMode, setScreenshotMode] = useState(false)
+  const [pendingActionIds, setPendingActionIds] = useState<string[]>([])
   const prevVisual = useRef<HudVisual>('compact')
 
 
@@ -547,6 +550,50 @@ export function HUD() {
     }
   }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual, setChatMetas])
 
+  const handleExecuteAction = useCallback(async (action: TutorAction) => {
+    if (action.kind !== 'spotify') return
+    if (pendingActionIds.includes(action.id)) return
+
+    setPendingActionIds(prev => [...prev, action.id])
+
+    try {
+      const result = await window.spotifyAPI.executeAction(action.payload)
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: result.message,
+          meta: buildSpotifyActionMeta(result)
+        }
+      ])
+      void refreshPrivacyState()
+    } catch (error) {
+      const content = error instanceof Error
+        ? error.message
+        : 'Não consegui executar essa ação no Spotify.'
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content,
+          meta: {
+            domain: 'general',
+            mode: 'direct',
+            content,
+            uncertainty: 0,
+            should_ask_confirmation: false,
+            needs_visual_confirmation: false,
+            suggested_follow_ups: ['O que tá tocando?', 'Tenta de novo'],
+            warning: null
+          }
+        }
+      ])
+    } finally {
+      setPendingActionIds(prev => prev.filter(id => id !== action.id))
+    }
+  }, [pendingActionIds, refreshPrivacyState])
+
   const latestAssistant = [...messages].reverse().find(message => message.role === 'assistant')
   const latestResponse = latestAssistant?.content ?? ''
   const latestResponseMeta = latestAssistant?.meta ?? null
@@ -620,6 +667,8 @@ export function HUD() {
               onInputBlur={handleInputBlur}
               onActivity={handleActivityEngage}
               onUnsnap={handleUnsnap}
+              onExecuteAction={handleExecuteAction}
+              pendingActionIds={pendingActionIds}
             />
           )}
 
@@ -664,6 +713,8 @@ export function HUD() {
               onUpdateUserProfile={updateUserProfile}
               onClearContext={clearSessionMemory}
               onQuickPrompt={value => setInputValue(value)}
+              onExecuteAction={handleExecuteAction}
+              pendingActionIds={pendingActionIds}
               onToggleTelemetry={() => {
                 if (!settings) return
                 void updateSettings({ telemetryOptIn: !settings.telemetryOptIn })
@@ -770,4 +821,34 @@ export function HUD() {
       </HudShell>
     </div>
   )
+}
+
+function buildSpotifyActionMeta(result: SpotifyCommandResult): TutorResponse {
+  const suggested = buildSpotifyActionFollowUps(result.state)
+
+  return {
+    domain: 'general',
+    mode: 'direct',
+    content: result.message,
+    provider: 'spotify-local',
+    model: 'spotify-local',
+    uncertainty: 0,
+    should_ask_confirmation: false,
+    needs_visual_confirmation: false,
+    suggested_follow_ups: suggested,
+    warning: result.ok ? null : result.message
+  }
+}
+
+function buildSpotifyActionFollowUps(state: SpotifyCommandResult['state']): string[] {
+  if (!state?.trackName) {
+    return ['Toca alguma coisa', 'O que tá tocando?']
+  }
+
+  const followUps = new Set<string>()
+  followUps.add(state.isPlaying ? 'Pausar' : 'Continuar')
+  followUps.add('Próxima')
+  if (state.albumName) followUps.add(`Toca o álbum ${state.albumName}`)
+  followUps.add('O que tá tocando?')
+  return [...followUps].slice(0, 4)
 }

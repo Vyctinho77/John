@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
   ConnectorStatus,
+  SpotifyActionPayload,
   TutorRequest,
   UserProfile
 } from '../shared/perception.types'
@@ -174,6 +175,9 @@ const bridgeAPI = {
   installVSCodeConnector: (): Promise<{ ok: boolean; message: string }> =>
     ipcRenderer.invoke('bridge:install-vscode-connector'),
 
+  disconnect: (id: string): Promise<void> =>
+    ipcRenderer.invoke('bridge:disconnect', id),
+
   onStatusUpdate: (cb: (status: ConnectorStatus) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, s: ConnectorStatus) => cb(s)
     ipcRenderer.on('bridge:status-update', handler)
@@ -186,6 +190,26 @@ const conversationAPI = {
     ipcRenderer.invoke('conversation:load'),
   save: (data: { messages: StoredMessage[]; summary: string | null }): Promise<void> =>
     ipcRenderer.invoke('conversation:save', data)
+}
+
+import type { SpotifyPlaybackState } from '../main/services/spotify'
+
+const spotifyAPI = {
+  startAuth:  ():                    Promise<void>                        => ipcRenderer.invoke('spotify:start-auth'),
+  getState:   ():                    Promise<SpotifyPlaybackState | null> => ipcRenderer.invoke('spotify:get-state'),
+  togglePlay: ():                    Promise<void>                        => ipcRenderer.invoke('spotify:toggle-play'),
+  next:       ():                    Promise<void>                        => ipcRenderer.invoke('spotify:next'),
+  prev:       ():                    Promise<void>                        => ipcRenderer.invoke('spotify:prev'),
+  setVolume:  (v: number):           Promise<void>                        => ipcRenderer.invoke('spotify:set-volume', v),
+  setShuffle: (s: boolean):          Promise<void>                        => ipcRenderer.invoke('spotify:set-shuffle', s),
+  setRepeat:  (s: string):           Promise<void>                        => ipcRenderer.invoke('spotify:set-repeat', s),
+  executeAction: (payload: SpotifyActionPayload)                         => ipcRenderer.invoke('spotify:execute-action', payload),
+  disconnect: ():                    Promise<void>                        => ipcRenderer.invoke('spotify:disconnect'),
+  onStateUpdate: (cb: (state: SpotifyPlaybackState | null) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: SpotifyPlaybackState | null) => cb(s)
+    ipcRenderer.on('spotify:state-update', handler)
+    return () => ipcRenderer.removeListener('spotify:state-update', handler)
+  }
 }
 
 if (process.contextIsolated) {
@@ -201,6 +225,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('chatAPI', chatAPI)
     contextBridge.exposeInMainWorld('bridgeAPI', bridgeAPI)
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
+    contextBridge.exposeInMainWorld('spotifyAPI', spotifyAPI)
   } catch (e) {
     console.error(e)
   }
@@ -227,4 +252,6 @@ if (process.contextIsolated) {
   window.bridgeAPI = bridgeAPI
   // @ts-ignore
   window.conversationAPI = conversationAPI
+  // @ts-ignore
+  window.spotifyAPI = spotifyAPI
 }

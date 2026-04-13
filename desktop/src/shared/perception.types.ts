@@ -177,6 +177,42 @@ export interface TutorResponse {
   needs_visual_confirmation: boolean
   suggested_follow_ups: string[]
   warning: string | null
+  actions?: TutorAction[]
+}
+
+export type SpotifyEntityType = 'track' | 'artist' | 'album' | 'playlist'
+
+export type SpotifyActionPayload = {
+  action: 'play_uri' | 'resume' | 'pause' | 'next' | 'prev' | 'report_state'
+  uri?: string
+  entityType?: SpotifyEntityType
+  query?: string
+}
+
+export type TutorAction = {
+  id: string
+  label: string
+  kind: 'spotify'
+  payload: SpotifyActionPayload
+}
+
+export interface SpotifyCommandResult {
+  ok: boolean
+  message: string
+  state: {
+    isPlaying: boolean
+    trackName: string | null
+    artistName: string | null
+    albumName: string | null
+    albumArtUrl: string | null
+    progressMs: number
+    durationMs: number
+    shuffle: boolean
+    repeat: 'off' | 'track' | 'context'
+    deviceName: string | null
+    volumePercent: number | null
+  } | null
+  errorCode?: 'not_authenticated' | 'no_active_device' | 'forbidden' | 'rate_limited' | 'not_found' | 'invalid_action' | 'unknown'
 }
 
 export interface FeatureFlags {
@@ -212,6 +248,7 @@ export interface AppSettings {
   featureFlags: FeatureFlags
   captureScope: CaptureScopeSettings
   typography: TypographySettings
+  spotifyClientId: string
   updatedAt: number
 }
 

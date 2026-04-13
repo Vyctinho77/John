@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   featureFlags: DEFAULT_FEATURE_FLAGS,
   captureScope: DEFAULT_CAPTURE_SCOPE,
   typography: DEFAULT_TYPOGRAPHY,
+  spotifyClientId: '',
   updatedAt: Date.now()
 }
 
@@ -170,6 +171,7 @@ function normalizeStoredSettings(settings: Partial<StoredSettings>): StoredSetti
           : DEFAULT_TYPOGRAPHY.fontSize,
       fontWeight: settings.typography?.fontWeight ?? DEFAULT_TYPOGRAPHY.fontWeight
     },
+    spotifyClientId: typeof settings.spotifyClientId === 'string' ? settings.spotifyClientId : '',
     featureFlags: resolveEffectiveFeatureFlags(
       installationId,
       requestedFeatureFlags
@@ -190,6 +192,7 @@ function toPublicSettings(settings: StoredSettings): AppSettings {
     featureFlags: resolveEffectiveFeatureFlags(settings.installationId, settings.requestedFeatureFlags),
     captureScope: settings.captureScope,
     typography: settings.typography,
+    spotifyClientId: settings.spotifyClientId,
     updatedAt: settings.updatedAt
   }
 }
