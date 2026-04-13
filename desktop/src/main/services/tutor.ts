@@ -2,13 +2,15 @@ import { getContextSnapshot } from './perception'
 import { runDomainTutor } from './tutor-domains'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 import { generateRemoteText } from './ai-provider'
+import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { retrieveRelevantMemories } from './memory-embeddings'
 import {
   buildRemoteSystemPrompt,
   buildRemoteUserPrompt,
   composeResponse,
   inferWarning,
-  formatVSCodeConnectorContext
+  formatVSCodeConnectorContext,
+  formatSpotifyConnectorContext
 } from './tutor-prompt'
 import { bridgeServer } from './bridge'
 import {
@@ -87,24 +89,27 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       warning: domainOutput?.warning ?? baseWarning,
       domainBody: domainOutput?.content ?? null
     })
-    const vsCodeRaw = bridgeServer.getContext('vscode')
-    const vsCodeBlock = vsCodeRaw ? formatVSCodeConnectorContext(vsCodeRaw.data) : undefined
+    const vsCodeRaw    = bridgeServer.getContext('vscode')
+    const spotifyRaw   = bridgeServer.getContext('spotify')
+    const vsCodeBlock  = vsCodeRaw  ? formatVSCodeConnectorContext(vsCodeRaw.data)   : undefined
+    const spotifyBlock = spotifyRaw ? formatSpotifyConnectorContext(spotifyRaw.data) : undefined
 
-    const remoteResult = await generateRemoteText({
-      sensitive: Boolean(domainOutput?.warning ?? baseWarning),
-      system: buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen),
-      prompt: buildRemoteUserPrompt(
-        request,
-        effectiveContext,
-        domainOutput?.content ?? null,
-        [...relevantPersistentMemory, ...behaviorSummaryLines],
-        offScreen,
-        vsCodeBlock
-      ),
-      // Conversation history: all turns except the last user message,
-      // which is already embedded in the rich `prompt` above.
-      messages: request.conversation.slice(0, -1),
-      imageDataUrl: context.screenshotDataUrl ?? null
+    const sensitive = Boolean(domainOutput?.warning ?? baseWarning)
+    const system    = buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen)
+    const prompt    = buildRemoteUserPrompt(
+      request,
+      effectiveContext,
+      domainOutput?.content ?? null,
+      [...relevantPersistentMemory, ...behaviorSummaryLines],
+      offScreen,
+      vsCodeBlock,
+      spotifyBlock
+    )
+    const history   = request.conversation.slice(0, -1)
+    const imageDataUrl = context.screenshotDataUrl ?? null
+
+    const remoteResult = await generateWithCodexFallback({
+      sensitive, system, prompt, history, imageDataUrl
     })
     const content = remoteResult?.text?.trim() || localContent
 
@@ -185,6 +190,40 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
 
     throw error
   }
+}
+
+// ─── Codex-first provider with graceful fallback ──────────────────────────────
+
+async function generateWithCodexFallback(input: {
+  sensitive: boolean
+  system: string
+  prompt: string
+  history: Array<{ role: 'user' | 'assistant'; content: string }>
+  imageDataUrl: string | null
+}): Promise<import('./ai-provider').ProviderExecutionResult | null> {
+  // Conteúdo sensível não vai pro Codex (servidor externo, não local)
+  if (!input.sensitive && codexAuth.getStatus().authenticated) {
+    try {
+      const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+        { role: 'system', content: input.system },
+        ...input.history,
+        { role: 'user',   content: input.prompt }
+      ]
+      const text = await codexClient.chat({ messages })
+      return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'gpt-4o', text }
+    } catch (e) {
+      // Codex falhou — cai no pipeline normal sem interromper
+      console.error('[Codex] falhou, usando fallback:', e instanceof Error ? e.message : e)
+    }
+  }
+
+  return generateRemoteText({
+    sensitive: input.sensitive,
+    system: input.system,
+    prompt: input.prompt,
+    messages: input.history,
+    imageDataUrl: input.imageDataUrl
+  })
 }
 
 function inferMode(request: TutorRequest, profile: UserProfile): TutorMode {

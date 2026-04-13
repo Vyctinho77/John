@@ -61,6 +61,7 @@ import {
 } from './services/chat-store'
 import { bridgeServer } from './services/bridge'
 import { spotifyService } from './services/spotify'
+import { codexAuth, codexClient } from './auth/codex-singleton'
 import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
 import type { DataDeletionSummary } from '../shared/perception.types'
 
@@ -550,6 +551,13 @@ ipcMain.handle('chat:generate-title', async (_e, id: string, firstMessage: strin
   if (title) setTitleIfEmpty(id, title)
   return title
 })
+
+// ─── Codex OAuth ──────────────────────────────────────────────────────────────
+
+ipcMain.handle('codex-auth:login',  () => codexAuth.login())
+ipcMain.handle('codex-auth:logout', () => codexAuth.logout())
+ipcMain.handle('codex-auth:status', () => codexAuth.getStatus())
+ipcMain.handle('codex-auth:chat',   (_e, options) => codexClient.chat(options))
 
 // ─── Bridge (Biblioteca connectors) ──────────────────────────────────────────
 

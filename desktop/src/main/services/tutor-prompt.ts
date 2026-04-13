@@ -33,7 +33,8 @@ export function buildRemoteUserPrompt(
   domainBody: string | null,
   relevantPersistentMemory: string[] = [],
   offScreen = false,
-  vsCodeContext?: string
+  vsCodeContext?: string,
+  spotifyContext?: string
 ): string {
   const { semanticState, sessionMemory } = context
   const keyValuesLine = formatKeyValues(semanticState.key_values)
@@ -76,6 +77,7 @@ export function buildRemoteUserPrompt(
       ? `Topics: ${semanticState.pedagogical_topics.join(', ')}`
       : '',
     vsCodeContext ?? '',
+    spotifyContext ?? '',
     domainBody ? `Domain guidance: ${domainBody}` : '',
     'Open with the main reading or recommendation first.',
     'Prioritize the next useful step before extra detail.',
@@ -659,4 +661,56 @@ function buildLayerLine(mode: TutorMode, continuity: string, topics: string[]): 
         ? `Aqui o conceito que organiza melhor a leitura é ${topics[0]}.`
         : continuity
   }
+}
+
+export function formatSpotifyConnectorContext(data: unknown): string {
+  if (!data) return ''
+  const s = data as {
+    isPlaying?: boolean
+    trackName?: string | null
+    artistName?: string | null
+    albumName?: string | null
+    progressMs?: number
+    durationMs?: number
+    shuffle?: boolean
+    repeat?: string
+    deviceName?: string | null
+    volumePercent?: number | null
+  }
+
+  const lines: string[] = ['--- Spotify (live connector) ---']
+
+  if (s.trackName) {
+    const artist = s.artistName ? ` — ${s.artistName}` : ''
+    lines.push(`${s.isPlaying ? 'Tocando' : 'Pausado'}: ${s.trackName}${artist}`)
+  } else {
+    lines.push('Sem reprodução ativa')
+  }
+
+  if (s.albumName)  lines.push(`Álbum: ${s.albumName}`)
+
+  if (s.durationMs) {
+    const prog = formatMs(s.progressMs ?? 0)
+    const dur  = formatMs(s.durationMs)
+    lines.push(`Progresso: ${prog} / ${dur}`)
+  }
+
+  const shuffle = s.shuffle ? 'on' : 'off'
+  const repeat  = s.repeat ?? 'off'
+  lines.push(`Shuffle: ${shuffle} | Repeat: ${repeat}`)
+
+  if (s.deviceName) {
+    const vol = s.volumePercent != null ? ` | Volume: ${s.volumePercent}%` : ''
+    lines.push(`Device: ${s.deviceName}${vol}`)
+  }
+
+  lines.push('--- End Spotify context ---')
+  return lines.join('\n')
+}
+
+function formatMs(ms: number): string {
+  const totalSec = Math.floor(ms / 1000)
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return `${min}:${sec.toString().padStart(2, '0')}`
 }

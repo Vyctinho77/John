@@ -11,3 +11,6 @@ packages/*/*.vsix
 *.log
 .DS_Store
 Thumbs.db
+
+# Codex OAuth token — nunca commitar
+**/codex-auth.json

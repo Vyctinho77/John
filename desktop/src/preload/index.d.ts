@@ -1,4 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
+import type { AuthStatus } from '../shared/auth.types'
 import type {
   AppSettings,
   CaptureSource,
@@ -124,6 +125,12 @@ declare global {
     conversationAPI: {
       load: () => Promise<{ messages: StoredMessage[]; summary: string | null } | null>
       save: (data: { messages: StoredMessage[]; summary: string | null }) => Promise<void>
+    }
+    codexAuthAPI: {
+      login:     () => Promise<AuthStatus>
+      logout:    () => Promise<void>
+      getStatus: () => Promise<AuthStatus>
+      chat:      (options: unknown) => Promise<string>
     }
     spotifyAPI: {
       startAuth:     () => Promise<void>

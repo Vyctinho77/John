@@ -192,6 +192,15 @@ const conversationAPI = {
     ipcRenderer.invoke('conversation:save', data)
 }
 
+import type { AuthStatus } from '../shared/auth.types'
+
+const codexAuthAPI = {
+  login:     (): Promise<AuthStatus>    => ipcRenderer.invoke('codex-auth:login'),
+  logout:    (): Promise<void>          => ipcRenderer.invoke('codex-auth:logout'),
+  getStatus: (): Promise<AuthStatus>    => ipcRenderer.invoke('codex-auth:status'),
+  chat:      (options: unknown): Promise<string> => ipcRenderer.invoke('codex-auth:chat', options),
+}
+
 import type { SpotifyPlaybackState } from '../main/services/spotify'
 
 const spotifyAPI = {
@@ -226,6 +235,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('bridgeAPI', bridgeAPI)
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
     contextBridge.exposeInMainWorld('spotifyAPI', spotifyAPI)
+    contextBridge.exposeInMainWorld('codexAuthAPI', codexAuthAPI)
   } catch (e) {
     console.error(e)
   }
@@ -254,4 +264,6 @@ if (process.contextIsolated) {
   window.conversationAPI = conversationAPI
   // @ts-ignore
   window.spotifyAPI = spotifyAPI
+  // @ts-ignore
+  window.codexAuthAPI = codexAuthAPI
 }

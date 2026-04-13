@@ -7,6 +7,7 @@ import { getUserProfile, updateUserProfile as persistUserProfile } from './user-
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 import { getMemoryContext, syncPersistedMemory } from './memory-card'
 import { buildIntermediateThought } from './intermediate-thought'
+import { maybeRefineIntermediateThoughtWithCodex } from './intermediate-thought-codex'
 import {
   effectiveObservationText,
   estimateUncertainty,
@@ -338,6 +339,7 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
 
     void evaluateProactiveOpportunity(snapshot)
     notifySnapshotUpdate(snapshot)
+    void scheduleCodexIntermediateThoughtRefinement(snapshot)
 
     void recordDiagnosticEvent({
       type: 'trace',
@@ -486,6 +488,37 @@ export function onSnapshotUpdate(cb: (snapshot: PerceptionContextSnapshot) => vo
 
 function notifySnapshotUpdate(snapshot: PerceptionContextSnapshot): void {
   for (const listener of snapshotListeners) listener(snapshot)
+}
+
+async function scheduleCodexIntermediateThoughtRefinement(
+  snapshot: PerceptionContextSnapshot
+): Promise<void> {
+  const refinedThought = await maybeRefineIntermediateThoughtWithCodex({
+    semanticState: snapshot.semanticState,
+    sessionMemory: snapshot.sessionMemory,
+    persistedMemoryHighlights: snapshot.persisted_memory_highlights,
+    heuristicThought: snapshot.intermediateThought
+  })
+
+  if (!refinedThought) return
+  if (!latestSnapshot) return
+
+  const isSameSnapshot =
+    latestSnapshot.sessionMemory.session_id === snapshot.sessionMemory.session_id
+    && latestSnapshot.semanticState.capturedAt === snapshot.semanticState.capturedAt
+
+  if (!isSameSnapshot) return
+  if (
+    latestSnapshot.intermediateThought.primary === refinedThought.primary
+    && latestSnapshot.intermediateThought.secondary === refinedThought.secondary
+  ) return
+
+  latestSnapshot = {
+    ...latestSnapshot,
+    intermediateThought: refinedThought
+  }
+
+  notifySnapshotUpdate(latestSnapshot)
 }
 
 export async function shutdown(): Promise<void> {

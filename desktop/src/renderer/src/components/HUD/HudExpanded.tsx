@@ -513,6 +513,9 @@ export const HudExpanded = memo(function HudExpanded({
   const [spotifyClientIdCard, setSpotifyClientIdCard] = useState(false)
   const [spotifyClientIdDraft, setSpotifyClientIdDraft] = useState('')
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
+  const [codexStatus, setCodexStatus] = useState<import('@shared/auth.types').AuthStatus>({ authenticated: false })
+  const [codexLoading, setCodexLoading] = useState(false)
+  const [codexError, setCodexError] = useState<string | null>(null)
 
   useEffect(() => {
     window.bridgeAPI.getStatuses().then(setConnectorStatuses)
@@ -544,6 +547,12 @@ export const HudExpanded = memo(function HudExpanded({
   useEffect(() => {
     onSettingsOpenChange(settingsOpen)
   }, [settingsOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (settingsOpen && activeSettingsTab === 'api') {
+      window.codexAuthAPI.getStatus().then(setCodexStatus)
+    }
+  }, [settingsOpen, activeSettingsTab])
 
   useEffect(() => {
     if (settingsOpen && activeSettingsTab === 'api') {
@@ -761,6 +770,24 @@ export const HudExpanded = memo(function HudExpanded({
     }
 
     onUpdateDailyCostLimit(Number(value.toFixed(2)))
+  }
+
+  const handleCodexLogin = async () => {
+    setCodexLoading(true)
+    setCodexError(null)
+    try {
+      const status = await window.codexAuthAPI.login()
+      setCodexStatus(status)
+    } catch (e: unknown) {
+      setCodexError(e instanceof Error ? e.message : 'Erro ao conectar')
+    } finally {
+      setCodexLoading(false)
+    }
+  }
+
+  const handleCodexLogout = async () => {
+    await window.codexAuthAPI.logout()
+    setCodexStatus({ authenticated: false })
   }
 
   const renderAPISettings = () => {
@@ -1095,6 +1122,68 @@ export const HudExpanded = memo(function HudExpanded({
                   value={aiCosts.remainingUsd === null ? 'sem limite' : `$${aiCosts.remainingUsd.toFixed(4)}`}
                   last
                 />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div
+          className="mt-4 rounded-[22px] p-4"
+          style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)'
+          }}
+        >
+          <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
+            ChatGPT (Codex OAuth)
+          </p>
+          <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)', lineHeight: 1.5 }}>
+            Use sua assinatura ChatGPT Plus/Pro sem API key. John vai priorizar esse provider quando estiver conectado.
+          </p>
+
+          <div className="mt-4">
+            {codexStatus.authenticated ? (
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                    {codexStatus.email}
+                  </p>
+                  <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                    plano: {codexStatus.planType}
+                  </p>
+                </div>
+                <button
+                  onMouseDown={e => { e.preventDefault(); void handleCodexLogout() }}
+                  className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    color: 'rgba(255,255,255,0.5)',
+                    border: '1px solid rgba(255,255,255,0.08)'
+                  }}
+                >
+                  desconectar
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <button
+                  onMouseDown={e => { e.preventDefault(); void handleCodexLogin() }}
+                  disabled={codexLoading}
+                  className="self-start px-3 py-1.5 rounded-full text-[10px]"
+                  style={{
+                    background: 'rgba(255,255,255,0.1)',
+                    color: codexLoading ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.88)',
+                    border: '1px solid rgba(255,255,255,0.14)',
+                    cursor: codexLoading ? 'default' : 'pointer'
+                  }}
+                >
+                  {codexLoading ? 'abrindo browser...' : 'conectar com ChatGPT'}
+                </button>
+                {codexError && (
+                  <p className="text-[11px]" style={{ color: 'rgba(255,100,100,0.8)' }}>
+                    {codexError}
+                  </p>
+                )}
               </div>
             )}
           </div>
