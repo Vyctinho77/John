@@ -116,7 +116,7 @@ function buildCodeThought(
     ? `lendo ${filePart}${langPart}`
     : `olhando ${simplifyFocus(state.probable_user_focus)}`
   const topic = state.pedagogical_topics[0]
-  const secondary = topic ? `o conceito central aqui parece ser ${topic}` : null
+  const secondary = topic ? phraseForCentralConcept(state, topic) : null
   return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
 }
 
@@ -138,7 +138,7 @@ function buildGraphicThought(
     const primary = `vendo ${kvLine}`
     const topic = topics[0]
     const secondary = topic
-      ? `o foco parece estar em ${topic}`
+      ? phraseForTopicFocus(state, topic)
       : detectFocusShift(state, session) ?? `olhando ${simplifyFocus(state.probable_user_focus)}`
     return { primary: finalize(primary), secondary: finalize(secondary), confidence }
   }
@@ -200,8 +200,8 @@ function buildTextThought(
 
   if (topics.length === 1) {
     return {
-      primary: finalize(`acho que o ponto central aqui é ${topics[0]}`),
-      secondary: confidence >= 0.42 && focusPart ? finalize(`a parte importante parece ser ${focusPart}`) : null,
+      primary: finalize(phraseForSingleTopic(state, topics[0])),
+      secondary: confidence >= 0.42 && focusPart ? finalize(phraseForImportantPart(state, focusPart)) : null,
       confidence
     }
   }
@@ -229,7 +229,7 @@ function buildGenericThought(
 
   return {
     primary: finalize(focus ? `tentando entender o que está em foco${appPart}: ${focus}` : `tentando entender melhor essa tela${appPart}`),
-    secondary: topic ? finalize(`talvez isso esteja girando em torno de ${topic}`) : null,
+    secondary: topic ? finalize(phraseForOrbitingTopic(state, topic)) : null,
     confidence
   }
 }
@@ -281,7 +281,7 @@ function buildShiftPrimary(from: string, to: string, state: SemanticState): stri
   if (change_summary === 'major') {
     if (surface_type === 'code') return `saiu de "${from}" e abriu "${to}"`
     if (surface_type === 'graphic') return `viewport mudou — de "${from}" para "${to}"`
-    return `agora ele parece focado em ${to}`
+    return phraseForShiftedFocus(state, to)
   }
 
   if (surface_type === 'document' || surface_type === 'text') {
@@ -291,7 +291,7 @@ function buildShiftPrimary(from: string, to: string, state: SemanticState): stri
     return `ele mudou o olhar para ${to}`
   }
 
-  return `agora ele parece focado em ${to}`
+  return phraseForShiftedFocus(state, to)
 }
 
 function buildShiftSecondary(state: SemanticState): string | null {
@@ -419,4 +419,75 @@ function finalize(text: string): string {
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))))
+}
+
+function phraseForCentralConcept(state: SemanticState, topic: string): string {
+  return pickStableVariant(state, `concept:${topic}`, [
+    `o conceito central aqui parece ser ${topic}`,
+    `isso está girando em torno de ${topic}`,
+    `a ideia que mais organiza esse trecho é ${topic}`,
+    `o eixo dessa leitura aqui é ${topic}`
+  ])
+}
+
+function phraseForTopicFocus(state: SemanticState, topic: string): string {
+  return pickStableVariant(state, `topic-focus:${topic}`, [
+    `o foco parece estar em ${topic}`,
+    `isso parece puxar mais para ${topic}`,
+    `o centro da leitura aqui está em ${topic}`,
+    `o ponto que está mandando nessa tela é ${topic}`
+  ])
+}
+
+function phraseForSingleTopic(state: SemanticState, topic: string): string {
+  return pickStableVariant(state, `single-topic:${topic}`, [
+    `acho que o ponto central aqui é ${topic}`,
+    `isso aqui parece bater em ${topic}`,
+    `o assunto que está segurando esse trecho é ${topic}`,
+    `o núcleo dessa leitura parece ser ${topic}`
+  ])
+}
+
+function phraseForImportantPart(state: SemanticState, focusPart: string): string {
+  return pickStableVariant(state, `important-part:${focusPart}`, [
+    `a parte importante parece ser ${focusPart}`,
+    `o trecho que mais pesa aqui é ${focusPart}`,
+    `o olhar parece preso em ${focusPart}`,
+    `o ponto mais útil agora está em ${focusPart}`
+  ])
+}
+
+function phraseForOrbitingTopic(state: SemanticState, topic: string): string {
+  return pickStableVariant(state, `orbit:${topic}`, [
+    `talvez isso esteja girando em torno de ${topic}`,
+    `isso deve estar orbitando ${topic}`,
+    `o tema que parece amarrar essa tela é ${topic}`,
+    `provavelmente essa leitura encosta em ${topic}`
+  ])
+}
+
+function phraseForShiftedFocus(state: SemanticState, focus: string): string {
+  return pickStableVariant(state, `shift:${focus}`, [
+    `agora ele parece focado em ${focus}`,
+    `o olhar mudou para ${focus}`,
+    `nesse momento a atenção parece estar em ${focus}`,
+    `ele acabou puxando o foco para ${focus}`
+  ])
+}
+
+function pickStableVariant(state: SemanticState, salt: string, options: string[]): string {
+  const seed = [
+    state.surface_type,
+    state.app_identifier ?? '',
+    state.probable_user_focus,
+    state.visual_summary,
+    salt
+  ].join('|')
+
+  let hash = 0
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash * 31) + seed.charCodeAt(i)) >>> 0
+  }
+
+  return options[hash % options.length] ?? options[0] ?? ''
 }

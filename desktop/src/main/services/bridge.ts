@@ -19,6 +19,7 @@ export class BridgeServer {
   private wss: WebSocketServer | null = null
   private clients = new Map<ConnectorID, WebSocket>()
   private contexts = new Map<ConnectorID, ConnectorContext>()
+  private internalStatus = new Map<ConnectorID, boolean>()
   private listeners: StatusListener[] = []
 
   start(): void {
@@ -69,6 +70,29 @@ export class BridgeServer {
     this.clients.clear()
   }
 
+  disconnect(id: ConnectorID): void {
+    const ws = this.clients.get(id)
+    if (ws) {
+      ws.close()
+      this.clients.delete(id)
+      this.contexts.delete(id)
+      this.emit({ id, connected: false, connectedAt: null })
+    }
+  }
+
+  /** For internal (non-WebSocket) connectors like Spotify */
+  injectContext(id: ConnectorID, ctx: ConnectorContext): void {
+    this.contexts.set(id, ctx)
+  }
+
+  setInternalStatus(id: ConnectorID, connected: boolean): void {
+    const was = this.internalStatus.get(id) ?? false
+    this.internalStatus.set(id, connected)
+    if (was !== connected) {
+      this.emit({ id, connected, connectedAt: connected ? Date.now() : null })
+    }
+  }
+
   getContext(id: ConnectorID): ConnectorContext | null {
     return this.contexts.get(id) ?? null
   }
@@ -77,8 +101,8 @@ export class BridgeServer {
     const ids: ConnectorID[] = ['vscode', 'spotify']
     return ids.map(id => ({
       id,
-      connected: this.clients.has(id),
-      connectedAt: this.clients.has(id) ? Date.now() : null
+      connected: this.clients.has(id) || (this.internalStatus.get(id) ?? false),
+      connectedAt: (this.clients.has(id) || (this.internalStatus.get(id) ?? false)) ? Date.now() : null
     }))
   }
 

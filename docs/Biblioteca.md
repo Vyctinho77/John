@@ -1,8 +1,14 @@
-Plano Técnico — John Connector Library
-Visão Geral
+# Plano Técnico — John Connector Library
+
+## Visão Geral
+
 Uma biblioteca de conectores padronizada que expõe contexto de aplicativos externos pro John em tempo real. Cada conector é independente, o John consome tudo via uma interface única.
 
-Arquitetura
+---
+
+## Arquitetura
+
+```
 ┌─────────────────────────────────────────┐
 │              John (Electron)             │
 │                                         │
@@ -24,10 +30,16 @@ Arquitetura
 │VSCode │  │Spotify  │  │TradingView  │
 │Ext.   │  │Connector│  │Connector    │
 └───────┘  └─────────┘  └─────────────┘
+```
 
-Contrato Comum — AppContext
+---
+
+## Contrato Comum — AppContext
+
 Todo conector publica esse tipo. O John sempre recebe nesse formato independente do app:
-typescript// packages/types/src/index.ts
+
+```typescript
+// packages/types/src/index.ts
 
 export type AppID = 'vscode' | 'spotify' | 'tradingview' | 'browser'
 
@@ -61,8 +73,13 @@ export interface ConnectorAction {
   type: string
   payload: unknown
 }
+```
 
-Estrutura de Pastas
+---
+
+## Estrutura de Pastas
+
+```
 john-connectors/
 ├── packages/
 │   ├── types/               # contratos compartilhados
@@ -96,10 +113,16 @@ john-connectors/
 │
 ├── package.json             # workspace root (pnpm)
 └── tsconfig.base.json
+```
 
-Bridge Server — Processo Main do Electron
+---
+
+## Bridge Server — Processo Main do Electron
+
 Roda dentro do Node.js do Electron. Recebe contexto dos conectores e repassa pro John via IPC:
-typescript// packages/bridge/src/BridgeServer.ts
+
+```typescript
+// packages/bridge/src/BridgeServer.ts
 import { WebSocketServer, WebSocket } from 'ws'
 import { ipcMain } from 'electron'
 import type { AppContext, AppID } from '@john/types'
@@ -155,10 +178,16 @@ export class BridgeServer {
     return match ? match[1] as AppID : null
   }
 }
+```
 
-Conector VSCode
-1. Entry point da extensão
-typescript// packages/connector-vscode/src/extension.ts
+---
+
+## Conector VSCode
+
+### 1. Entry point da extensão
+
+```typescript
+// packages/connector-vscode/src/extension.ts
 import * as vscode from 'vscode'
 import { VSCodeConnector } from './VSCodeConnector'
 
@@ -173,8 +202,12 @@ export function activate(ctx: vscode.ExtensionContext) {
 export function deactivate() {
   connector?.disconnect()
 }
-2. VSCodeConnector — coleta e envia contexto
-typescript// packages/connector-vscode/src/VSCodeConnector.ts
+```
+
+### 2. VSCodeConnector — coleta e envia contexto
+
+```typescript
+// packages/connector-vscode/src/VSCodeConnector.ts
 import WebSocket from 'ws'
 import * as vscode from 'vscode'
 import { EditorCollector } from './collectors/EditorCollector'
@@ -213,7 +246,6 @@ export class VSCodeConnector {
   }
 
   private registerListeners() {
-    // Qualquer mudança dispara um contexto novo (com debounce)
     this.disposables.push(
       vscode.window.onDidChangeActiveTextEditor(() => this.scheduleUpdate()),
       vscode.window.onDidChangeTextEditorSelection(() => this.scheduleUpdate()),
@@ -262,8 +294,12 @@ export class VSCodeConnector {
     } catch {}
   }
 }
-3. Collectors
-typescript// EditorCollector.ts — arquivo atual, cursor, seleção
+```
+
+### 3. Collectors
+
+```typescript
+// EditorCollector.ts — arquivo atual, cursor, seleção
 export class EditorCollector {
   async collect() {
     const editor = vscode.window.activeTextEditor
@@ -332,20 +368,23 @@ export class TerminalCollector {
   private lastOutput = ''
 
   async collect() {
-    // VSCode não expõe output do terminal diretamente
-    // Workaround: extensão registra um pseudoterminal próprio
     return { lastOutput: this.lastOutput }
   }
 
   registerOutput(output: string) {
-    // Chamado pelo pseudoterminal
     this.lastOutput = output.slice(-2000) // últimos 2000 chars
   }
 }
+```
 
-Como o John Consome
+---
+
+## Como o John Consome
+
 No renderer React, via IPC:
-typescript// john-app/src/hooks/useConnectorContext.ts
+
+```typescript
+// john-app/src/hooks/useConnectorContext.ts
 import { ipcRenderer } from 'electron'
 import { useEffect, useState } from 'react'
 import type { AppContext, AppID } from '@john/types'
@@ -373,14 +412,25 @@ const vscodeCtx = useConnectorContext('vscode')
 
 // Injeta no prompt do agente automaticamente:
 const systemPrompt = buildPrompt({ vscodeCtx, spotifyCtx, ... })
+```
 
-Roadmap de Conectores
-ConectorComplexidadeImpactoPrioridadeVSCodeMédia🔥 Altíssimo1SpotifyBaixaAlto2Browser (extensão Chrome)MédiaAlto3TradingViewAltaAlto (pra você)4
+---
 
-Por Onde Começar
+## Roadmap de Conectores
 
-Cria o monorepo com pnpm workspaces
-Define o pacote types — esse contrato não muda depois
-Implementa o BridgeServer no main process do Electron
-Desenvolve a extensão VSCode com EditorCollector + DiagnosticsCollector primeiro (já resolve 80% dos casos)
-Testa injetando o contexto num prompt simples e vendo a diferença na qualidade da resposta
+| Conector      | Complexidade | Impacto         | Prioridade |
+|---------------|-------------|-----------------|------------|
+| VSCode        | Média       | 🔥 Altíssimo    | 1          |
+| Spotify       | Baixa       | Alto            | 2          |
+| Browser (ext) | Média       | Alto            | 3          |
+| TradingView   | Alta        | Alto (pra você) | 4          |
+
+---
+
+## Por Onde Começar
+
+1. Cria o monorepo com pnpm workspaces
+2. Define o pacote `types` — esse contrato não muda depois
+3. Implementa o `BridgeServer` no main process do Electron
+4. Desenvolve a extensão VSCode com `EditorCollector` + `DiagnosticsCollector` primeiro (já resolve 80% dos casos)
+5. Testa injetando o contexto num prompt simples e vendo a diferença na qualidade da resposta

@@ -69,7 +69,7 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
   // PNG size is a free entropy proxy: text screens compress to ~0.15+ bytes/pixel,
   // charts and dark UIs compress to ~0.03–0.10 bytes/pixel.
   const bytesPerPixel = pngBuf.length / (width * height)
-  if (bytesPerPixel < 0.12) {
+  if (bytesPerPixel < 0.15) {
     return emptyResult(startedAt)
   }
 
@@ -89,7 +89,7 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   const normalizedDataUrl = ocrImage.toDataURL()
   const w = await getWorker()
-  const { data } = await w.recognize(normalizedDataUrl)
+  const { data } = await suppressLeptonicaNoise(() => w.recognize(normalizedDataUrl))
 
   const regions: TextRegion[] = (data.blocks ?? [])
     .filter(b => b.text.trim().length > 0)
@@ -168,4 +168,20 @@ function sanitizeBBox(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+// Leptonica prints internal warnings directly to stderr, bypassing the Tesseract.js
+// logger callback. Filter the known-harmless patterns so they don't pollute the console.
+const LEPTONICA_NOISE = /pixScanForForeground|boxClipToRectangle/
+
+function suppressLeptonicaNoise<T>(fn: () => Promise<T>): Promise<T> {
+  const orig = process.stderr.write.bind(process.stderr)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(process.stderr as any).write = (chunk: any, ...args: any[]) => {
+    if (LEPTONICA_NOISE.test(String(chunk))) return true
+    return orig(chunk, ...args)
+  }
+  return fn().finally(() => {
+    process.stderr.write = orig
+  })
 }
