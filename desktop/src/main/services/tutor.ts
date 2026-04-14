@@ -109,7 +109,14 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
     const imageDataUrl = context.screenshotDataUrl ?? null
 
     const remoteResult = await generateWithCodexFallback({
-      sensitive, system, prompt, history, imageDataUrl
+      sensitive,
+      system,
+      prompt,
+      history,
+      imageDataUrl,
+      screenCapturedAt: context.semanticState.capturedAt,
+      screenChangeSummary: context.semanticState.change_summary,
+      screenVisualSummary: context.semanticState.visual_summary
     })
     const content = remoteResult?.text?.trim() || localContent
 
@@ -200,17 +207,46 @@ async function generateWithCodexFallback(input: {
   prompt: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   imageDataUrl: string | null
+  screenCapturedAt: number
+  screenChangeSummary: PerceptionContextSnapshot['semanticState']['change_summary']
+  screenVisualSummary: string
 }): Promise<import('./ai-provider').ProviderExecutionResult | null> {
   // Conteúdo sensível não vai pro Codex (servidor externo, não local)
   if (!input.sensitive && codexAuth.getStatus().authenticated) {
     try {
+      const shouldTrimHistoryForFreshScreen =
+        Boolean(input.imageDataUrl) && input.screenChangeSummary === 'major'
+      const codexHistory = shouldTrimHistoryForFreshScreen
+        ? input.history.slice(-2)
+        : input.history
+      const codexSystem = [
+        input.system,
+        `Current screen capture timestamp: ${input.screenCapturedAt}.`,
+        `Current screen summary: ${input.screenVisualSummary}.`,
+        'Visual grounding policy:',
+        '- the latest screenshot and current screen summary are authoritative',
+        '- if the current screen differs from earlier conversation context, discard the older screen assumptions',
+        '- do not keep describing a previous screen after a screen change',
+        'House style override:',
+        '- match the same John voice used in the standard API provider path',
+        '- do not answer in an overly compressed or timid way',
+        '- when the answer is explanatory, prefer 2 to 4 well-developed paragraphs instead of a single short block',
+        '- use the available width naturally; do not sound clipped or minimal by default',
+        '- stay direct, observant, grounded in the current screen and with the same personality tone as the non-Codex path'
+      ].join('\n')
       const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
-        { role: 'system', content: input.system },
-        ...input.history,
+        { role: 'system', content: codexSystem },
+        ...codexHistory,
         { role: 'user',   content: input.prompt }
       ]
-      const text = await codexClient.chat({ messages })
-      return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'gpt-4o', text }
+      try {
+        const text = await codexClient.chat({ model: 'gpt-4.1', messages, imageDataUrl: input.imageDataUrl })
+        return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'gpt-4.1', text }
+      } catch (primaryError) {
+        const text = await codexClient.chat({ messages, imageDataUrl: input.imageDataUrl })
+        console.warn('[Codex] fallback para modelo padrÃ£o da conta:', primaryError instanceof Error ? primaryError.message : primaryError)
+        return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'codex-account-default', text }
+      }
     } catch (e) {
       // Codex falhou — cai no pipeline normal sem interromper
       console.error('[Codex] falhou, usando fallback:', e instanceof Error ? e.message : e)

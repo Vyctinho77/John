@@ -63,7 +63,7 @@ import { bridgeServer } from './services/bridge'
 import { spotifyService } from './services/spotify'
 import { codexAuth, codexClient } from './auth/codex-singleton'
 import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
-import type { DataDeletionSummary } from '../shared/perception.types'
+import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
 let screenshotModeTimer: ReturnType<typeof setTimeout> | null = null
@@ -538,17 +538,69 @@ ipcMain.handle('chat:save',          (_e, id: string, messages: unknown, summary
 ipcMain.handle('chat:delete',        (_e, id: string) => deleteChat(id))
 ipcMain.handle('chat:rename',        (_e, id: string, title: string) => { renameChat(id, title) })
 ipcMain.handle('chat:set-active',    (_e, id: string) => { setActiveChat(id) })
-ipcMain.handle('chat:generate-title', async (_e, id: string, firstMessage: string) => {
-  const { generateRemoteText } = await import('./services/ai-provider')
-  const result = await generateRemoteText({
-    sensitive: false,
-    system: 'You generate ultra-short conversation titles. Reply with ONLY the title — 3 to 5 words, no quotes, no punctuation at the end.',
-    prompt: `First message: "${firstMessage.slice(0, 200)}"`,
-    messages: [],
-    imageDataUrl: null
-  })
-  const title = result?.text?.trim().replace(/^["']|["']$/g, '') ?? null
-  if (title) setTitleIfEmpty(id, title)
+ipcMain.handle('chat:generate-title', async (_e, id: string, messages: TutorMessage[]) => {
+  const existingChat = loadChat(id)
+  const existingTitle = existingChat?.title ?? null
+  const prompt = buildChatTitlePrompt(messages)
+  let rawTitle: string | null = null
+
+  if (codexAuth.getStatus().authenticated) {
+    try {
+      rawTitle = await codexClient.chat({
+        model: 'codex-mini-latest',
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'You write concise conversation titles for a chat sidebar.',
+              'Reply with only the title.',
+              'Requirements:',
+              '- 2 to 5 words',
+              '- natural, specific, and compact',
+              '- no quotes',
+              '- no emoji',
+              '- no trailing punctuation',
+              '- avoid generic titles like "Ajuda", "Conversa", "Novo chat", "Pergunta"'
+            ].join('\n')
+          },
+          { role: 'user', content: prompt }
+        ]
+      })
+    } catch {
+      rawTitle = null
+    }
+  }
+
+  if (!rawTitle) {
+    const { generateRemoteText } = await import('./services/ai-provider')
+    const result = await generateRemoteText({
+      sensitive: false,
+      system: [
+        'You write concise conversation titles for a chat sidebar.',
+        'Reply with only the title.',
+        'Requirements:',
+        '- 2 to 5 words',
+        '- natural, specific, and compact',
+        '- no quotes',
+        '- no emoji',
+        '- no trailing punctuation',
+        '- avoid generic titles like "Ajuda", "Conversa", "Novo chat", "Pergunta"'
+      ].join('\n'),
+      prompt,
+      messages: [],
+      imageDataUrl: null
+    })
+    rawTitle = result?.text?.trim() ?? null
+  }
+
+  const title = sanitizeGeneratedChatTitle(rawTitle)
+  if (title) {
+    if (!existingTitle) {
+      setTitleIfEmpty(id, title)
+    } else if (shouldRefreshGeneratedTitle(existingTitle, messages)) {
+      renameChat(id, title)
+    }
+  }
   return title
 })
 
@@ -558,6 +610,78 @@ ipcMain.handle('codex-auth:login',  () => codexAuth.login())
 ipcMain.handle('codex-auth:logout', () => codexAuth.logout())
 ipcMain.handle('codex-auth:status', () => codexAuth.getStatus())
 ipcMain.handle('codex-auth:chat',   (_e, options) => codexClient.chat(options))
+
+function buildChatTitlePrompt(messages: TutorMessage[]): string {
+  const snippets = messages
+    .slice(0, 6)
+    .map((message, index) => {
+      const speaker = message.role === 'user' ? 'User' : 'Assistant'
+      const compact = message.content.replace(/\s+/g, ' ').trim().slice(0, 220)
+      return `${index + 1}. ${speaker}: ${compact}`
+    })
+    .join('\n')
+
+  return [
+    'Create a short title for this conversation.',
+    'Infer the actual user goal from the opening interaction, not just the first user message.',
+    'If the second turn clarifies the task, prefer the clarified topic.',
+    'The result should feel like a ChatGPT sidebar title: specific, natural, and immediately scannable.',
+    'Conversation:',
+    snippets
+  ].join('\n')
+}
+
+function sanitizeGeneratedChatTitle(rawTitle: string | null): string | null {
+  if (!rawTitle) return null
+
+  const cleaned = rawTitle
+    .replace(/^["'`]|["'`]+$/g, '')
+    .replace(/[.?!,:;]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60)
+
+  if (!cleaned) return null
+
+  const words = cleaned.split(' ').filter(Boolean)
+  if (words.length < 2) return null
+
+  return cleaned
+}
+
+function shouldRefreshGeneratedTitle(existingTitle: string, messages: TutorMessage[]): boolean {
+  const assistantCount = messages.filter(message => message.role === 'assistant').length
+  if (assistantCount < 2) return false
+
+  return looksLikeWeakGeneratedTitle(existingTitle)
+}
+
+function looksLikeWeakGeneratedTitle(title: string): boolean {
+  const normalized = title
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+  if (!normalized) return true
+  if (normalized.length <= 16) {
+    const genericShort = [
+      'ajuda',
+      'conversa',
+      'novo chat',
+      'pergunta',
+      'duvida',
+      'duvida rapida',
+      'ideia',
+      'projeto',
+      'codigo',
+      'spotify'
+    ]
+    if (genericShort.includes(normalized)) return true
+  }
+
+  return /^(ajuda( com)?|conversa|novo chat|pergunta|duvida|duvida rapida|ideia|projeto|codigo|spotify)$/i.test(normalized)
+}
 
 // ─── Bridge (Biblioteca connectors) ──────────────────────────────────────────
 

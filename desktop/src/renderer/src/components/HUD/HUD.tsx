@@ -126,13 +126,22 @@ export function HUD() {
 
   // ── Load active chat on mount ──
   useEffect(() => {
-    window.chatAPI.getActive().then(({ chat, activeChatId: id }) => {
+    window.chatAPI.listMetas().then(async metas => {
+      setChatMetas(metas)
+      if (metas.length === 0) {
+        setActiveChatId(null)
+        activeChatIdRef.current = null
+        setMessages([])
+        setConversationSummary(null)
+        return
+      }
+
+      const { chat, activeChatId: id } = await window.chatAPI.getActive()
       setActiveChatId(id)
       activeChatIdRef.current = id
       if (chat.messages.length > 0) setMessages(chat.messages)
       setConversationSummary(chat.summary)
     }).catch(() => {})
-    window.chatAPI.listMetas().then(setChatMetas).catch(() => {})
   }, [])
 
   const {
@@ -282,11 +291,10 @@ export function HUD() {
         setConversationSummary(next.summary)
       }
     } else {
-      const { chat, metas: newMetas } = await window.chatAPI.create()
-      setActiveChatId(chat.id)
+      setActiveChatId(null)
+      activeChatIdRef.current = null
       setMessages([])
       setConversationSummary(null)
-      setChatMetas(newMetas)
     }
     setInputValue('')
     setChunk('')
@@ -457,11 +465,38 @@ export function HUD() {
 
   if (prevVisual.current !== visual) prevVisual.current = visual
 
+  const maybeGenerateChatTitle = useCallback((conversationMessages: Message[]) => {
+    const chatId = activeChatIdRef.current
+    if (!chatId) return
+
+    const titleSeed = conversationMessages
+      .filter(message => message.content.trim())
+      .slice(0, 6)
+      .map(message => ({ role: message.role, content: message.content }))
+
+    if (titleSeed.length < 2) return
+
+    const assistantCount = titleSeed.filter(message => message.role === 'assistant').length
+    if (assistantCount === 0 || assistantCount > 2) return
+
+    window.chatAPI.generateTitle(chatId, titleSeed).then(title => {
+      if (title) {
+        setChatMetas(prev => prev.map(meta => meta.id === chatId ? { ...meta, title } : meta))
+      }
+    }).catch(() => {})
+  }, [setChatMetas])
+
   const handleSubmit = useCallback(async () => {
     if (!inputValue.trim() || isStreaming) return
 
     const userMsg = inputValue.trim()
-    const isFirstMessage = messages.length === 0
+
+    if (!activeChatIdRef.current) {
+      const { chat, metas } = await window.chatAPI.create()
+      setActiveChatId(chat.id)
+      activeChatIdRef.current = chat.id
+      setChatMetas(metas)
+    }
 
     // Build the conversation with sliding window + optional summary block
     const activeMessages = messages.slice(-CONVO_WINDOW)
@@ -509,21 +544,16 @@ export function HUD() {
             if (next.length > CONVO_SUMMARIZE_AT) {
               const toCompress = next.slice(0, next.length - CONVO_WINDOW)
               setConversationSummary(s => buildConversationSummary(s, toCompress))
-              return next.slice(-CONVO_WINDOW)
+              const trimmed = next.slice(-CONVO_WINDOW)
+              maybeGenerateChatTitle(trimmed)
+              return trimmed
             }
+            maybeGenerateChatTitle(next)
             return next
           })
           setChunk('')
           setStreaming(false)
           void refreshPrivacyState()
-          if (isFirstMessage) {
-            const chatId = activeChatIdRef.current
-            if (chatId) {
-              window.chatAPI.generateTitle(chatId, userMsg).then(title => {
-                if (title) setChatMetas(prev => prev.map(m => m.id === chatId ? { ...m, title } : m))
-              }).catch(() => {})
-            }
-          }
         }
       )
     } catch (error) {
@@ -548,7 +578,7 @@ export function HUD() {
       setChunk('')
       setStreaming(false)
     }
-  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, messages, refreshPrivacyState, setStreaming, visual, setChatMetas])
+  }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, maybeGenerateChatTitle, messages, refreshPrivacyState, setStreaming, visual])
 
   const handleExecuteAction = useCallback(async (action: TutorAction) => {
     if (action.kind !== 'spotify') return

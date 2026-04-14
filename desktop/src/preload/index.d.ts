@@ -114,7 +114,7 @@ declare global {
       delete: (id: string) => Promise<ChatMeta[]>
       rename: (id: string, title: string) => Promise<void>
       setActive: (id: string) => Promise<void>
-      generateTitle: (id: string, firstMessage: string) => Promise<string | null>
+      generateTitle: (id: string, messages: StoredMessage[]) => Promise<string | null>
     }
     bridgeAPI: {
       getStatuses: () => Promise<ConnectorStatus[]>

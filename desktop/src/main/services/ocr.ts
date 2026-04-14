@@ -9,6 +9,7 @@ let initPromise: Promise<void> | null = null
 let lastImageHash: string | null = null
 let lastOcrResult: PerceptionResult | null = null
 
+const OCR_LANG = 'eng+por'
 const OCR_DPI = '110'
 
 async function getWorker(): Promise<Worker> {
@@ -22,7 +23,7 @@ async function getWorker(): Promise<Worker> {
   initializing = true
   initPromise = (async () => {
     console.log('[ocr] Initializing tesseract worker...')
-    worker = await Tesseract.createWorker('eng', 1, {
+    worker = await Tesseract.createWorker(OCR_LANG, 1, {
       // Suppress tesseract verbose logs
       logger: () => {}
     })
@@ -44,6 +45,9 @@ async function getWorker(): Promise<Worker> {
 // Tesseract bbox overflow errors and keep recognition speed reasonable.
 const OCR_MAX_WIDTH = 960
 const OCR_MAX_HEIGHT = 540
+const OCR_SKIP_BPP_HARD = 0.09
+const OCR_SKIP_BPP_SOFT = 0.15
+const OCR_COMPLEXITY_SAMPLE = 160
 
 export async function recognizeImage(dataUrl: string): Promise<PerceptionResult> {
   const image = nativeImage.createFromDataURL(dataUrl)
@@ -64,13 +68,28 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
   }
   lastImageHash = imageHash
 
-  // Skip OCR on graphical/uniform frames — they always return confidence 0.0
-  // and trigger Leptonica internal errors (pixScanForForeground, boxClipToRectangle).
-  // PNG size is a free entropy proxy: text screens compress to ~0.15+ bytes/pixel,
-  // charts and dark UIs compress to ~0.03–0.10 bytes/pixel.
+  // Skip OCR on truly low-entropy frames, but keep a softer middle range:
+  // dark UIs with small text also compress well, so ambiguous frames go through
+  // a second visual-complexity check before being discarded.
   const bytesPerPixel = pngBuf.length / (width * height)
-  if (bytesPerPixel < 0.15) {
+  if (bytesPerPixel < OCR_SKIP_BPP_HARD) {
+    console.log(`[ocr] Skipping low-entropy frame (bpp=${bytesPerPixel.toFixed(3)}).`)
     return emptyResult(startedAt)
+  }
+
+  if (bytesPerPixel < OCR_SKIP_BPP_SOFT) {
+    const complexity = estimateVisualComplexity(image)
+    const shouldSkip =
+      complexity.lumaStdDev < 22
+      && complexity.edgeDensity < 0.12
+      && complexity.inkCoverage < 0.18
+
+    if (shouldSkip) {
+      console.log(
+        `[ocr] Skipping low-complexity frame (bpp=${bytesPerPixel.toFixed(3)}, std=${complexity.lumaStdDev.toFixed(1)}, edges=${complexity.edgeDensity.toFixed(3)}).`
+      )
+      return emptyResult(startedAt)
+    }
   }
 
   // Downscale to OCR-optimal resolution if needed, preserving aspect ratio.
@@ -168,6 +187,72 @@ function sanitizeBBox(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function estimateVisualComplexity(image: Electron.NativeImage): {
+  lumaStdDev: number
+  edgeDensity: number
+  inkCoverage: number
+} {
+  const { width, height } = image.getSize()
+  const scale = Math.min(1, OCR_COMPLEXITY_SAMPLE / Math.max(width, height))
+  const sampled = scale < 1
+    ? image.resize({
+        width: Math.max(24, Math.round(width * scale)),
+        height: Math.max(24, Math.round(height * scale)),
+        quality: 'good'
+      })
+    : image
+
+  const { width: sampleWidth, height: sampleHeight } = sampled.getSize()
+  const bitmap = sampled.toBitmap()
+  const pixelCount = sampleWidth * sampleHeight
+
+  if (!pixelCount || bitmap.length < pixelCount * 4) {
+    return { lumaStdDev: 0, edgeDensity: 0, inkCoverage: 0 }
+  }
+
+  let sum = 0
+  let sumSquares = 0
+  let edgeHits = 0
+  let edgeChecks = 0
+  let inkPixels = 0
+  const lumas = new Float32Array(pixelCount)
+
+  for (let y = 0; y < sampleHeight; y += 1) {
+    for (let x = 0; x < sampleWidth; x += 1) {
+      const pixelIndex = y * sampleWidth + x
+      const offset = pixelIndex * 4
+      const blue = bitmap[offset] ?? 0
+      const green = bitmap[offset + 1] ?? 0
+      const red = bitmap[offset + 2] ?? 0
+      const alpha = (bitmap[offset + 3] ?? 255) / 255
+      const luma = (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha
+
+      lumas[pixelIndex] = luma
+      sum += luma
+      sumSquares += luma * luma
+      if (luma < 210) inkPixels += 1
+    }
+  }
+
+  for (let y = 0; y < sampleHeight; y += 1) {
+    for (let x = 0; x < sampleWidth - 1; x += 1) {
+      const current = lumas[y * sampleWidth + x] ?? 0
+      const next = lumas[y * sampleWidth + x + 1] ?? 0
+      edgeChecks += 1
+      if (Math.abs(current - next) > 24) edgeHits += 1
+    }
+  }
+
+  const mean = sum / pixelCount
+  const variance = Math.max(0, sumSquares / pixelCount - mean * mean)
+
+  return {
+    lumaStdDev: Math.sqrt(variance),
+    edgeDensity: edgeChecks > 0 ? edgeHits / edgeChecks : 0,
+    inkCoverage: inkPixels / pixelCount
+  }
 }
 
 // Leptonica prints internal warnings directly to stderr, bypassing the Tesseract.js

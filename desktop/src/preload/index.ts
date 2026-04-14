@@ -164,8 +164,8 @@ const chatAPI = {
     ipcRenderer.invoke('chat:rename', id, title),
   setActive: (id: string): Promise<void> =>
     ipcRenderer.invoke('chat:set-active', id),
-  generateTitle: (id: string, firstMessage: string): Promise<string | null> =>
-    ipcRenderer.invoke('chat:generate-title', id, firstMessage)
+  generateTitle: (id: string, messages: StoredMessage[]): Promise<string | null> =>
+    ipcRenderer.invoke('chat:generate-title', id, messages)
 }
 
 const bridgeAPI = {

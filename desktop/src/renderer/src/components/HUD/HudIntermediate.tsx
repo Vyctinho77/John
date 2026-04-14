@@ -1,6 +1,6 @@
-import { motion } from 'framer-motion'
 import { useEffect, useRef, KeyboardEvent } from 'react'
 import { CaptureIndicator } from './CaptureIndicator'
+import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
@@ -101,13 +101,8 @@ export function HudIntermediate({
         <div className="flex-1" />
 
         {isStreaming && (
-          <div className="flex gap-1 items-center">
-            {[0, 1, 2].map(i => (
-              <motion.div key={i} className="w-1 h-1 rounded-full" style={{ background: '#6b7ff0' }}
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.18 }}
-              />
-            ))}
+          <div className="flex items-center">
+            <GlasswingThinkingIndicator size={34} emphasis="strong" />
           </div>
         )}
 

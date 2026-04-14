@@ -704,6 +704,10 @@ export function formatSpotifyConnectorContext(data: unknown): string {
     lines.push(`Device: ${s.deviceName}${vol}`)
   }
 
+  lines.push('')
+  lines.push('SPOTIFY CONTROLS: You can control Spotify. When the user asks, respond with the action description and confirm it was done.')
+  lines.push('Supported: pause, resume, next track, previous track, play by name/artist/album/playlist, what\'s playing.')
+  lines.push('Use natural commands: "Pausando.", "Pulando para a próxima.", "Tocando [name]."')
   lines.push('--- End Spotify context ---')
   return lines.join('\n')
 }

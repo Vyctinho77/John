@@ -1,3 +1,4 @@
+import { nativeImage } from 'electron'
 import type {
   ChangeSummary,
   CodeContext,
@@ -9,6 +10,7 @@ import type {
   VisionAnalysis
 } from '../../shared/perception.types'
 import { generateRemoteText } from './ai-provider'
+import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 
 // ---------------------------------------------------------------------------
@@ -32,7 +34,9 @@ export async function analyzeScreenWithVision(
 
   try {
     const prompt = buildVisionPrompt(ocrText, previousText, userProfile)
-    const result = await withTimeout(
+
+    // Try configured AI providers first; fall back to Codex if authenticated
+    let result = await withTimeout(
       generateRemoteText({
         sensitive: false,
         system: VISION_SYSTEM_PROMPT,
@@ -41,6 +45,25 @@ export async function analyzeScreenWithVision(
       }),
       VISION_TIMEOUT_MS
     )
+
+    if (!result?.text && codexAuth.getStatus().authenticated) {
+      try {
+        const resizedDataUrl = await resizeForVision(screenshotDataUrl)
+        const text = await withTimeout(
+          codexClient.chat({
+            messages: [
+              { role: 'system',  content: VISION_SYSTEM_PROMPT },
+              { role: 'user',    content: prompt }
+            ],
+            imageDataUrl: resizedDataUrl
+          }),
+          VISION_TIMEOUT_MS
+        )
+        if (text) result = { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'codex-vision', text }
+      } catch (codexErr) {
+        console.warn('[Vision] Codex vision fallback failed:', codexErr instanceof Error ? codexErr.message : codexErr)
+      }
+    }
 
     if (!result?.text) {
       void recordDiagnosticEvent({
@@ -404,4 +427,26 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       error => { clearTimeout(timer); reject(error) }
     )
   })
+}
+
+// Resize screenshot to a max 768px wide JPEG before sending to Codex vision.
+// Full 1280×720 PNG base64 can exceed 1 MB; most vision APIs cap at ~5 MB but
+// a smaller payload reduces latency and avoids rejections on internal endpoints.
+const VISION_MAX_WIDTH = 768
+
+async function resizeForVision(dataUrl: string): Promise<string> {
+  try {
+    const img = nativeImage.createFromDataURL(dataUrl)
+    const { width, height } = img.getSize()
+    if (width <= VISION_MAX_WIDTH) return dataUrl
+    const scale = VISION_MAX_WIDTH / width
+    const resized = img.resize({
+      width:   VISION_MAX_WIDTH,
+      height:  Math.round(height * scale),
+      quality: 'good'
+    })
+    return resized.toDataURL()
+  } catch {
+    return dataUrl
+  }
 }

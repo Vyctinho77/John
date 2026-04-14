@@ -4,6 +4,7 @@ import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
 import { MessageBody } from './MessageBody'
 import { TutorActionChips } from './TutorActionChips'
+import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -269,19 +270,8 @@ export function HudSidebar({
             )}
 
             {isStreaming && !streamingContent && (
-              <div style={{ display: 'flex', gap: 5, padding: '4px 0', alignItems: 'center' }}>
-                {[0, 1, 2].map(n => (
-                  <div
-                    key={n}
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.28)',
-                      animation: `sb-pulse 1.2s ease-in-out ${n * 0.2}s infinite`
-                    }}
-                  />
-                ))}
+              <div style={{ display: 'flex', padding: '4px 0', alignItems: 'center' }}>
+                <GlasswingThinkingIndicator size={40} emphasis="strong" />
               </div>
             )}
 
@@ -342,15 +332,10 @@ export function HudSidebar({
           </div>
         </>
       )}
-
       <style>{`
         @keyframes sb-blink {
           0%, 100% { opacity: 1 }
           50%       { opacity: 0 }
-        }
-        @keyframes sb-pulse {
-          0%, 80%, 100% { transform: scale(0.55); opacity: 0.25 }
-          40%            { transform: scale(1);    opacity: 0.75 }
         }
       `}</style>
     </div>

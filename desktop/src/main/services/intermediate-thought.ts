@@ -2,24 +2,14 @@
  * intermediate-thought.ts
  *
  * Builds a short, grounded "thinking" display from perception data alone —
- * no LLM calls. The goal is to show the user that John is READING the screen
- * right now, producing a sharp internal monologue that feels alive.
+ * no LLM calls. Uses the vision-generated fields (visual_summary, inferred_intent)
+ * as the primary source so thoughts are specific to what's actually on screen.
  *
- * Priority order of what to express:
- *  1. What is visually dominant (file, chart, paragraph, metric)
- *  2. What seems to be the active problem or question
- *  3. What changed recently (shift in focus gives continuity)
- *  4. What the next useful move looks like
- *
- * Inputs already extracted by the perception pipeline (no new LLM needed):
- *  - semanticState.visual_summary      — one-sentence read of the screen
- *  - semanticState.code_context        — file, language, errors, cursor, terminal
- *  - semanticState.key_values          — named numbers extracted from the screen
- *  - semanticState.pedagogical_topics  — concepts detected
- *  - semanticState.emotional_signal    — user emotional state
- *  - semanticState.app_identifier      — which app is in focus
- *  - semanticState.surface_type        — code / text / graphic / document / dashboard
- *  - sessionMemory.recent_states       — previous frames for shift detection
+ * Priority order:
+ *  1. Code errors / terminal signals (most specific)
+ *  2. visual_summary — already a sharp, screen-specific observation
+ *  3. inferred_intent — what the user seems to be trying to do
+ *  4. probable_user_focus + topics as last resort
  */
 
 import type {
@@ -38,24 +28,22 @@ export function buildIntermediateThought(input: IntermediateThoughtInput): Inter
   const { semanticState, sessionMemory } = input
   const confidence = clamp(1 - semanticState.uncertainty)
 
-  // ── Low confidence: say as little as possible, stay honest ────────────────
   if (confidence < 0.36) {
     return buildLowConfidenceThought(semanticState, confidence)
   }
 
-  // ── Route by surface type for rich, grounded thoughts ─────────────────────
   switch (semanticState.surface_type) {
     case 'code':
       return buildCodeThought(semanticState, sessionMemory, confidence)
     case 'graphic':
-      return buildGraphicThought(semanticState, sessionMemory, confidence)
+      return buildGraphicThought(semanticState, confidence)
     case 'dashboard':
-      return buildDashboardThought(semanticState, sessionMemory, confidence)
+      return buildDashboardThought(semanticState, confidence)
     case 'document':
     case 'text':
-      return buildTextThought(semanticState, sessionMemory, confidence)
+      return buildTextThought(semanticState, confidence)
     default:
-      return buildGenericThought(semanticState, sessionMemory, confidence)
+      return buildGenericThought(semanticState, confidence)
   }
 }
 
@@ -63,173 +51,196 @@ export function buildIntermediateThought(input: IntermediateThoughtInput): Inter
 
 function buildCodeThought(
   state: SemanticState,
-  session: SessionMemory,
+  _session: SessionMemory,
   confidence: number
 ): IntermediateThought {
   const cc = state.code_context
-  const error = detectErrorSignal(state.detected_text)
 
-  // Case 1: there's a visible error — lead with the specific error
-  if (error) {
-    const filePart = cc?.file_name ? ` em ${cc.file_name}` : ''
-    const scopePart = cc?.active_function ? ` dentro de ${cc.active_function}` : ''
-    const primary = `tem um problema${filePart}${scopePart} — ${error.blocker}`
-    const cause = inferCause(error, state)
-    const secondary = cause
-      ? `o mais provável é que ${cause}; ${inferNextStep(error, state)}`
-      : inferNextStep(error, state)
-    return { primary: finalize(primary), secondary: confidence >= 0.44 ? finalize(secondary) : null, confidence }
+  // 1. Real errors from code_context (most specific)
+  if (cc?.errors?.length) {
+    const top = cc.errors[0]
+    const line = top.line != null ? ` (linha ${top.line})` : ''
+    const file = cc.file_name ? ` — ${cc.file_name}` : ''
+    const primary = `${top.message.slice(0, 90)}${line}${file}`
+    const secondary = confidence >= 0.44
+      ? inferNextStepFromError(top.message)
+      : null
+    return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
   }
 
-  // Case 2: terminal output visible — the user is watching build/test results
+  // 2. Error signal from detected text
+  const errSignal = detectErrorSignal(state.detected_text)
+  if (errSignal) {
+    const filePart = cc?.file_name ? ` em ${cc.file_name}` : ''
+    const primary = `${errSignal.blocker}${filePart}`
+    const secondary = confidence >= 0.44
+      ? (errSignal.cause ?? inferNextStepFromType(errSignal.type, state))
+      : null
+    return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
+  }
+
+  // 3. Terminal signal
   if (cc?.terminal_output) {
-    const terminalSignal = detectTerminalSignal(cc.terminal_output)
-    if (terminalSignal) {
-      const filePart = cc.file_name ? ` (${cc.file_name})` : ''
+    const sig = detectTerminalSignal(cc.terminal_output)
+    if (sig) {
       return {
-        primary: finalize(`${terminalSignal.summary}${filePart}`),
-        secondary: confidence >= 0.44 ? finalize(terminalSignal.next) : null,
+        primary:   finalize(sig.summary),
+        secondary: confidence >= 0.44 ? finalize(sig.next) : null,
         confidence
       }
     }
   }
 
-  // Case 3: focused on a specific function/scope
-  if (cc?.active_function) {
-    const langPart = cc.language ? ` ${cc.language}` : ''
-    const filePart = cc.file_name ? ` em ${cc.file_name}` : ''
-    const primary = `olhando ${cc.active_function}${langPart}${filePart}`
-    const secondary = cc.visible_line_range
-      ? `vizinhança das linhas ${cc.visible_line_range}`
-      : detectFocusShift(state, session)
-    return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
+  // 4. visual_summary (LLM already described the screen specifically)
+  const summary = toThoughtLine(state.visual_summary)
+  if (summary) {
+    const intent = toThoughtLine(state.inferred_intent)
+    return {
+      primary:   finalize(summary),
+      secondary: intent && intent !== summary && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
   }
 
-  // Case 4: shift in context
-  const shift = buildContextShift(state, session)
-  if (shift) return { ...shift, confidence }
-
-  // Case 5: just a file open, no specific signal
-  const filePart = cc?.file_name ?? null
-  const langPart = cc?.language ? ` (${cc.language})` : ''
-  const primary = filePart
-    ? `lendo ${filePart}${langPart}`
-    : `olhando ${simplifyFocus(state.probable_user_focus)}`
-  const topic = state.pedagogical_topics[0]
-  const secondary = topic ? phraseForCentralConcept(state, topic) : null
-  return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
+  // 5. Code context specifics as last resort
+  const func = cc?.active_function ?? null
+  const file = cc?.file_name ?? null
+  const primary = func
+    ? `função ${func}${file ? ` em ${file}` : ''}`
+    : file
+      ? `lendo ${file}`
+      : 'olhando o código'
+  const intent = toThoughtLine(state.inferred_intent)
+  return {
+    primary:   finalize(primary),
+    secondary: intent && confidence >= 0.44 ? finalize(intent) : null,
+    confidence
+  }
 }
 
 // ─── Surface: graphic (charts, candlesticks, etc.) ────────────────────────────
 
-function buildGraphicThought(
-  state: SemanticState,
-  session: SessionMemory,
-  confidence: number
-): IntermediateThought {
+function buildGraphicThought(state: SemanticState, confidence: number): IntermediateThought {
   const kv = state.key_values ?? {}
   const kvEntries = Object.entries(kv).slice(0, 3)
-  const summary = state.visual_summary
-  const topics = state.pedagogical_topics
 
-  // Lead with what numbers are visible if we have them
+  // Lead with specific numbers when visible
   if (kvEntries.length >= 2) {
     const kvLine = kvEntries.map(([k, v]) => `${k} ${v}`).join(', ')
     const primary = `vendo ${kvLine}`
-    const topic = topics[0]
-    const secondary = topic
-      ? phraseForTopicFocus(state, topic)
-      : detectFocusShift(state, session) ?? `olhando ${simplifyFocus(state.probable_user_focus)}`
-    return { primary: finalize(primary), secondary: finalize(secondary), confidence }
+    const summary = toThoughtLine(state.visual_summary)
+    const secondary = summary && summary !== primary && confidence >= 0.44
+      ? summary
+      : null
+    return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
   }
 
-  // No clean key-values — use the visual summary directly
-  const primary = summary
-    ? compactSummary(summary)
-    : `analisando ${simplifyFocus(state.probable_user_focus)}`
-  const shift = detectFocusShift(state, session)
-  const secondary = shift ?? (topics[0] ? `referência central: ${topics[0]}` : null)
-  return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
+  // visual_summary is the best source for chart observations
+  const summary = toThoughtLine(state.visual_summary)
+  if (summary) {
+    const intent = toThoughtLine(state.inferred_intent)
+    return {
+      primary:   finalize(summary),
+      secondary: intent && intent !== summary && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
+  }
+
+  const focus = simplifyFocus(state.probable_user_focus)
+  return {
+    primary:   finalize(focus ? `analisando ${focus}` : 'lendo o gráfico'),
+    secondary: null,
+    confidence
+  }
 }
 
 // ─── Surface: dashboard ───────────────────────────────────────────────────────
 
-function buildDashboardThought(
-  state: SemanticState,
-  session: SessionMemory,
-  confidence: number
-): IntermediateThought {
+function buildDashboardThought(state: SemanticState, confidence: number): IntermediateThought {
   const kv = state.key_values ?? {}
   const kvEntries = Object.entries(kv).slice(0, 2)
-  const app = state.app_identifier
 
   if (kvEntries.length) {
     const kvLine = kvEntries.map(([k, v]) => `${k}: ${v}`).join(' · ')
-    const primary = `métricas visíveis — ${kvLine}`
-    const shift = detectFocusShift(state, session)
-    return { primary: finalize(primary), secondary: shift ? finalize(shift) : null, confidence }
+    const primary = `métricas — ${kvLine}`
+    const intent = toThoughtLine(state.inferred_intent)
+    return {
+      primary:   finalize(primary),
+      secondary: intent && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
   }
 
-  const appPart = app ? ` no ${app}` : ''
-  const primary = `lendo o painel${appPart} — ${simplifyFocus(state.probable_user_focus)}`
-  const topic = state.pedagogical_topics[0]
+  const summary = toThoughtLine(state.visual_summary)
+  const intent  = toThoughtLine(state.inferred_intent)
   return {
-    primary: finalize(primary),
-    secondary: topic ? finalize(`lente principal: ${topic}`) : null,
+    primary:   finalize(summary ?? `lendo o painel${state.app_identifier ? ` do ${state.app_identifier}` : ''}`),
+    secondary: intent && intent !== summary && confidence >= 0.44 ? finalize(intent) : null,
     confidence
   }
 }
 
 // ─── Surface: text / document ─────────────────────────────────────────────────
 
-function buildTextThought(
-  state: SemanticState,
-  _session: SessionMemory,
-  confidence: number
-): IntermediateThought {
-  const topics = state.pedagogical_topics
-  const summary = state.visual_summary
-  const focusPart = simplifyFocus(state.probable_user_focus)
+function buildTextThought(state: SemanticState, confidence: number): IntermediateThought {
+  // visual_summary already says what the text is about
+  const summary = toThoughtLine(state.visual_summary)
+  const intent  = toThoughtLine(state.inferred_intent)
 
-  // Academic/educational document — lead with topic
-  if (topics.length >= 2) {
-    const primary = `tentando ligar ${topics[0]} com ${topics[1]}`
-    const secondary = summary ? `isso parece falar de ${compactSummary(summary)}` : null
-    return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null, confidence }
-  }
-
-  if (topics.length === 1) {
+  if (summary) {
     return {
-      primary: finalize(phraseForSingleTopic(state, topics[0])),
-      secondary: confidence >= 0.42 && focusPart ? finalize(phraseForImportantPart(state, focusPart)) : null,
+      primary:   finalize(summary),
+      secondary: intent && intent !== summary && confidence >= 0.44 ? finalize(intent) : null,
       confidence
     }
   }
 
-  // No clean topics — use summary directly
-  const gist = summary ? compactSummary(summary) : focusPart
-  const primary = gist ? `tentando entender ${gist}` : 'tentando entender melhor esse trecho'
-  return { primary: finalize(primary), secondary: null, confidence }
+  const topics = state.pedagogical_topics
+  if (topics.length >= 2) {
+    return {
+      primary:   finalize(`lendo sobre ${topics[0]} e ${topics[1]}`),
+      secondary: intent && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
+  }
+
+  if (topics.length === 1) {
+    return {
+      primary:   finalize(`lendo sobre ${topics[0]}`),
+      secondary: intent && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
+  }
+
+  const focus = simplifyFocus(state.probable_user_focus)
+  return {
+    primary:   finalize(focus ? `lendo — ${focus}` : 'lendo o texto'),
+    secondary: null,
+    confidence
+  }
 }
 
 // ─── Surface: unknown / generic ───────────────────────────────────────────────
 
-function buildGenericThought(
-  state: SemanticState,
-  session: SessionMemory,
-  confidence: number
-): IntermediateThought {
-  const shift = buildContextShift(state, session)
-  if (shift) return { ...shift, confidence }
+function buildGenericThought(state: SemanticState, confidence: number): IntermediateThought {
+  const summary = toThoughtLine(state.visual_summary)
+  const intent  = toThoughtLine(state.inferred_intent)
 
-  const app = state.app_identifier
+  if (summary) {
+    return {
+      primary:   finalize(summary),
+      secondary: intent && intent !== summary && confidence >= 0.44 ? finalize(intent) : null,
+      confidence
+    }
+  }
+
+  const app   = state.app_identifier
   const focus = simplifyFocus(state.probable_user_focus)
   const appPart = app ? ` no ${app}` : ''
-  const topic = state.pedagogical_topics[0]
 
   return {
-    primary: finalize(focus ? `tentando entender o que está em foco${appPart}: ${focus}` : `tentando entender melhor essa tela${appPart}`),
-    secondary: topic ? finalize(phraseForOrbitingTopic(state, topic)) : null,
+    primary:   finalize(focus ? `${focus}${appPart}` : `olhando a tela${appPart}`),
+    secondary: intent && confidence >= 0.44 ? finalize(intent) : null,
     confidence
   }
 }
@@ -240,174 +251,111 @@ function buildLowConfidenceThought(state: SemanticState, confidence: number): In
   const app = state.app_identifier
   const appPart = app ? ` (${app})` : ''
   return {
-    primary: finalize(`capturando o contexto${appPart} — ainda calibrando`),
+    primary: finalize(`calibrando leitura${appPart}`),
     secondary: state.surface_type !== 'unknown'
-      ? finalize(`parece tela de ${state.surface_type}, mas preciso de mais frames`)
+      ? finalize(`parece tela de ${state.surface_type}`)
       : null,
     confidence
   }
 }
 
-// ─── Context shift detection ──────────────────────────────────────────────────
+// ─── Error signal detection ───────────────────────────────────────────────────
 
-function buildContextShift(
-  state: SemanticState,
-  session: SessionMemory
-): Omit<IntermediateThought, 'confidence'> | null {
-  const previousEntry = session.recent_states.at(-2) ?? null
-  if (!previousEntry) return null
+type ErrorSignal = { blocker: string; type: string; cause: string | null }
 
-  const prevFocus = simplifyFocus(previousEntry.probable_user_focus)
-  const currFocus = simplifyFocus(state.probable_user_focus)
-  if (prevFocus === currFocus || state.change_summary === 'none') return null
-
-  const primary = buildShiftPrimary(prevFocus, currFocus, state)
-  const secondary = buildShiftSecondary(state)
-  return { primary: finalize(primary), secondary: secondary ? finalize(secondary) : null }
-}
-
-function detectFocusShift(state: SemanticState, session: SessionMemory): string | null {
-  const prev = session.recent_states.at(-2)
-  if (!prev) return null
-  const prevFocus = simplifyFocus(prev.probable_user_focus)
-  const currFocus = simplifyFocus(state.probable_user_focus)
-  if (prevFocus === currFocus || state.change_summary === 'none') return null
-  return `antes: ${prevFocus}`
-}
-
-function buildShiftPrimary(from: string, to: string, state: SemanticState): string {
-  const { surface_type, change_summary } = state
-
-  if (change_summary === 'major') {
-    if (surface_type === 'code') return `saiu de "${from}" e abriu "${to}"`
-    if (surface_type === 'graphic') return `viewport mudou — de "${from}" para "${to}"`
-    return phraseForShiftedFocus(state, to)
+function detectErrorSignal(text: string): ErrorSignal | null {
+  const n = text.toLowerCase()
+  if (/typeerror:.*not a function/.test(n)) {
+    return { blocker: 'chamada inválida — não é uma função', type: 'not-a-function', cause: 'valor chegando errado nesse ponto' }
   }
-
-  if (surface_type === 'document' || surface_type === 'text') {
-    return `acho que a parte importante agora é ${to}`
+  if (/cannot read properties of (undefined|null)/.test(n)) {
+    return { blocker: 'tentando acessar propriedade de valor nulo', type: 'undefined-access', cause: 'dado chega vazio antes de ser usado' }
   }
-  if (surface_type === 'graphic' || surface_type === 'dashboard') {
-    return `ele mudou o olhar para ${to}`
+  if (/referenceerror/.test(n)) {
+    return { blocker: 'nome usado antes de existir no escopo', type: 'reference-error', cause: null }
   }
-
-  return phraseForShiftedFocus(state, to)
-}
-
-function buildShiftSecondary(state: SemanticState): string | null {
-  const topic = state.pedagogical_topics[0]
-  if (state.surface_type === 'code') {
-    return topic ? `conceito em jogo: ${topic}` : null
+  if (/syntaxerror/.test(n)) {
+    return { blocker: 'erro de sintaxe impedindo execução', type: 'syntax-error', cause: null }
   }
-  if (state.surface_type === 'document' || state.surface_type === 'text') {
-    return null
+  if (/assert|expected.*received|failing test|test failed/.test(n)) {
+    return { blocker: 'teste falhando — expected não bateu', type: 'test-failure', cause: 'expectativa do teste divergiu da implementação' }
+  }
+  if (/\berror\b|\bexception\b|\btraceback\b|\bfalha\b/.test(n)) {
+    return { blocker: 'erro visível no output', type: 'generic-error', cause: null }
   }
   return null
+}
+
+function inferNextStepFromError(message: string): string | null {
+  const m = message.toLowerCase()
+  if (/not a function/.test(m))           return 'conferir o tipo do valor antes da chamada'
+  if (/cannot read|undefined|null/.test(m)) return 'rastrear de onde esse dado vem'
+  if (/referenceerror/.test(m))           return 'declarar ou importar antes de usar'
+  if (/syntaxerror/.test(m))              return 'achar a linha exata que o parser rejeita'
+  if (/expected|received/.test(m))        return 'alinhar o teste com a mudança mais recente'
+  return null
+}
+
+function inferNextStepFromType(type: string, _state: SemanticState): string | null {
+  switch (type) {
+    case 'not-a-function':   return 'alinhar o valor com o que a função espera'
+    case 'undefined-access': return 'validar de onde esse valor deveria vir'
+    case 'reference-error':  return 'declarar ou importar antes de usar'
+    case 'syntax-error':     return 'achar a linha que o parser está rejeitando'
+    case 'test-failure':     return 'alinhar a expectativa com a implementação'
+    default:                 return null
+  }
 }
 
 // ─── Terminal signal detection ────────────────────────────────────────────────
 
 function detectTerminalSignal(terminal: string): { summary: string; next: string } | null {
   const t = terminal.toLowerCase()
-  if (/tests? failed|✕|✗|● /.test(t)) {
-    return { summary: 'teste falhando no terminal', next: 'o diff entre expected e received vai mostrar onde quebrou' }
-  }
-  if (/build failed|error:/.test(t)) {
-    return { summary: 'build quebrando', next: 'a primeira linha de erro costuma apontar o arquivo exato' }
-  }
-  if (/tests? passed|✓|✔|all tests/.test(t)) {
-    return { summary: 'testes passando', next: 'próximo passo é checar coverage ou o próximo caso' }
-  }
-  if (/command not found|enoent/.test(t)) {
+  if (/tests? failed|✕|✗|● /.test(t))
+    return { summary: 'teste falhando no terminal', next: 'diff entre expected e received mostra onde quebrou' }
+  if (/build failed|error:/.test(t))
+    return { summary: 'build quebrando', next: 'primeira linha de erro aponta o arquivo exato' }
+  if (/tests? passed|✓|✔|all tests/.test(t))
+    return { summary: 'testes passando', next: 'próximo passo: coverage ou próximo caso' }
+  if (/command not found|enoent/.test(t))
     return { summary: 'comando ou arquivo não encontrado', next: 'checar se o pacote está instalado ou o path está certo' }
-  }
   return null
-}
-
-// ─── Error signal detection ───────────────────────────────────────────────────
-
-function detectErrorSignal(text: string): { blocker: string; type: string } | null {
-  const n = text.toLowerCase()
-  if (/typeerror:.*not a function/.test(n)) {
-    return { blocker: 'alguma chamada está quebrando nessa função', type: 'not-a-function' }
-  }
-  if (/cannot read properties of (undefined|null)/.test(n)) {
-    return { blocker: 'algum valor está chegando nulo onde o código espera objeto', type: 'undefined-access' }
-  }
-  if (/referenceerror/.test(n)) {
-    return { blocker: 'tem um nome sendo usado antes de existir no escopo', type: 'reference-error' }
-  }
-  if (/syntaxerror/.test(n)) {
-    return { blocker: 'tem um erro de sintaxe impedindo a execução', type: 'syntax-error' }
-  }
-  if (/assert|expected.*received|failing test|test failed/.test(n)) {
-    return { blocker: 'o teste está parando aqui — o expected não fechou', type: 'test-failure' }
-  }
-  if (/\berror\b|\bexception\b|\btraceback\b|\bfalha\b/.test(n)) {
-    return { blocker: 'tem um erro segurando esse fluxo', type: 'generic-error' }
-  }
-  return null
-}
-
-function inferCause(
-  error: ReturnType<typeof detectErrorSignal>,
-  state: SemanticState
-): string | null {
-  if (!error) return null
-  switch (error.type) {
-    case 'not-a-function':      return 'algum valor está sendo chamado como função sem ser'
-    case 'undefined-access':    return 'um dado está chegando vazio onde o código precisa de estrutura'
-    case 'reference-error':     return 'esse identificador ainda não entrou no escopo certo'
-    case 'syntax-error':        return 'tem algo mal formado que o parser não consegue ler'
-    case 'test-failure':        return state.change_summary === 'major'
-      ? 'o teste e a implementação saíram do mesmo contrato'
-      : 'a expectativa do teste não bate com o estado real'
-    default:                    return 'alguma suposição do fluxo não está fechando'
-  }
-}
-
-function inferNextStep(
-  error: ReturnType<typeof detectErrorSignal>,
-  state: SemanticState
-): string {
-  switch (error?.type) {
-    case 'not-a-function':   return 'alinhar o valor com o que a função espera receber'
-    case 'undefined-access': return 'validar de onde esse valor deveria vir antes da chamada'
-    case 'reference-error':  return 'declarar ou importar esse nome antes de usar'
-    case 'syntax-error':     return 'achar a linha exata que o parser está rejeitando'
-    case 'test-failure':     return 'alinhar a expectativa do teste com a mudança mais recente'
-    default: break
-  }
-  if (state.surface_type === 'document' || state.surface_type === 'text') {
-    return 'ligar essa leitura ao ponto exato que ele quer destravar'
-  }
-  return 'confirmar qual trecho da tela está guiando a dúvida'
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Compacts a visual_summary string (which can be verbose) into a short phrase.
- * The LLM produces summaries like "Viewing a code editor with a TypeError in the main function."
- * We want just the core read: "code editor com TypeError na função principal"
+ * Transforms a vision-generated description into a first-person observation.
+ * Strips narrator prefixes ("A tela mostra...", "O usuário está...") and
+ * returns a compact thought-style string.
  */
-function compactSummary(summary: string): string {
-  return summary
-    .replace(/^(viewing|looking at|the screen shows?|tela mostra|tela com)\s+/i, '')
-    .replace(/\.$/, '')
-    .split(/[.!?]/)[0]  // keep only the first sentence
-    .trim()
+function toThoughtLine(text: string | null | undefined): string | null {
+  if (!text) return null
+
+  const cleaned = text
+    .replace(/^(the screen (shows?|displays?)|tela (mostra|exibe|apresenta)|a tela (mostra|exibe))\s*/i, '')
+    .replace(/^(the user (is|seems to be)|o usuário (está|parece estar))\s*/i, '')
+    .replace(/^(looking at|viewing|reading|vendo|lendo|olhando para)\s*/i, '')
+    .replace(/^(it appears|parece que|ao que parece)\s*/i, '')
+    .split(/[.!?]/)[0]  // first sentence only
+    ?.trim()
     .toLowerCase()
-    .slice(0, 80)        // hard cap so it doesn't overflow the HUD
+    ?? null
+
+  if (!cleaned || cleaned.length <= 3) return null
+  return smartTrim(cleaned, 128)
 }
 
+
 function simplifyFocus(focus: string): string {
-  return focus
+  return smartTrim(
+    focus
     .replace(/^.*?:\s*/, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .toLowerCase()
-    .slice(0, 60)
+    .toLowerCase(),
+    72
+  )
 }
 
 function finalize(text: string): string {
@@ -417,77 +365,18 @@ function finalize(text: string): string {
     .trim()
 }
 
-function clamp(value: number): number {
-  return Math.max(0, Math.min(1, Number(value.toFixed(2))))
-}
+function smartTrim(value: string, max: number): string {
+  if (value.length <= max) return value
 
-function phraseForCentralConcept(state: SemanticState, topic: string): string {
-  return pickStableVariant(state, `concept:${topic}`, [
-    `o conceito central aqui parece ser ${topic}`,
-    `isso está girando em torno de ${topic}`,
-    `a ideia que mais organiza esse trecho é ${topic}`,
-    `o eixo dessa leitura aqui é ${topic}`
-  ])
-}
-
-function phraseForTopicFocus(state: SemanticState, topic: string): string {
-  return pickStableVariant(state, `topic-focus:${topic}`, [
-    `o foco parece estar em ${topic}`,
-    `isso parece puxar mais para ${topic}`,
-    `o centro da leitura aqui está em ${topic}`,
-    `o ponto que está mandando nessa tela é ${topic}`
-  ])
-}
-
-function phraseForSingleTopic(state: SemanticState, topic: string): string {
-  return pickStableVariant(state, `single-topic:${topic}`, [
-    `acho que o ponto central aqui é ${topic}`,
-    `isso aqui parece bater em ${topic}`,
-    `o assunto que está segurando esse trecho é ${topic}`,
-    `o núcleo dessa leitura parece ser ${topic}`
-  ])
-}
-
-function phraseForImportantPart(state: SemanticState, focusPart: string): string {
-  return pickStableVariant(state, `important-part:${focusPart}`, [
-    `a parte importante parece ser ${focusPart}`,
-    `o trecho que mais pesa aqui é ${focusPart}`,
-    `o olhar parece preso em ${focusPart}`,
-    `o ponto mais útil agora está em ${focusPart}`
-  ])
-}
-
-function phraseForOrbitingTopic(state: SemanticState, topic: string): string {
-  return pickStableVariant(state, `orbit:${topic}`, [
-    `talvez isso esteja girando em torno de ${topic}`,
-    `isso deve estar orbitando ${topic}`,
-    `o tema que parece amarrar essa tela é ${topic}`,
-    `provavelmente essa leitura encosta em ${topic}`
-  ])
-}
-
-function phraseForShiftedFocus(state: SemanticState, focus: string): string {
-  return pickStableVariant(state, `shift:${focus}`, [
-    `agora ele parece focado em ${focus}`,
-    `o olhar mudou para ${focus}`,
-    `nesse momento a atenção parece estar em ${focus}`,
-    `ele acabou puxando o foco para ${focus}`
-  ])
-}
-
-function pickStableVariant(state: SemanticState, salt: string, options: string[]): string {
-  const seed = [
-    state.surface_type,
-    state.app_identifier ?? '',
-    state.probable_user_focus,
-    state.visual_summary,
-    salt
-  ].join('|')
-
-  let hash = 0
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = ((hash * 31) + seed.charCodeAt(i)) >>> 0
+  const sliced = value.slice(0, max + 1)
+  const boundary = sliced.search(/\s+\S*$/)
+  if (boundary > Math.floor(max * 0.65)) {
+    return sliced.slice(0, boundary).trim()
   }
 
-  return options[hash % options.length] ?? options[0] ?? ''
+  return value.slice(0, max).trim()
+}
+
+function clamp(value: number): number {
+  return Math.max(0, Math.min(1, Number(value.toFixed(2))))
 }

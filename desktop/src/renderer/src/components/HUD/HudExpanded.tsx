@@ -17,6 +17,7 @@ import { ProfileIcon } from './ProfileIcon'
 import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { ChatSidebar } from './ChatSidebar'
+import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import type {
   AICostSnapshot,
@@ -2254,16 +2255,8 @@ export const HudExpanded = memo(function HudExpanded({
         <div className="flex-1" />
 
         {isStreaming && (
-          <div className="flex gap-1 items-center">
-            {[0, 1, 2].map(i => (
-              <motion.div
-                key={i}
-                className="w-1 h-1 rounded-full"
-                style={{ background: '#ffffff' }}
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.18 }}
-              />
-            ))}
+          <div className="flex items-center">
+            <GlasswingThinkingIndicator size={34} emphasis="strong" />
           </div>
         )}
 

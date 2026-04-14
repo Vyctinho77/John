@@ -18,8 +18,10 @@ interface CacheEntry {
 }
 
 const SUCCESS_TTL_MS = 45_000
-const FAILURE_TTL_MS = 10_000
-const REQUEST_TIMEOUT_MS = 1_200
+const FAILURE_TTL_MS = 5_000
+const REQUEST_TIMEOUT_MS = 7_000
+const PRIMARY_MAX_CHARS = 160
+const SECONDARY_MAX_CHARS = 190
 
 const cache = new Map<string, CacheEntry>()
 const inFlight = new Map<string, Promise<IntermediateThought | null>>()
@@ -77,8 +79,8 @@ async function requestCodexThought(
             '- soar humano e variado, sem frases feitas repetidas',
             '- usar apenas os fatos fornecidos',
             '- nunca inventar intenção, erro ou contexto não citado',
-            '- primary com até 110 caracteres',
-            '- secondary com até 140 caracteres ou null',
+            '- primary com até 150 caracteres',
+            '- secondary com até 180 caracteres ou null',
             '- não mencionar "heurística", "json", "modelo", "captura" ou "LLM"',
             '- não usar listas, aspas decorativas ou markdown'
           ].join('\n')
@@ -145,8 +147,8 @@ function parseThought(raw: string, confidence: number): IntermediateThought | nu
 
   try {
     const parsed = JSON.parse(jsonText) as { primary?: unknown; secondary?: unknown }
-    const primary = sanitizeLine(parsed.primary)
-    const secondary = parsed.secondary === null ? null : sanitizeLine(parsed.secondary)
+    const primary = sanitizeLine(parsed.primary, PRIMARY_MAX_CHARS)
+    const secondary = parsed.secondary === null ? null : sanitizeLine(parsed.secondary, SECONDARY_MAX_CHARS)
 
     if (!primary) return null
 
@@ -160,13 +162,15 @@ function parseThought(raw: string, confidence: number): IntermediateThought | nu
   }
 }
 
-function sanitizeLine(value: unknown): string | null {
+function sanitizeLine(value: unknown, maxChars: number): string | null {
   if (typeof value !== 'string') return null
-  const normalized = value
-    .replace(/\s+/g, ' ')
-    .replace(/^[-•]\s*/, '')
-    .trim()
-    .slice(0, 140)
+  const normalized = smartTrim(
+    value
+      .replace(/\s+/g, ' ')
+      .replace(/^[-•]\s*/, '')
+      .trim(),
+    maxChars
+  )
 
   return normalized || null
 }
@@ -192,7 +196,19 @@ function buildFingerprint(input: IntermediateThoughtCodexInput): string {
 }
 
 function trim(value: string, max: number): string {
-  return value.replace(/\s+/g, ' ').trim().slice(0, max)
+  return smartTrim(value.replace(/\s+/g, ' ').trim(), max)
+}
+
+function smartTrim(value: string, max: number): string {
+  if (value.length <= max) return value
+
+  const sliced = value.slice(0, max + 1)
+  const boundary = sliced.search(/\s+\S*$/)
+  if (boundary > Math.floor(max * 0.65)) {
+    return sliced.slice(0, boundary).trim()
+  }
+
+  return value.slice(0, max).trim()
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

@@ -615,7 +615,8 @@ export class SpotifyService {
     try {
       const token = await this.ensureValidToken()
       const res = await fetch('https://api.spotify.com/v1/me/player', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(8_000)
       })
 
       if (res.status === 429) {
@@ -640,7 +641,8 @@ export class SpotifyService {
       this.currentState = nextState
       if (changed) this._onState?.(nextState)
     } catch (err) {
-      console.error('[Spotify] Poll error:', err)
+      const isTransient = isNetworkError(err)
+      if (!isTransient) console.error('[Spotify] Poll error:', err)
     }
   }
 
@@ -706,6 +708,17 @@ export class SpotifyService {
 
     throw new SpotifyApiError('unknown', `Spotify API returned ${res.status}`)
   }
+}
+
+function isNetworkError(err: unknown): boolean {
+  if (err instanceof Error) {
+    const code = (err as NodeJS.ErrnoException & { code?: string }).code
+    if (code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'UND_ERR_SOCKET' || code === 'ECONNREFUSED' || code === 'ENOTFOUND') return true
+    if (err.name === 'TimeoutError' || err.name === 'AbortError') return true
+    const cause = (err as Error & { cause?: unknown }).cause
+    if (cause instanceof Error) return isNetworkError(cause)
+  }
+  return false
 }
 
 export const spotifyService = new SpotifyService()
