@@ -117,6 +117,7 @@ export function HUD() {
   const [screenshotMode, setScreenshotMode] = useState(false)
   const [pendingActionIds, setPendingActionIds] = useState<string[]>([])
   const prevVisual = useRef<HudVisual>('compact')
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
 
   // ── Keep activeChatIdRef in sync ──
@@ -528,6 +529,15 @@ export function HUD() {
         context: contextSnapshot
       })
 
+      // Kick off TTS in parallel with text streaming so audio is ready when text finishes
+      const voiceEnabled = settings?.featureFlags.voiceMode
+      const audioPromise: Promise<string | null> = voiceEnabled
+        ? window.elevenLabsAPI.speak(tutorResponse.content).catch(err => {
+            console.warn('[TTS] speak failed:', err instanceof Error ? err.message : err)
+            return null
+          })
+        : Promise.resolve(null)
+
       let accumulated = ''
       streamText(
         tutorResponse.content,
@@ -554,6 +564,15 @@ export function HUD() {
           setChunk('')
           setStreaming(false)
           void refreshPrivacyState()
+
+          // Play voice once text is displayed (audio likely already buffered)
+          void audioPromise.then(base64 => {
+            if (!base64) return
+            currentAudioRef.current?.pause()
+            const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
+            currentAudioRef.current = audio
+            void audio.play().catch(err => console.warn('[TTS] play failed:', err))
+          })
         }
       )
     } catch (error) {
@@ -793,6 +812,13 @@ export function HUD() {
                     voiceMode: !settings.featureFlags.voiceMode
                   }
                 })
+              }}
+              onTestVoice={async () => {
+                const base64 = await window.elevenLabsAPI.speak('Olá, sou o John. Tudo certo por aqui.')
+                currentAudioRef.current?.pause()
+                const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
+                currentAudioRef.current = audio
+                await audio.play()
               }}
               onSelectCaptureSource={source => {
                 if (!settings) return

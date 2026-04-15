@@ -1,5 +1,7 @@
+import { bridgeServer } from './bridge'
 import type {
   PerceptionContextSnapshot,
+  TradingViewConnectorState,
   TutorDomain,
   TutorMode,
   TutorRequest
@@ -63,7 +65,6 @@ function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
   const { semanticState, sessionMemory } = input.context
   const cc = semanticState.code_context
 
-  // Build rich context lines from vision data when available
   const contextParts: string[] = []
 
   if (cc) {
@@ -90,7 +91,6 @@ function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
     }
   }
 
-  // Fallback to basic context if no vision code_context
   if (!contextParts.length) {
     const cue = semanticState.detected_text || semanticState.probable_user_focus
     contextParts.push(`Foco visível: ${cue}`)
@@ -99,8 +99,6 @@ function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
   contextParts.push(`Mudança recente: ${sessionMemory.incremental_summary}`)
 
   const body = contextParts.join('\n')
-
-  // Smarter follow-ups based on what's visible
   const followUps: string[] = []
   if (cc?.errors.length) followUps.push('Explica esse erro')
   if (cc?.active_function) followUps.push(`O que ${cc.active_function} faz?`)
@@ -118,16 +116,75 @@ function buildCodeTutor(input: DomainTutorInput): DomainTutorOutput {
 
 function buildMarketTutor(input: DomainTutorInput): DomainTutorOutput {
   const { semanticState, sessionMemory } = input.context
+  const tradingViewCtx = bridgeServer.getContext('tradingview')
+  const tradingView = (tradingViewCtx?.data ?? null) as TradingViewConnectorState | null
+  const lines: string[] = [
+    'Trate isso como leitura de tela e contexto, não como chamada automática de compra ou venda.'
+  ]
+
+  if (tradingView?.symbol) {
+    lines.push(
+      `Ativo em foco: ${tradingView.symbol}${tradingView.timeframe ? ` no timeframe ${formatTradingViewTimeframe(tradingView.timeframe)}` : ''}.`
+    )
+  }
+
+  if (tradingView?.crosshairActive && tradingView.ohlc.close) {
+    lines.push(
+      `O usuário está apontando para uma vela específica${tradingView.hoveredCandleTime ? ` em ${tradingView.hoveredCandleTime}` : ''}. Leia essa vela primeiro: O ${tradingView.ohlc.open ?? '?'} | H ${tradingView.ohlc.high ?? '?'} | L ${tradingView.ohlc.low ?? '?'} | C ${tradingView.ohlc.close ?? '?'}.`
+    )
+  } else if (tradingView?.ohlc.close) {
+    lines.push(
+      `OHLC visível mais confiável: O ${tradingView.ohlc.open ?? '?'} | H ${tradingView.ohlc.high ?? '?'} | L ${tradingView.ohlc.low ?? '?'} | C ${tradingView.ohlc.close ?? '?'}.`
+    )
+  }
+
+  if (tradingView?.currentPrice) {
+    lines.push(
+      `Preço atual legível: ${tradingView.currentPrice}${tradingView.priceChange ? ` | variação ${tradingView.priceChange}` : ''}.`
+    )
+  }
+
+  if (tradingView?.candleDirection && tradingView.candleDirection !== 'unknown') {
+    lines.push(`Direção da candle em foco: ${translateCandleDirection(tradingView.candleDirection)}.`)
+  }
+
+  if (tradingView?.candleStructure) {
+    lines.push(`Estrutura da candle: ${tradingView.candleStructure}.`)
+  }
+
+  if (tradingView?.patternHints?.length) {
+    lines.push(`Pistas de padrão: ${tradingView.patternHints.join(', ')}.`)
+  }
+
+  if (tradingView?.contextualPatternHints?.length) {
+    lines.push(`Contexto entre velas: ${tradingView.contextualPatternHints.join(', ')}.`)
+  }
+
+  if (tradingView?.sequencePatternHints?.length) {
+    lines.push(`Sequência curta: ${tradingView.sequencePatternHints.join(', ')}.`)
+  }
+
+  if (tradingView?.indicatorValues && Object.keys(tradingView.indicatorValues).length) {
+    lines.push(
+      `Indicadores visíveis: ${Object.entries(tradingView.indicatorValues)
+        .slice(0, 6)
+        .map(([name, value]) => `${name}=${value}`)
+        .join(' | ')}.`
+    )
+  }
+
+  lines.push(`O trecho central do gráfico parece ser ${semanticState.probable_user_focus}.`)
+  lines.push(`Mudança recente no viewport: ${sessionMemory.incremental_summary}.`)
+  lines.push('Se a pergunta for sobre "essa vela", "essa candle", máxima, mínima, fechamento ou rejeição, responda usando primeiro o OHLC do conector e só complemente com leitura visual depois.')
+  lines.push('Se faltarem níveis exatos, seja honesto e descreva a estrutura visível sem inventar preço.')
+  lines.push('Se a leitura for simples, prefira responder como trader lendo o gráfico ao vivo: posição prática, motivo, gatilho que mudaria a leitura e pergunta curta sobre horizonte.')
 
   return {
     domain: 'market',
-    content: [
-      'Trate isso como leitura de tela e contexto, não como chamada automática de compra ou venda.',
-      `O trecho central do gráfico parece ser ${semanticState.probable_user_focus}.`,
-      `Mudança recente no viewport: ${sessionMemory.incremental_summary}.`,
-      'Se a leitura for simples, prefira responder como trader lendo o gráfico ao vivo: posição prática, motivo, gatilho que mudaria a leitura e pergunta curta sobre horizonte.'
-    ].join('\n'),
-    suggested_follow_ups: ['Explica o gráfico', 'O que você faria aqui?', 'Qual nível importa?', 'Resume a leitura'],
+    content: lines.join('\n'),
+    suggested_follow_ups: tradingView?.crosshairActive
+      ? ['Lê essa vela', 'Qual a máxima dela?', 'Qual o fechamento?', 'Resume a leitura']
+      : ['Explica o gráfico', 'O que você faria aqui?', 'Qual nível importa?', 'Resume a leitura'],
     warning: 'contexto de mercado deve ser tratado como estudo, não como sinal de compra ou venda'
   }
 }
@@ -176,7 +233,7 @@ function buildHomeworkTutor(input: DomainTutorInput): DomainTutorOutput {
   return {
     domain: 'homework',
     content: [
-      `Vou tratar isso como apoio de estudo, nao como atalho para cola pronta.`,
+      'Vou tratar isso como apoio de estudo, não como atalho para cola pronta.',
       `A parte central parece ser ${semanticState.probable_user_focus}.`,
       'Posso ajudar decompondo a questão, sugerindo como pensar e checando seu raciocínio antes da resposta final.'
     ].join('\n'),
@@ -198,5 +255,43 @@ function buildReadingTutor(input: DomainTutorInput): DomainTutorOutput {
         : 'Posso resumir, explicar termos e testar compreensão.'
     ].join('\n'),
     suggested_follow_ups: ['Resume o texto', 'Explica os termos', 'Faz perguntas de compreensão', 'Simplifica a linguagem']
+  }
+}
+
+function formatTradingViewTimeframe(timeframe: string): string {
+  switch (timeframe) {
+    case '1':
+      return '1m'
+    case '3':
+      return '3m'
+    case '5':
+      return '5m'
+    case '15':
+      return '15m'
+    case '30':
+      return '30m'
+    case '45':
+      return '45m'
+    case '60':
+      return '1h'
+    case '120':
+      return '2h'
+    case '240':
+      return '4h'
+    default:
+      return timeframe
+  }
+}
+
+function translateCandleDirection(direction: TradingViewConnectorState['candleDirection']): string {
+  switch (direction) {
+    case 'bullish':
+      return 'alta'
+    case 'bearish':
+      return 'baixa'
+    case 'neutral':
+      return 'neutra'
+    default:
+      return 'indefinida'
   }
 }

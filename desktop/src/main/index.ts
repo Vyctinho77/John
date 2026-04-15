@@ -61,8 +61,11 @@ import {
 } from './services/chat-store'
 import { bridgeServer } from './services/bridge'
 import { spotifyService } from './services/spotify'
+import { tradingViewService } from './services/tradingview'
 import { codexAuth, codexClient } from './auth/codex-singleton'
 import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
+import { maybeHandleTradingViewTutorRequest } from './services/tradingview-command-router'
+import { speakWithElevenLabs } from './services/elevenlabs'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -308,6 +311,8 @@ ipcMain.handle('perception:resume-sensitive-block', async () => {
 ipcMain.handle('tutor:respond', async (_e, request) => {
   const spotifyResponse = await maybeHandleSpotifyTutorRequest(request.prompt)
   if (spotifyResponse) return spotifyResponse
+  const tradingViewResponse = await maybeHandleTradingViewTutorRequest(request.prompt)
+  if (tradingViewResponse) return tradingViewResponse
   return generateTutorResponse(request)
 })
 
@@ -683,6 +688,26 @@ function looksLikeWeakGeneratedTitle(title: string): boolean {
   return /^(ajuda( com)?|conversa|novo chat|pergunta|duvida|duvida rapida|ideia|projeto|codigo|spotify)$/i.test(normalized)
 }
 
+// ─── ElevenLabs TTS ──────────────────────────────────────────────────────────
+
+ipcMain.handle('elevenlabs:has-key', () => {
+  return Boolean(process.env['ELEVENLABS_API_KEY']?.trim())
+})
+
+ipcMain.handle('elevenlabs:speak', async (_e, text: string): Promise<string> => {
+  const apiKey = process.env['ELEVENLABS_API_KEY']?.trim()
+  if (!apiKey) throw new Error('ELEVENLABS_API_KEY não configurada no .env')
+  try {
+    const buffer = await speakWithElevenLabs(text, apiKey)
+    console.log(`[ElevenLabs] TTS ok — ${buffer.length} bytes`)
+    return buffer.toString('base64')
+  } catch (err) {
+    console.error('[ElevenLabs] speak error:', err instanceof Error ? err.message : err)
+    throw err
+  }
+})
+
+
 // ─── Bridge (Biblioteca connectors) ──────────────────────────────────────────
 
 ipcMain.handle('bridge:get-statuses', () => {
@@ -692,6 +717,14 @@ ipcMain.handle('bridge:get-statuses', () => {
 ipcMain.handle('bridge:disconnect', (_e, id: string) => {
   bridgeServer.disconnect(id as import('../shared/perception.types').ConnectorID)
 })
+
+// ─── TradingView IPC ───────────────────────────────────────────────────────────
+
+ipcMain.handle('tradingview:open', () => tradingViewService.open())
+ipcMain.handle('tradingview:close', () => tradingViewService.close())
+ipcMain.handle('tradingview:get-status', () => tradingViewService.getState())
+ipcMain.handle('tradingview:set-symbol', (_e, symbol: string) => tradingViewService.setSymbol(symbol))
+ipcMain.handle('tradingview:set-timeframe', (_e, timeframe: string) => tradingViewService.setTimeframe(timeframe))
 
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 
@@ -823,6 +856,25 @@ app.whenReady().then(() => {
   spotifyService.onAuthChange(connected => {
     bridgeServer.setInternalStatus('spotify', connected)
   })
+  // Sync bridge with tokens already loaded from disk before onAuthChange was registered
+  bridgeServer.setInternalStatus('spotify', spotifyService.isAuthenticated())
+
+  tradingViewService.onStatusChange(state => {
+    bridgeServer.injectContext('tradingview', {
+      app: 'tradingview',
+      priority: 'high',
+      state: state.symbol
+        ? `${state.symbol}${state.timeframe ? ` · ${state.timeframe}` : ''}${state.currentPrice ? ` · ${state.currentPrice}` : ''}`
+        : state.title ?? 'tradingview aberto',
+      data: state,
+      timestamp: Date.now(),
+      sessionId: ''
+    })
+    bridgeServer.setInternalStatus('tradingview', state.connected)
+    hudWindow?.webContents.send('tradingview:status-update', state)
+  })
+  bridgeServer.setInternalStatus('tradingview', tradingViewService.getState().connected)
+
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createHudWindow()

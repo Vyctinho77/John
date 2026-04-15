@@ -14,3 +14,10 @@ Thumbs.db
 
 # Codex OAuth token — nunca commitar
 **/codex-auth.json
+
+# Environment secrets — nunca commitar
+desktop/.env
+
+# Local-only assets
+/glasswing_loading_indicator.html
+/desktop/por.traineddata

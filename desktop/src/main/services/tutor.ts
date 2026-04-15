@@ -10,7 +10,8 @@ import {
   composeResponse,
   inferWarning,
   formatVSCodeConnectorContext,
-  formatSpotifyConnectorContext
+  formatSpotifyConnectorContext,
+  formatTradingViewConnectorContext
 } from './tutor-prompt'
 import { bridgeServer } from './bridge'
 import {
@@ -91,8 +92,10 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
     })
     const vsCodeRaw    = bridgeServer.getContext('vscode')
     const spotifyRaw   = bridgeServer.getContext('spotify')
+    const tradingViewRaw = bridgeServer.getContext('tradingview')
     const vsCodeBlock  = vsCodeRaw  ? formatVSCodeConnectorContext(vsCodeRaw.data)   : undefined
     const spotifyBlock = spotifyRaw ? formatSpotifyConnectorContext(spotifyRaw.data) : undefined
+    const tradingViewBlock = tradingViewRaw ? formatTradingViewConnectorContext(tradingViewRaw.data) : undefined
 
     const sensitive = Boolean(domainOutput?.warning ?? baseWarning)
     const system    = buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen)
@@ -103,7 +106,8 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       [...relevantPersistentMemory, ...behaviorSummaryLines],
       offScreen,
       vsCodeBlock,
-      spotifyBlock
+      spotifyBlock,
+      tradingViewBlock
     )
     const history   = request.conversation.slice(0, -1)
     const imageDataUrl = context.screenshotDataUrl ?? null

@@ -1,7 +1,8 @@
 import { CodexAuthManager } from './CodexAuthManager'
 
-const BASE_URL = 'https://chatgpt.com/backend-api'
-const CODEX_RESPONSES_URL = `${BASE_URL}/codex/responses`
+const BASE_URL              = 'https://chatgpt.com/backend-api'
+const CODEX_RESPONSES_URL   = `${BASE_URL}/codex/responses`
+const VISION_RESPONSES_URL  = `${BASE_URL}/responses`   // supports image inputs
 
 // Modelos conhecidos do Codex com Plus, em ordem de preferência.
 const FALLBACK_MODELS = ['codex-mini-latest', 'o4-mini', 'o3-mini', 'gpt-4.1-mini']
@@ -17,6 +18,7 @@ export interface CodexRequestOptions {
   temperature?: number
   max_tokens?: number
   imageDataUrl?: string | null
+  signal?: AbortSignal
 }
 
 export class CodexClient {
@@ -120,11 +122,12 @@ export class CodexClient {
       return { role: message.role, content: message.content }
     })
 
-    const url = CODEX_RESPONSES_URL
+    const url = options.imageDataUrl ? VISION_RESPONSES_URL : CODEX_RESPONSES_URL
     console.log(`[Codex] chat -> ${url} model=${model} vision=${Boolean(options.imageDataUrl)}`)
 
     const res = await fetch(url, {
       method: 'POST',
+      signal: options.signal,
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',

@@ -10,6 +10,7 @@ import type {
   PrivacySnapshot,
   SpotifyActionPayload,
   SpotifyCommandResult,
+  TradingViewConnectorState,
   SessionMemory,
   TutorRequest,
   TutorResponse,
@@ -144,6 +145,18 @@ declare global {
       executeAction: (payload: SpotifyActionPayload) => Promise<SpotifyCommandResult>
       disconnect:    () => Promise<void>
       onStateUpdate: (cb: (state: SpotifyPlaybackState | null) => void) => () => void
+    }
+    tradingViewAPI: {
+      open: () => Promise<TradingViewConnectorState>
+      close: () => Promise<TradingViewConnectorState>
+      getStatus: () => Promise<TradingViewConnectorState>
+      setSymbol: (symbol: string) => Promise<TradingViewConnectorState>
+      setTimeframe: (timeframe: string) => Promise<TradingViewConnectorState>
+      onStatusUpdate: (cb: (state: TradingViewConnectorState) => void) => () => void
+    }
+    elevenLabsAPI: {
+      hasKey: () => Promise<boolean>
+      speak:  (text: string) => Promise<string>
     }
   }
 }

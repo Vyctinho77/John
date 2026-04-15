@@ -98,7 +98,7 @@ export class BridgeServer {
   }
 
   getStatuses(): ConnectorStatus[] {
-    const ids: ConnectorID[] = ['vscode', 'spotify']
+    const ids: ConnectorID[] = ['vscode', 'spotify', 'tradingview']
     return ids.map(id => ({
       id,
       connected: this.clients.has(id) || (this.internalStatus.get(id) ?? false),
@@ -121,7 +121,7 @@ export class BridgeServer {
     const match = url.match(/\/connect\/(\w+)/)
     if (!match) return null
     const id = match[1] as ConnectorID
-    return id === 'vscode' || id === 'spotify' ? id : null
+    return id === 'vscode' || id === 'spotify' || id === 'tradingview' ? id : null
   }
 }
 

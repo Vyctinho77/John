@@ -17,7 +17,7 @@ import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 // Vision LLM analyzer — replaces heuristic classification with multimodal AI
 // ---------------------------------------------------------------------------
 
-const VISION_TIMEOUT_MS = 12_000
+const VISION_TIMEOUT_MS = 28_000
 
 /**
  * Sends a screenshot to the configured Vision LLM and returns a structured
@@ -47,20 +47,24 @@ export async function analyzeScreenWithVision(
     )
 
     if (!result?.text && codexAuth.getStatus().authenticated) {
+      const abort = new AbortController()
       try {
         const resizedDataUrl = await resizeForVision(screenshotDataUrl)
         const text = await withTimeout(
           codexClient.chat({
             messages: [
-              { role: 'system',  content: VISION_SYSTEM_PROMPT },
-              { role: 'user',    content: prompt }
+              { role: 'system', content: VISION_SYSTEM_PROMPT },
+              { role: 'user',   content: prompt }
             ],
-            imageDataUrl: resizedDataUrl
+            imageDataUrl: resizedDataUrl,
+            signal: abort.signal
           }),
-          VISION_TIMEOUT_MS
+          VISION_TIMEOUT_MS,
+          abort
         )
         if (text) result = { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'codex-vision', text }
       } catch (codexErr) {
+        abort.abort()
         console.warn('[Vision] Codex vision fallback failed:', codexErr instanceof Error ? codexErr.message : codexErr)
       }
     }
@@ -419,9 +423,12 @@ function inferChangeFallback(previousText: string, currentText: string): ChangeS
   return 'major'
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms: number, abort?: AbortController): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('vision timeout')), ms)
+    const timer = setTimeout(() => {
+      abort?.abort()
+      reject(new Error('vision timeout'))
+    }, ms)
     promise.then(
       value => { clearTimeout(timer); resolve(value) },
       error => { clearTimeout(timer); reject(error) }

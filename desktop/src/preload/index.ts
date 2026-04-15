@@ -4,6 +4,7 @@ import type {
   AppSettings,
   ConnectorStatus,
   SpotifyActionPayload,
+  TradingViewConnectorState,
   TutorRequest,
   UserProfile
 } from '../shared/perception.types'
@@ -201,6 +202,11 @@ const codexAuthAPI = {
   chat:      (options: unknown): Promise<string> => ipcRenderer.invoke('codex-auth:chat', options),
 }
 
+const elevenLabsAPI = {
+  hasKey: (): Promise<boolean>    => ipcRenderer.invoke('elevenlabs:has-key'),
+  speak:  (text: string): Promise<string> => ipcRenderer.invoke('elevenlabs:speak', text)
+}
+
 import type { SpotifyPlaybackState } from '../main/services/spotify'
 
 const spotifyAPI = {
@@ -221,6 +227,24 @@ const spotifyAPI = {
   }
 }
 
+const tradingViewAPI = {
+  open: (): Promise<TradingViewConnectorState> =>
+    ipcRenderer.invoke('tradingview:open'),
+  close: (): Promise<TradingViewConnectorState> =>
+    ipcRenderer.invoke('tradingview:close'),
+  getStatus: (): Promise<TradingViewConnectorState> =>
+    ipcRenderer.invoke('tradingview:get-status'),
+  setSymbol: (symbol: string): Promise<TradingViewConnectorState> =>
+    ipcRenderer.invoke('tradingview:set-symbol', symbol),
+  setTimeframe: (timeframe: string): Promise<TradingViewConnectorState> =>
+    ipcRenderer.invoke('tradingview:set-timeframe', timeframe),
+  onStatusUpdate: (cb: (state: TradingViewConnectorState) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, state: TradingViewConnectorState) => cb(state)
+    ipcRenderer.on('tradingview:status-update', handler)
+    return () => ipcRenderer.removeListener('tradingview:status-update', handler)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
@@ -235,7 +259,9 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('bridgeAPI', bridgeAPI)
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
     contextBridge.exposeInMainWorld('spotifyAPI', spotifyAPI)
+    contextBridge.exposeInMainWorld('tradingViewAPI', tradingViewAPI)
     contextBridge.exposeInMainWorld('codexAuthAPI', codexAuthAPI)
+    contextBridge.exposeInMainWorld('elevenLabsAPI', elevenLabsAPI)
   } catch (e) {
     console.error(e)
   }
@@ -265,5 +291,9 @@ if (process.contextIsolated) {
   // @ts-ignore
   window.spotifyAPI = spotifyAPI
   // @ts-ignore
+  window.tradingViewAPI = tradingViewAPI
+  // @ts-ignore
   window.codexAuthAPI = codexAuthAPI
+  // @ts-ignore
+  window.elevenLabsAPI = elevenLabsAPI
 }

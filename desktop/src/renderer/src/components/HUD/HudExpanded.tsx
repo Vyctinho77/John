@@ -37,6 +37,7 @@ import type {
   PrivacySnapshot,
   SemanticState,
   SessionMemory,
+  TradingViewConnectorState,
   TypographyFontFamily,
   TypographyFontWeight,
   TutorResponse,
@@ -115,6 +116,7 @@ interface HudExpandedProps {
   onToggleAdvancedPerception: () => void
   onToggleCrashReporting: () => void
   onToggleVoiceMode: () => void
+  onTestVoice: () => Promise<void>
   onSelectCaptureSource: (source: CaptureSource | null) => void
   onDeleteLocalData: () => void
   onExportMemory: () => void
@@ -467,6 +469,7 @@ export const HudExpanded = memo(function HudExpanded({
   onToggleAdvancedPerception,
   onToggleCrashReporting,
   onToggleVoiceMode,
+  onTestVoice,
   onSelectCaptureSource,
   onDeleteLocalData,
   onExportMemory,
@@ -506,11 +509,15 @@ export const HudExpanded = memo(function HudExpanded({
   const [nameDraft, setNameDraft] = useState('')
   const [dailyCostDraft, setDailyCostDraft] = useState('')
   const [connectorStatuses, setConnectorStatuses] = useState<ConnectorStatus[]>([])
+  const [voiceTestState, setVoiceTestState] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
+  const [voiceTestError, setVoiceTestError] = useState<string | null>(null)
+  const [voiceKeyReady, setVoiceKeyReady] = useState<boolean | null>(null)
   const [installingVSCode, setInstallingVSCode] = useState(false)
   const [vscodePendingReload, setVscodePendingReload] = useState(false)
   const [vscodeInstallMsg, setVscodeInstallMsg] = useState<string | null>(null)
   const [spotifyAuthing, setSpotifyAuthing] = useState(false)
   const [spotifyState, setSpotifyState] = useState<SpotifyPlaybackState | null>(null)
+  const [tradingViewState, setTradingViewState] = useState<TradingViewConnectorState | null>(null)
   const [spotifyClientIdCard, setSpotifyClientIdCard] = useState(false)
   const [spotifyClientIdDraft, setSpotifyClientIdDraft] = useState('')
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
@@ -537,6 +544,11 @@ export const HudExpanded = memo(function HudExpanded({
   }, [])
 
   useEffect(() => {
+    window.tradingViewAPI.getStatus().then(setTradingViewState)
+    return window.tradingViewAPI.onStatusUpdate(setTradingViewState)
+  }, [])
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, streamingContent])
 
@@ -548,6 +560,12 @@ export const HudExpanded = memo(function HudExpanded({
   useEffect(() => {
     onSettingsOpenChange(settingsOpen)
   }, [settingsOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeSettingsTab === 'notifications') {
+      window.elevenLabsAPI.hasKey().then(setVoiceKeyReady).catch(() => setVoiceKeyReady(false))
+    }
+  }, [activeSettingsTab])
 
   useEffect(() => {
     if (settingsOpen && activeSettingsTab === 'api') {
@@ -1417,6 +1435,68 @@ export const HudExpanded = memo(function HudExpanded({
                 </div>
               )
             })()}
+
+            {(() => {
+              const connected = connectorStatuses.find(s => s.id === 'tradingview')?.connected ?? false
+              return (
+                <div className="flex flex-col items-center gap-2" style={{ width: 92 }}>
+                  <svg
+                    width="30"
+                    height="30"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                    style={{ color: 'rgba(255,255,255,0.9)' }}
+                  >
+                    <path
+                      d="M15.8654 8.2789c0 1.3541 -1.0978 2.4519 -2.452 2.4519 -1.354 0 -2.4519 -1.0978 -2.4519 -2.452 0 -1.354 1.0978 -2.4518 2.452 -2.4518 1.3541 0 2.4519 1.0977 2.4519 2.4519zM9.75 6H0v4.9038h4.8462v7.2692H9.75Zm8.5962 0H24l-5.1058 12.173h-5.6538z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>TradingView</span>
+                  <button
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => {
+                      if (connected) {
+                        void window.tradingViewAPI.close()
+                        return
+                      }
+                      void window.tradingViewAPI.open()
+                    }}
+                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50"
+                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: connected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: connected ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
+                  >
+                    {connected ? 'Fechar' : 'Abrir'}
+                  </button>
+                  {tradingViewState?.symbol && (
+                    <div className="text-center leading-tight" style={{ maxWidth: 120 }}>
+                      <span className="block text-[10px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                        {tradingViewState.symbol}
+                        {tradingViewState.timeframe ? ` · ${tradingViewState.timeframe}` : ''}
+                      </span>
+                      {tradingViewState.currentPrice && (
+                        <span className="block text-[10px]" style={{ color: 'rgba(255,255,255,0.56)' }}>
+                          {tradingViewState.currentPrice}
+                          {tradingViewState.priceChange ? ` · ${tradingViewState.priceChange}` : ''}
+                        </span>
+                      )}
+                      {tradingViewState.ohlc.close && (
+                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          {tradingViewState.crosshairActive ? 'vela sob o mouse' : 'última vela'}
+                          {tradingViewState.hoveredCandleTime ? ` · ${tradingViewState.hoveredCandleTime}` : ''}
+                        </span>
+                      )}
+                      {tradingViewState.candleStructure && (
+                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          {tradingViewState.candleStructure}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
           </div>
 
           {/* Spotify Client ID floating card */}
@@ -1580,12 +1660,67 @@ export const HudExpanded = memo(function HudExpanded({
             />
             <SettingsRow
               label="Voice mode"
-              value={settings.featureFlags.voiceMode ? 'Liberado' : 'Desligado'}
+              value={settings.featureFlags.voiceMode ? 'Ativado' : 'Desligado'}
               toggle={settings.featureFlags.voiceMode}
               muted={!settings.featureFlags.voiceMode}
               onClick={onToggleVoiceMode}
-              last
             />
+            {/* Voice status + test button */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <div style={{ minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <span
+                  className="text-[14px]"
+                  style={{ color: voiceKeyReady === false ? 'rgba(255,120,80,0.85)' : 'rgba(255,255,255,0.42)' }}
+                >
+                  {voiceKeyReady === null
+                    ? 'Voz: verificando…'
+                    : voiceKeyReady
+                      ? 'Voz: chave configurada'
+                      : 'Voz: ELEVENLABS_API_KEY não encontrada no .env'}
+                </span>
+                {settings.featureFlags.voiceMode && voiceKeyReady && (
+                  <button
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={async () => {
+                      setVoiceTestState('testing')
+                      setVoiceTestError(null)
+                      try {
+                        await onTestVoice()
+                        setVoiceTestState('ok')
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : String(err)
+                        setVoiceTestError(msg)
+                        setVoiceTestState('error')
+                        console.error('[Voice test]', msg)
+                      }
+                      setTimeout(() => setVoiceTestState('idle'), 3000)
+                    }}
+                    disabled={voiceTestState === 'testing'}
+                    className="text-[13px] px-3 py-1 rounded transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-40"
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      color: voiceTestState === 'ok'
+                        ? 'rgba(100,220,120,0.9)'
+                        : voiceTestState === 'error'
+                          ? 'rgba(255,100,80,0.9)'
+                          : 'rgba(255,255,255,0.7)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {voiceTestState === 'testing' ? '…'
+                      : voiceTestState === 'ok'    ? '✓ ok'
+                      : voiceTestState === 'error' ? '✗ falhou'
+                      : 'Testar'}
+                  </button>
+                )}
+              </div>
+              {voiceTestError && (
+                <p className="text-[12px] pb-2" style={{ color: 'rgba(255,100,80,0.85)' }}>
+                  {voiceTestError}
+                </p>
+              )}
+            </div>
           </div>
         </>
       )

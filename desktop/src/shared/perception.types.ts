@@ -215,6 +215,47 @@ export interface SpotifyCommandResult {
   errorCode?: 'not_authenticated' | 'no_active_device' | 'forbidden' | 'rate_limited' | 'not_found' | 'invalid_action' | 'unknown'
 }
 
+export interface TradingViewConnectorState {
+  connected: boolean
+  loggedIn: boolean
+  lowConfidence: boolean
+  url: string | null
+  title: string | null
+  symbol: string | null
+  exchange: string | null
+  timeframe: string | null
+  crosshairActive: boolean
+  hoveredCandleTime: string | null
+  ohlcSource: 'hovered' | 'last-visible' | 'unknown'
+  currentPrice: string | null
+  priceChange: string | null
+  ohlc: {
+    open: string | null
+    high: string | null
+    low: string | null
+    close: string | null
+  }
+  previousOhlc: {
+    open: string | null
+    high: string | null
+    low: string | null
+    close: string | null
+  } | null
+  previousCandleTime: string | null
+  candleDirection: 'bullish' | 'bearish' | 'neutral' | 'unknown'
+  candleStructure: string | null
+  patternHints: string[]
+  contextualPatternHints: string[]
+  sequencePatternHints: string[]
+  indicatorValues: Record<string, string>
+  layoutHints: string[]
+  watchlistVisible: boolean
+  indicatorsVisible: boolean
+  drawingToolsVisible: boolean
+  selectedPanel: string | null
+  lastObservedAt: number | null
+}
+
 export interface FeatureFlags {
   passiveSuggestions: boolean
   advancedPerception: boolean
@@ -335,7 +376,7 @@ export interface CaptureSource {
 
 // ─── Biblioteca / Connector types ────────────────────────────────────────────
 
-export type ConnectorID = 'vscode' | 'spotify'
+export type ConnectorID = 'vscode' | 'spotify' | 'tradingview'
 
 export interface ConnectorStatus {
   id: ConnectorID

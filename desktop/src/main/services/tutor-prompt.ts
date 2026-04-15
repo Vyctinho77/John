@@ -34,7 +34,8 @@ export function buildRemoteUserPrompt(
   relevantPersistentMemory: string[] = [],
   offScreen = false,
   vsCodeContext?: string,
-  spotifyContext?: string
+  spotifyContext?: string,
+  tradingViewContext?: string
 ): string {
   const { semanticState, sessionMemory } = context
   const keyValuesLine = formatKeyValues(semanticState.key_values)
@@ -78,6 +79,7 @@ export function buildRemoteUserPrompt(
       : '',
     vsCodeContext ?? '',
     spotifyContext ?? '',
+    tradingViewContext ?? '',
     domainBody ? `Domain guidance: ${domainBody}` : '',
     'Open with the main reading or recommendation first.',
     'Prioritize the next useful step before extra detail.',
@@ -711,6 +713,119 @@ export function formatSpotifyConnectorContext(data: unknown): string {
   lines.push('--- End Spotify context ---')
   return lines.join('\n')
 }
+
+export function formatTradingViewConnectorContext(data: unknown): string {
+  if (!data || typeof data !== 'object') return ''
+
+  const state = data as {
+    loggedIn?: boolean
+    lowConfidence?: boolean
+    url?: string | null
+    title?: string | null
+    symbol?: string | null
+    exchange?: string | null
+    timeframe?: string | null
+    crosshairActive?: boolean
+    hoveredCandleTime?: string | null
+    ohlcSource?: 'hovered' | 'last-visible' | 'unknown'
+    currentPrice?: string | null
+    priceChange?: string | null
+    ohlc?: {
+      open?: string | null
+      high?: string | null
+      low?: string | null
+      close?: string | null
+    }
+    previousOhlc?: {
+      open?: string | null
+      high?: string | null
+      low?: string | null
+      close?: string | null
+    } | null
+    previousCandleTime?: string | null
+    candleDirection?: 'bullish' | 'bearish' | 'neutral' | 'unknown'
+    candleStructure?: string | null
+    patternHints?: string[]
+    contextualPatternHints?: string[]
+    sequencePatternHints?: string[]
+    indicatorValues?: Record<string, string>
+    layoutHints?: string[]
+    watchlistVisible?: boolean
+    indicatorsVisible?: boolean
+    drawingToolsVisible?: boolean
+    selectedPanel?: string | null
+  }
+
+  const lines: string[] = ['--- TradingView (live connector) ---']
+  lines.push(`Session: ${state.loggedIn ? 'authenticated' : 'open without confirmed login'}`)
+  if (state.symbol) lines.push(`Symbol: ${state.symbol}`)
+  if (state.exchange) lines.push(`Exchange: ${state.exchange}`)
+  if (state.timeframe) lines.push(`Timeframe: ${state.timeframe}`)
+  if (state.crosshairActive) lines.push('Crosshair: active on chart')
+  if (state.hoveredCandleTime) lines.push(`Hovered candle time: ${state.hoveredCandleTime}`)
+  if (state.currentPrice) lines.push(`Current price: ${state.currentPrice}`)
+  if (state.priceChange) lines.push(`Price change: ${state.priceChange}`)
+  if (state.ohlc && (state.ohlc.open || state.ohlc.high || state.ohlc.low || state.ohlc.close)) {
+    lines.push(
+      `OHLC (${state.ohlcSource ?? 'unknown'}): O ${state.ohlc.open ?? '?'} | H ${state.ohlc.high ?? '?'} | L ${state.ohlc.low ?? '?'} | C ${state.ohlc.close ?? '?'}`
+    )
+  }
+  if (state.previousOhlc && (state.previousOhlc.open || state.previousOhlc.high || state.previousOhlc.low || state.previousOhlc.close)) {
+    lines.push(
+      `Previous candle${state.previousCandleTime ? ` (${state.previousCandleTime})` : ''}: O ${state.previousOhlc.open ?? '?'} | H ${state.previousOhlc.high ?? '?'} | L ${state.previousOhlc.low ?? '?'} | C ${state.previousOhlc.close ?? '?'}`
+    )
+  }
+  if (state.candleDirection && state.candleDirection !== 'unknown') {
+    lines.push(`Candle direction: ${state.candleDirection}`)
+  }
+  if (state.candleStructure) {
+    lines.push(`Candle structure: ${state.candleStructure}`)
+  }
+  if (state.patternHints?.length) {
+    lines.push(`Pattern hints: ${state.patternHints.join(', ')}`)
+  }
+  if (state.contextualPatternHints?.length) {
+    lines.push(`Contextual pattern hints: ${state.contextualPatternHints.join(', ')}`)
+  }
+  if (state.sequencePatternHints?.length) {
+    lines.push(`Sequence pattern hints: ${state.sequencePatternHints.join(', ')}`)
+  }
+  if (state.indicatorValues && Object.keys(state.indicatorValues).length) {
+    lines.push(
+      `Indicators: ${Object.entries(state.indicatorValues)
+        .slice(0, 8)
+        .map(([name, value]) => `${name}=${value}`)
+        .join(' | ')}`
+    )
+  }
+  if (state.title) lines.push(`Page: ${state.title}`)
+  if (state.url) lines.push(`URL: ${state.url}`)
+
+  const hints: string[] = []
+  if (state.watchlistVisible) hints.push('watchlist visible')
+  if (state.indicatorsVisible) hints.push('indicators visible')
+  if (state.drawingToolsVisible) hints.push('drawing tools visible')
+  if (state.selectedPanel) hints.push(`selected panel: ${state.selectedPanel}`)
+  if (state.layoutHints?.length) hints.push(`layout hints: ${state.layoutHints.join(', ')}`)
+  if (hints.length) lines.push(`Layout: ${hints.join(' | ')}`)
+  if (state.lowConfidence) lines.push('Confidence: low for some DOM fields — use screenshot/OCR to complement the read.')
+
+  lines.push('')
+  lines.push('TRADINGVIEW POLICY: Treat this as the active financial screen. Prefer this structured connector state over vague visual guesses for symbol, timeframe, price, OHLC, and indicators.')
+  lines.push('When crosshair is active, assume the OHLC and hovered candle time refer to the candle under the user pointer, not just the latest candle.')
+  lines.push('If connector values and screenshot intuition disagree, trust the connector for symbol, timeframe, OHLC, price, and visible indicator values.')
+  lines.push('Use screenshot and OCR as support for chart structure, candle behavior, zones, and anything not explicit in the connector.')
+  lines.push('MARKET RESPONSE STYLE: if the user asks about a specific candle, answer directly from OHLC first, then explain what that implies in plain trader language.')
+  lines.push('Use candleDirection, candleStructure, and patternHints when available to describe wick rejection, indecision, body strength, or impulse without overclaiming.')
+  lines.push('Use contextualPatternHints when available to talk about inside bar, outside bar, range expansion/contraction, or shift versus the previous candle.')
+  lines.push('Use sequencePatternHints when available to describe short continuation, failed continuation, or compression before expansion across the last 2 to 3 candles.')
+  lines.push('Do not pretend to know exact support/resistance levels if they are not explicit in the connector or clearly readable on screen.')
+  lines.push('If the user asks for maximum, minimum, close, rejection, range, or wick behavior, anchor the answer in the visible OHLC before giving interpretation.')
+  lines.push('Do not imply order placement or trade execution capabilities.')
+  lines.push('--- End TradingView context ---')
+  return lines.join('\n')
+}
+
 
 function formatMs(ms: number): string {
   const totalSec = Math.floor(ms / 1000)

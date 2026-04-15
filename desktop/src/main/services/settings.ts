@@ -19,7 +19,7 @@ const SETTINGS_PATH = join(app.getPath('userData'), 'app-settings.json')
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   passiveSuggestions: true,
   advancedPerception: false,
-  voiceMode: false,
+  voiceMode: true,
   crashReporting: false
 }
 

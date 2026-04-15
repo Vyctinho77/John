@@ -1,436 +1,209 @@
-# Plano Técnico — John Connector Library
+# Biblioteca
 
-## Visão Geral
+## Visao geral
 
-Uma biblioteca de conectores padronizada que expõe contexto de aplicativos externos pro John em tempo real. Cada conector é independente, o John consome tudo via uma interface única.
+A Biblioteca e a area do HUD que expoe conectores e integrações ao vivo do John. Hoje ela nao e um monorepo de conectores separados. Ela e uma superficie do app Electron que mostra o estado real de integracoes implementadas no processo main.
 
----
+No momento, a Biblioteca concentra:
 
-## Arquitetura
+- status do bridge com apps externos
+- controles e estado do Spotify
+- abertura e estado do TradingView
+- status do Codex OAuth
 
-```
-┌─────────────────────────────────────────┐
-│              John (Electron)             │
-│                                         │
-│  ┌─────────────┐    ┌─────────────────┐ │
-│  │ Context     │    │  John AI Core   │ │
-│  │ Manager     │───▶│  (processa +    │ │
-│  │ (main proc) │    │   responde)     │ │
-│  └──────┬──────┘    └─────────────────┘ │
-│         │ IPC                           │
-│  ┌──────▼──────┐                        │
-│  │  Bridge     │                        │
-│  │  Server     │                        │
-│  │ (localhost) │                        │
-└──┴──────┬──────┴────────────────────────┘
-          │ WebSocket / HTTP
-    ┌─────┴──────┬──────────────┐
-    │            │              │
-┌───▼───┐  ┌────▼────┐  ┌──────▼──────┐
-│VSCode │  │Spotify  │  │TradingView  │
-│Ext.   │  │Connector│  │Connector    │
-└───────┘  └─────────┘  └─────────────┘
-```
+Os conectores ativos hoje sao:
 
----
+- `vscode`
+- `spotify`
+- `tradingview`
 
-## Contrato Comum — AppContext
+## Arquitetura atual
 
-Todo conector publica esse tipo. O John sempre recebe nesse formato independente do app:
+### Bridge central
 
-```typescript
-// packages/types/src/index.ts
+O bridge roda no main process e centraliza contexto dos conectores em `desktop/src/main/services/bridge.ts`.
 
-export type AppID = 'vscode' | 'spotify' | 'tradingview' | 'browser'
+Ele mantem:
 
-export type ContextPriority = 'low' | 'medium' | 'high' | 'critical'
+- conexoes WebSocket para conectores externos, como VS Code
+- contexto injetado por conectores internos, como Spotify e TradingView
+- status consolidado para o renderer via IPC
 
-export interface AppContext<T = unknown> {
-  app: AppID
-  priority: ContextPriority
-  state: string           // descrição legível do estado atual
-  data: T                 // payload específico do app
+Porta usada:
+
+- `ws://127.0.0.1:42001`
+
+Formato base de contexto:
+
+```ts
+interface ConnectorContext {
+  app: 'vscode' | 'spotify' | 'tradingview'
+  priority: string
+  state: string
+  data: unknown
   timestamp: number
-  sessionId: string       // identifica a sessão contínua
-}
-
-export interface ConnectorCapabilities {
-  canRead: boolean        // lê contexto passivamente
-  canWrite: boolean       // executa ações no app
-  supportsStreaming: boolean
-}
-
-// Cada conector exporta isso
-export interface Connector {
-  id: AppID
-  capabilities: ConnectorCapabilities
-  getContext(): Promise<AppContext>
-  onContextChange(cb: (ctx: AppContext) => void): () => void // retorna unsubscribe
-  executeAction?(action: ConnectorAction): Promise<void>
-}
-
-export interface ConnectorAction {
-  type: string
-  payload: unknown
+  sessionId: string
 }
 ```
 
----
+### Conectores externos x internos
 
-## Estrutura de Pastas
+#### VS Code
 
-```
-john-connectors/
-├── packages/
-│   ├── types/               # contratos compartilhados
-│   │   └── src/index.ts
-│   │
-│   ├── bridge/              # servidor central no processo main do Electron
-│   │   └── src/
-│   │       ├── BridgeServer.ts
-│   │       ├── ContextManager.ts
-│   │       └── index.ts
-│   │
-│   ├── connector-vscode/    # extensão VSCode
-│   │   ├── src/
-│   │   │   ├── extension.ts
-│   │   │   ├── VSCodeConnector.ts
-│   │   │   └── collectors/
-│   │   │       ├── EditorCollector.ts
-│   │   │       ├── DiagnosticsCollector.ts
-│   │   │       ├── GitCollector.ts
-│   │   │       └── TerminalCollector.ts
-│   │   └── package.json
-│   │
-│   ├── connector-spotify/
-│   │   └── src/
-│   │       ├── SpotifyConnector.ts
-│   │       └── SpotifyClient.ts
-│   │
-│   └── connector-tradingview/
-│       └── src/
-│           └── TradingViewConnector.ts
-│
-├── package.json             # workspace root (pnpm)
-└── tsconfig.base.json
-```
+`vscode` e um conector externo. Ele se conecta ao bridge por WebSocket e publica contexto do editor, diagnosticos, git e terminal.
 
----
+#### Spotify
 
-## Bridge Server — Processo Main do Electron
+`spotify` e um conector interno. O estado e injetado no bridge pelo main process depois da autenticacao OAuth e do polling de playback state.
 
-Roda dentro do Node.js do Electron. Recebe contexto dos conectores e repassa pro John via IPC:
+#### TradingView
 
-```typescript
-// packages/bridge/src/BridgeServer.ts
-import { WebSocketServer, WebSocket } from 'ws'
-import { ipcMain } from 'electron'
-import type { AppContext, AppID } from '@john/types'
+`tradingview` e um conector interno. O app abre o site oficial do TradingView em uma `BrowserWindow` dedicada e observa o `BrowserView` para extrair estado do grafico.
 
-const BRIDGE_PORT = 42001 // porta local fixa
+## Tipos compartilhados
 
-export class BridgeServer {
-  private wss: WebSocketServer
-  private contexts = new Map<AppID, AppContext>()
-  private clients = new Map<AppID, WebSocket>()
+Os tipos compartilhados vivem em `desktop/src/shared/perception.types.ts`.
 
-  start() {
-    this.wss = new WebSocketServer({ port: BRIDGE_PORT, host: '127.0.0.1' })
+Campos relevantes:
 
-    this.wss.on('connection', (ws, req) => {
-      const appId = this.parseAppId(req.url)
-      if (!appId) return ws.close()
+- `ConnectorID`
+- `ConnectorStatus`
+- `SpotifyActionPayload`
+- `SpotifyCommandResult`
+- `TradingViewConnectorState`
+- `TutorAction`
+- `TutorResponse.actions`
 
-      this.clients.set(appId, ws)
-      console.log(`[Bridge] ${appId} conectado`)
+Isso permite que o John:
 
-      ws.on('message', (raw) => {
-        try {
-          const ctx: AppContext = JSON.parse(raw.toString())
-          this.onContextReceived(ctx)
-        } catch {}
-      })
+- responda a partir do estado dos conectores
+- execute acoes locais sem passar pelo fluxo normal do tutor
+- mostre chips de acao na HUD
 
-      ws.on('close', () => this.clients.delete(appId))
-    })
+## Exposicao para o renderer
 
-    // John pode pedir contexto via IPC
-    ipcMain.handle('bridge:getContext', (_, appId?: AppID) => {
-      if (appId) return this.contexts.get(appId) ?? null
-      return Object.fromEntries(this.contexts)
-    })
+O preload expoe tres APIs importantes em `desktop/src/preload/index.ts`:
 
-    ipcMain.handle('bridge:executeAction', async (_, appId: AppID, action) => {
-      const ws = this.clients.get(appId)
-      if (!ws) throw new Error(`${appId} não conectado`)
-      ws.send(JSON.stringify({ type: 'action', payload: action }))
-    })
-  }
-
-  private onContextReceived(ctx: AppContext) {
-    this.contexts.set(ctx.app, ctx)
-    // Notifica o renderer do Electron (John UI)
-    // mainWindow.webContents.send('bridge:contextUpdated', ctx)
-  }
-
-  private parseAppId(url = ''): AppID | null {
-    const match = url.match(/\/connect\/(\w+)/)
-    return match ? match[1] as AppID : null
-  }
-}
+```ts
+window.bridgeAPI
+window.spotifyAPI
+window.tradingViewAPI
+window.codexAuthAPI
 ```
 
----
+Essas APIs sao consumidas principalmente em:
 
-## Conector VSCode
+- `desktop/src/renderer/src/components/HUD/HudExpanded.tsx`
+- `desktop/src/renderer/src/components/HUD/HUD.tsx`
 
-### 1. Entry point da extensão
+## Biblioteca na HUD
 
-```typescript
-// packages/connector-vscode/src/extension.ts
-import * as vscode from 'vscode'
-import { VSCodeConnector } from './VSCodeConnector'
+A Biblioteca no HUD expandido mostra cards de integracao com estado em tempo real.
 
-let connector: VSCodeConnector
+### Spotify
 
-export function activate(ctx: vscode.ExtensionContext) {
-  connector = new VSCodeConnector()
-  connector.connect()
-  ctx.subscriptions.push({ dispose: () => connector.disconnect() })
-}
+Exibe:
 
-export function deactivate() {
-  connector?.disconnect()
-}
-```
+- conectado ou nao
+- faixa atual
+- artista
+- album
+- progresso
+- shuffle e repeat
+- dispositivo ativo
 
-### 2. VSCodeConnector — coleta e envia contexto
+Tambem oferece:
 
-```typescript
-// packages/connector-vscode/src/VSCodeConnector.ts
-import WebSocket from 'ws'
-import * as vscode from 'vscode'
-import { EditorCollector } from './collectors/EditorCollector'
-import { DiagnosticsCollector } from './collectors/DiagnosticsCollector'
-import { GitCollector } from './collectors/GitCollector'
-import { TerminalCollector } from './collectors/TerminalCollector'
-import type { AppContext } from '@john/types'
+- conectar
+- desconectar
+- play/pause
+- proxima
+- anterior
+- volume
+- shuffle
+- repeat
 
-const BRIDGE_URL = 'ws://127.0.0.1:42001/connect/vscode'
-const DEBOUNCE_MS = 300
+### TradingView
 
-export class VSCodeConnector {
-  private ws: WebSocket | null = null
-  private debounceTimer: NodeJS.Timeout | null = null
-  private disposables: vscode.Disposable[] = []
+Exibe:
 
-  private editor   = new EditorCollector()
-  private diag     = new DiagnosticsCollector()
-  private git      = new GitCollector()
-  private terminal = new TerminalCollector()
+- aberto ou fechado
+- simbolo atual
+- timeframe
+- preco atual
+- variacao
+- leitura resumida da candle atual ou da candle sob o mouse
 
-  connect() {
-    this.ws = new WebSocket(BRIDGE_URL)
-    this.ws.on('open', () => {
-      console.log('[John] VSCode connector ativo')
-      this.sendContext()
-      this.registerListeners()
-    })
-    this.ws.on('message', (raw) => this.handleAction(raw.toString()))
-    this.ws.on('close', () => setTimeout(() => this.connect(), 3000)) // reconecta
-  }
+Tambem oferece:
 
-  disconnect() {
-    this.disposables.forEach(d => d.dispose())
-    this.ws?.close()
-  }
+- abrir o TradingView no app
+- fechar a janela do TradingView
 
-  private registerListeners() {
-    this.disposables.push(
-      vscode.window.onDidChangeActiveTextEditor(() => this.scheduleUpdate()),
-      vscode.window.onDidChangeTextEditorSelection(() => this.scheduleUpdate()),
-      vscode.languages.onDidChangeDiagnostics(() => this.scheduleUpdate()),
-      vscode.workspace.onDidSaveTextDocument(() => this.scheduleUpdate()),
-    )
-  }
+### Codex OAuth
 
-  private scheduleUpdate() {
-    if (this.debounceTimer) clearTimeout(this.debounceTimer)
-    this.debounceTimer = setTimeout(() => this.sendContext(), DEBOUNCE_MS)
-  }
+Exibe:
 
-  private async sendContext() {
-    if (this.ws?.readyState !== WebSocket.OPEN) return
+- autenticado ou nao
+- email
+- tipo de plano
+- validade da sessao
 
-    const [editorCtx, diagCtx, gitCtx, terminalCtx] = await Promise.all([
-      this.editor.collect(),
-      this.diag.collect(),
-      this.git.collect(),
-      this.terminal.collect(),
-    ])
+## Como o tutor usa a Biblioteca
 
-    const ctx: AppContext<VSCodeData> = {
-      app: 'vscode',
-      priority: diagCtx.hasErrors ? 'high' : 'medium',
-      state: this.describeState(editorCtx, diagCtx),
-      data: { editor: editorCtx, diagnostics: diagCtx, git: gitCtx, terminal: terminalCtx },
-      timestamp: Date.now(),
-      sessionId: vscode.env.sessionId,
-    }
+O tutor nao le a Biblioteca visualmente. Ele consome o contexto dos conectores no main process.
 
-    this.ws.send(JSON.stringify(ctx))
-  }
+Fluxo:
 
-  private describeState(editor: any, diag: any): string {
-    if (diag.hasErrors) return `editando ${editor.filename} com ${diag.errorCount} erro(s)`
-    return `editando ${editor.filename} (${editor.language})`
-  }
+1. o bridge mantem o ultimo estado de cada conector
+2. `tutor.ts` consulta `bridgeServer.getContext(...)`
+3. `tutor-prompt.ts` formata blocos como `VS Code (live connector)`, `Spotify (live connector)` e `TradingView (live connector)`
+4. o prompt final prioriza esses dados estruturados sobre leitura vaga da screenshot
 
-  private handleAction(raw: string) {
-    // Futuramente: John pede pro VSCode abrir arquivo, navegar, etc
-    try {
-      const { type, payload } = JSON.parse(raw)
-      if (type === 'openFile') vscode.workspace.openTextDocument(payload.path)
-    } catch {}
-  }
-}
-```
+Regra importante:
 
-### 3. Collectors
+- dados estruturados do conector vencem inferencia visual para campos explicitos
+- visao e OCR entram como complemento
 
-```typescript
-// EditorCollector.ts — arquivo atual, cursor, seleção
-export class EditorCollector {
-  async collect() {
-    const editor = vscode.window.activeTextEditor
-    if (!editor) return null
-    return {
-      filename: editor.document.fileName.split('/').pop(),
-      filepath: editor.document.fileName,
-      language: editor.document.languageId,
-      cursorLine: editor.selection.active.line,
-      selectedText: editor.document.getText(editor.selection) || null,
-      visibleRange: {
-        start: editor.visibleRanges[0]?.start.line,
-        end: editor.visibleRanges[0]?.end.line,
-      },
-      // Contexto ao redor do cursor (±20 linhas) — o mais útil pro John
-      surroundingCode: this.getSurroundingCode(editor, 20),
-    }
-  }
+## Acoes locais
 
-  private getSurroundingCode(editor: vscode.TextEditor, radius: number) {
-    const line = editor.selection.active.line
-    const start = Math.max(0, line - radius)
-    const end = Math.min(editor.document.lineCount - 1, line + radius)
-    return editor.document.getText(new vscode.Range(start, 0, end, 999))
-  }
-}
+Spotify e TradingView ja possuem roteadores locais de comandos.
 
-// DiagnosticsCollector.ts — erros e warnings do LSP
-export class DiagnosticsCollector {
-  async collect() {
-    const editor = vscode.window.activeTextEditor
-    if (!editor) return { hasErrors: false, errorCount: 0, items: [] }
-    const diags = vscode.languages.getDiagnostics(editor.document.uri)
-    const errors = diags.filter(d => d.severity === vscode.DiagnosticSeverity.Error)
-    return {
-      hasErrors: errors.length > 0,
-      errorCount: errors.length,
-      items: diags.slice(0, 10).map(d => ({
-        message: d.message,
-        severity: d.severity,
-        line: d.range.start.line,
-        source: d.source,
-      }))
-    }
-  }
-}
+### Spotify
 
-// GitCollector.ts — branch, diff, status
-export class GitCollector {
-  async collect() {
-    const ext = vscode.extensions.getExtension('vscode.git')?.exports
-    const repo = ext?.getAPI(1)?.repositories[0]
-    if (!repo) return null
-    return {
-      branch: repo.state.HEAD?.name,
-      ahead: repo.state.HEAD?.ahead ?? 0,
-      behind: repo.state.HEAD?.behind ?? 0,
-      changedFiles: repo.state.workingTreeChanges.length,
-      stagedFiles: repo.state.indexChanges.length,
-    }
-  }
-}
+O roteador em `desktop/src/main/services/spotify-command-router.ts` intercepta pedidos como:
 
-// TerminalCollector.ts — último output do terminal
-export class TerminalCollector {
-  private lastOutput = ''
+- `proxima`
+- `pausa`
+- `continua`
+- `toca [nome]`
+- `muda a musica`
 
-  async collect() {
-    return { lastOutput: this.lastOutput }
-  }
+Quando a intencao e clara:
 
-  registerOutput(output: string) {
-    this.lastOutput = output.slice(-2000) // últimos 2000 chars
-  }
-}
-```
+- o comando e executado localmente
+- o tutor nao inventa que executou
+- a HUD pode renderizar `actions` clicaveis
 
----
+### TradingView
 
-## Como o John Consome
+O roteador em `desktop/src/main/services/tradingview-command-router.ts` intercepta pedidos como:
 
-No renderer React, via IPC:
+- `abre BTCUSDT`
+- `abre BTCUSDT em 15m`
+- `muda para 1h`
+- `resume o grafico`
+- `le essa vela`
 
-```typescript
-// john-app/src/hooks/useConnectorContext.ts
-import { ipcRenderer } from 'electron'
-import { useEffect, useState } from 'react'
-import type { AppContext, AppID } from '@john/types'
+## Limitacoes atuais
 
-export function useConnectorContext(appId: AppID) {
-  const [ctx, setCtx] = useState<AppContext | null>(null)
+- a Biblioteca depende do estado real dos conectores; ela nao simula integracoes ausentes
+- `spotify` controla playback, mas nao gerencia biblioteca pessoal nem playlists do usuario
+- `tradingview` e read-only com navegacao leve; ele nao envia ordens nem interage com corretora
+- `vscode` continua dependendo do conector externo estar instalado e conectado
 
-  useEffect(() => {
-    // Pega contexto atual
-    ipcRenderer.invoke('bridge:getContext', appId).then(setCtx)
+## Proximos docs relacionados
 
-    // Escuta atualizações
-    const handler = (_: any, incoming: AppContext) => {
-      if (incoming.app === appId) setCtx(incoming)
-    }
-    ipcRenderer.on('bridge:contextUpdated', handler)
-    return () => { ipcRenderer.off('bridge:contextUpdated', handler) }
-  }, [appId])
-
-  return ctx
-}
-
-// Uso no componente do John:
-const vscodeCtx = useConnectorContext('vscode')
-
-// Injeta no prompt do agente automaticamente:
-const systemPrompt = buildPrompt({ vscodeCtx, spotifyCtx, ... })
-```
-
----
-
-## Roadmap de Conectores
-
-| Conector      | Complexidade | Impacto         | Prioridade |
-|---------------|-------------|-----------------|------------|
-| VSCode        | Média       | 🔥 Altíssimo    | 1          |
-| Spotify       | Baixa       | Alto            | 2          |
-| Browser (ext) | Média       | Alto            | 3          |
-| TradingView   | Alta        | Alto (pra você) | 4          |
-
----
-
-## Por Onde Começar
-
-1. Cria o monorepo com pnpm workspaces
-2. Define o pacote `types` — esse contrato não muda depois
-3. Implementa o `BridgeServer` no main process do Electron
-4. Desenvolve a extensão VSCode com `EditorCollector` + `DiagnosticsCollector` primeiro (já resolve 80% dos casos)
-5. Testa injetando o contexto num prompt simples e vendo a diferença na qualidade da resposta
+- `docs/john-codex-oauth.md`
+- `docs/vscode.md`
+- `docs/spotify.md`
+- `docs/tradingview.md`

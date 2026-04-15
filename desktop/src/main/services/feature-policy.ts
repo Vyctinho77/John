@@ -13,8 +13,8 @@ export const FEATURE_POLICY: Record<keyof FeatureFlags, { rolloutPercentage: num
     reason: 'gradual beta rollout'
   },
   voiceMode: {
-    rolloutPercentage: 0,
-    reason: 'feature reserved for future release'
+    rolloutPercentage: 100,
+    reason: 'stable feature'
   },
   crashReporting: {
     rolloutPercentage: 15,
