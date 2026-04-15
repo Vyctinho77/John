@@ -46,9 +46,9 @@ function buildConversationSummary(existing: string | null, toCompress: Message[]
 }
 
 const FONT_FAMILY_MAP = {
-  'system-sans': '"SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
-  'system-serif': '"New York", Georgia, "Times New Roman", serif',
-  mono: '"SF Mono", "Cascadia Code", Consolas, monospace'
+  'system-sans': '"SF Pro Text", "SF Pro Display", system-ui, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+  'system-serif': '"New York", "Georgia Pro", Georgia, "Times New Roman", serif',
+  mono: '"SF Mono", "Cascadia Code", "Cascadia Mono", Consolas, monospace'
 } as const
 
 const FONT_WEIGHT_MAP = {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { TutorAction, TutorResponse } from '@shared/perception.types'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
@@ -91,6 +91,13 @@ export function HudSidebar({
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
+
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = '24px'
+    el.style.height = `${Math.min(el.scrollHeight, 96)}px`
+  }, [inputValue])
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onActivity()
@@ -293,7 +300,7 @@ export function HudSidebar({
                   style={{
                     color: 'rgba(255,255,255,0.88)',
                     fontSize: 15,
-                    lineHeight: 1.3,
+                    lineHeight: 1.5,
                     minHeight: 24,
                     maxHeight: 96,
                     opacity: isStreaming ? 0.45 : 1

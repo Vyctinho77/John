@@ -44,17 +44,19 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
   if (isSidebar) {
     const attachedLeft = sidebarSide === 'left'
     const border = attachedLeft
-      ? { borderRight: '1px solid rgba(255,255,255,0.07)' }
-      : { borderLeft:  '1px solid rgba(255,255,255,0.07)' }
+      ? { borderRight: '1px solid rgba(255,255,255,0.10)' }
+      : { borderLeft:  '1px solid rgba(255,255,255,0.10)' }
     const borderRadius = attachedLeft ? '0 14px 14px 0' : '14px 0 0 14px'
 
     return (
       <div
         className="relative overflow-hidden"
         style={{
-          width:        '100vw',
-          height:       '100vh',
-          background:   'linear-gradient(180deg, rgba(3,3,5,0.99) 0%, rgba(0,0,0,0.99) 100%)',
+          width:                '100vw',
+          height:               '100vh',
+          background:           'linear-gradient(180deg, rgba(8,8,12,0.88) 0%, rgba(4,4,6,0.88) 100%)',
+          backdropFilter:       'blur(24px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           borderRadius,
           ...border,
           boxShadow: attachedLeft
@@ -77,9 +79,11 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
     <motion.div
       className="relative overflow-hidden"
       style={{
-        background: 'linear-gradient(180deg, rgba(3,3,5,0.99) 0%, rgba(0,0,0,0.99) 100%)',
-        border: '1px solid rgba(255,255,255,0.045)',
-        boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.03)',
+        background:           'linear-gradient(180deg, rgba(8,8,12,0.88) 0%, rgba(4,4,6,0.88) 100%)',
+        backdropFilter:       'blur(24px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+        border: '1px solid rgba(255,255,255,0.10)',
+        boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'
       }}

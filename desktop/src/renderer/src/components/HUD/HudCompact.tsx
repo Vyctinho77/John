@@ -23,12 +23,8 @@ export const HudCompact = memo(function HudCompact({
   hasProactiveHint: _hasProactiveHint
 }: HudCompactProps) {
   const { handleMouseDown, wasDragged } = useDragWindow()
-  const label =
-    minimalMode
-      ? ''
-      : passiveSuggestion
-        ? `Sugestão: ${passiveSuggestion}`
-        : 'digite alguma coisa'
+  const label = minimalMode ? '' : passiveSuggestion ?? 'digite alguma coisa'
+  const isSuggestion = !minimalMode && Boolean(passiveSuggestion)
 
   return (
     <div
@@ -53,14 +49,20 @@ export const HudCompact = memo(function HudCompact({
       <div className="flex-1 px-4 overflow-hidden">
         {!minimalMode && (
           <span
-            className="block truncate text-[15px]"
+            className="flex items-center gap-1.5 truncate"
             style={{
               color: 'rgba(255,255,255,0.58)',
               letterSpacing: '-0.02em',
               fontSize: 'var(--hud-font-size, 15px)'
             }}
           >
-            {label}
+            {isSuggestion && (
+              <span
+                className="flex-shrink-0 w-1 h-1 rounded-full"
+                style={{ background: 'rgba(255,255,255,0.45)' }}
+              />
+            )}
+            <span className="truncate">{label}</span>
           </span>
         )}
       </div>

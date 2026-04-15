@@ -15,6 +15,13 @@ html, body, #root {
   background: transparent;
   -webkit-user-select: none;
   user-select: none;
+
+  /* Premium text rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-optical-sizing: auto;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
 /* Allow text selection inside content areas */

@@ -1,6 +1,8 @@
 ﻿import {
   memo,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   KeyboardEvent,
@@ -9,7 +11,14 @@
   type ReactNode
 } from 'react'
 import { motion } from 'framer-motion'
+import {
+  AlignLeft, AlertTriangle, BarChart2, BookOpen, Bug,
+  Code2, FileText, HelpCircle, Lightbulb, ListChecks,
+  MessageSquare, RotateCcw, Scale, Settings2, Zap,
+  type LucideIcon
+} from 'lucide-react'
 import { LogoMark } from './LogoMark'
+import { StageCompactIcon, StageIntermediateIcon, StageExpandedIcon } from './StageIcons'
 import { ConfigIcon } from './ConfigIcon'
 import { NotificationsIcon } from './NotificationsIcon'
 import { DataIcon } from './DataIcon'
@@ -52,6 +61,7 @@ import type {
 } from '@shared/memory.types'
 import type { SpotifyPlaybackState } from '../../../../preload/index.d'
 import { TutorActionChips } from './TutorActionChips'
+import { SpotifyBanner } from './SpotifyBanner'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -497,6 +507,7 @@ export const HudExpanded = memo(function HudExpanded({
 }: HudExpandedProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const greetingPhraseIdx = useRef(Math.floor(Math.random() * 4))
   const { handleMouseDown } = useDragWindow()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSpinTurns, setSettingsSpinTurns] = useState(0)
@@ -621,7 +632,7 @@ export const HudExpanded = memo(function HudExpanded({
   const topic = semanticState?.pedagogical_topics?.[0] ?? null
   const continuity = sessionMemory?.continuity_summary?.trim() ?? null
 
-  const buildGreeting = (): { label: string; cta: string; subtitle: string | null } => {
+  const greeting = useMemo((): { label: string; cta: string; subtitle: string | null } => {
     const hour = new Date().getHours()
     const name = displayName
     const returning = (sessionMemory?.frame_count ?? 0) > 0
@@ -630,7 +641,6 @@ export const HudExpanded = memo(function HudExpanded({
     const timeGreeting =
       hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : lateNight ? 'Ainda acordado?' : 'Boa noite'
 
-    // subtitle: último contexto de sessão
     const subtitle = continuity
       ? continuity.length > 72 ? continuity.slice(0, 72) + '…' : continuity
       : topic
@@ -654,7 +664,7 @@ export const HudExpanded = memo(function HudExpanded({
       ]
       return {
         label: timeGreeting + '.',
-        cta: phrases[new Date().getMinutes() % phrases.length],
+        cta: phrases[greetingPhraseIdx.current % phrases.length],
         subtitle
       }
     }
@@ -664,33 +674,67 @@ export const HudExpanded = memo(function HudExpanded({
       cta: `Olá, ${name}.`,
       subtitle
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayName, surface, topic, continuity, sessionMemory?.frame_count])
 
-  const buildSuggestionPills = (): string[] => {
+  const suggestionPills = useMemo((): { text: string; Icon: LucideIcon }[] => {
     const level = userProfile?.user_level ?? 'intermediate'
 
-    const byLevel: Record<string, string[]> = {
-      beginner:     ['Me explica do zero', 'Dá um exemplo prático', 'O que é isso?'],
-      intermediate: ['Como isso funciona?', 'Quais são as opções?', 'Me resume isso'],
-      advanced:     ['Quais os tradeoffs?', 'Quais os edge cases?', 'Mostra o código']
+    const byLevel: Record<string, { text: string; Icon: LucideIcon }[]> = {
+      beginner:     [
+        { text: 'Me explica do zero',    Icon: BookOpen    },
+        { text: 'Dá um exemplo prático', Icon: Lightbulb   },
+        { text: 'O que é isso?',         Icon: HelpCircle  }
+      ],
+      intermediate: [
+        { text: 'Como isso funciona?',   Icon: Settings2   },
+        { text: 'Quais são as opções?',  Icon: ListChecks  },
+        { text: 'Me resume isso',        Icon: FileText    }
+      ],
+      advanced:     [
+        { text: 'Quais os tradeoffs?',   Icon: Scale       },
+        { text: 'Quais os edge cases?',  Icon: AlertTriangle },
+        { text: 'Mostra o código',       Icon: Code2       }
+      ]
     }
 
     if (surface === 'code') {
       return level === 'advanced'
-        ? ['Explica esse código', 'O que pode dar errado?', 'Como melhorar isso?']
-        : ['O que esse código faz?', 'Tem algum bug aqui?', 'Explica linha a linha']
+        ? [
+            { text: 'Explica esse código',      Icon: Code2         },
+            { text: 'O que pode dar errado?',   Icon: AlertTriangle },
+            { text: 'Como melhorar isso?',      Icon: Zap           }
+          ]
+        : [
+            { text: 'O que esse código faz?',   Icon: Code2         },
+            { text: 'Tem algum bug aqui?',      Icon: Bug           },
+            { text: 'Explica linha a linha',    Icon: AlignLeft     }
+          ]
     }
     if (surface === 'document' || surface === 'text') {
-      return ['Resume isso', 'Quais os pontos principais?', 'Explica em termos simples']
+      return [
+        { text: 'Resume isso',               Icon: FileText      },
+        { text: 'Quais os pontos principais?', Icon: ListChecks   },
+        { text: 'Explica em termos simples', Icon: MessageSquare  }
+      ]
     }
     if (surface === 'dashboard') {
-      return ['O que esses números dizem?', 'Aponta alguma anomalia', 'Faz um resumo disso']
+      return [
+        { text: 'O que esses números dizem?', Icon: BarChart2    },
+        { text: 'Aponta alguma anomalia',     Icon: AlertTriangle },
+        { text: 'Faz um resumo disso',        Icon: FileText      }
+      ]
     }
     if (continuity) {
-      return ['Continuar de onde paramos', byLevel[level][0], byLevel[level][1]]
+      const fallback = byLevel[level] ?? byLevel.intermediate
+      return [
+        { text: 'Continuar de onde paramos', Icon: RotateCcw },
+        fallback[0],
+        fallback[1]
+      ]
     }
     return byLevel[level] ?? byLevel.intermediate
-  }
+  }, [userProfile?.user_level, surface, continuity])
 
   const inputPlaceholder = (): string => {
     if (surface === 'code') return 'o que quer entender sobre esse código?'
@@ -699,9 +743,6 @@ export const HudExpanded = memo(function HudExpanded({
     return 'o que está na sua tela agora?'
   }
 
-  const greeting = buildGreeting()
-  const suggestionPills = buildSuggestionPills()
-
   const syncInputHeight = () => {
     const input = inputRef.current
     if (!input) return
@@ -709,7 +750,7 @@ export const HudExpanded = memo(function HudExpanded({
     input.style.height = `${Math.min(input.scrollHeight, INPUT_MAX_HEIGHT)}px`
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     syncInputHeight()
   }, [inputValue])
 
@@ -1564,67 +1605,19 @@ export const HudExpanded = memo(function HudExpanded({
             </div>
           )}
 
-          {/* Spotify mini-player */}
+          {/* Spotify Now Playing banner */}
           {spotifyState && (
-            <div className="mt-4 px-1" style={{ maxWidth: 220 }}>
-              <p className="text-[12px] truncate font-medium" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                {spotifyState.trackName ?? '—'}
-              </p>
-              <p className="text-[11px] truncate mt-0.5" style={{ color: 'rgba(255,255,255,0.44)' }}>
-                {spotifyState.artistName ?? ''}
-              </p>
-              <div className="flex items-center gap-3 mt-2">
-                {/* Prev */}
-                <button onMouseDown={e => e.preventDefault()} onClick={() => void window.spotifyAPI.prev()}
-                  className="transition-opacity hover:opacity-80 active:opacity-50" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M2 2v10M12 2L5 7l7 5V2Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                {/* Play/Pause */}
-                <button onMouseDown={e => e.preventDefault()} onClick={() => void window.spotifyAPI.togglePlay()}
-                  className="transition-opacity hover:opacity-80 active:opacity-50" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                  {spotifyState.isPlaying ? (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M5 3h1.5v10H5V3ZM9.5 3H11v10H9.5V3Z" fill="currentColor"/>
-                    </svg>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      <path d="M4 2.5l10 5.5-10 5.5V2.5Z" fill="currentColor"/>
-                    </svg>
-                  )}
-                </button>
-                {/* Next */}
-                <button onMouseDown={e => e.preventDefault()} onClick={() => void window.spotifyAPI.next()}
-                  className="transition-opacity hover:opacity-80 active:opacity-50" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M12 2v10M2 2l7 5-7 5V2Z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                {/* Shuffle */}
-                <button onMouseDown={e => e.preventDefault()} onClick={() => void window.spotifyAPI.setShuffle(!spotifyState.shuffle)}
-                  className="transition-opacity hover:opacity-80 active:opacity-50"
-                  style={{ color: spotifyState.shuffle ? 'rgba(45,255,66,0.9)' : 'rgba(255,255,255,0.3)' }}>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M1 4h2.5a3 3 0 0 1 2.5 1.5M1 9h2.5a3 3 0 0 0 2.5-1.5M8 3.5l1.5-1.5L11 3.5M8 9.5l1.5 1.5L11 9.5M9.5 2v2.5a3 3 0 0 1-.5 1.5 3 3 0 0 1 .5 1.5V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-                {/* Repeat */}
-                <button onMouseDown={e => e.preventDefault()} onClick={() => {
-                  const next = spotifyState.repeat === 'off' ? 'context' : spotifyState.repeat === 'context' ? 'track' : 'off'
-                  void window.spotifyAPI.setRepeat(next)
-                }}
-                  className="transition-opacity hover:opacity-80 active:opacity-50"
-                  style={{ color: spotifyState.repeat !== 'off' ? 'rgba(45,255,66,0.9)' : 'rgba(255,255,255,0.3)', position: 'relative' }}>
-                  <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-                    <path d="M2 4h9M2 9h9M9.5 2l2 2-2 2M3.5 7l-2 2 2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  {spotifyState.repeat === 'track' && (
-                    <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 7, color: 'rgba(45,255,66,0.9)', fontWeight: 700, lineHeight: 1 }}>1</span>
-                  )}
-                </button>
-              </div>
-            </div>
+            <SpotifyBanner
+              state={spotifyState}
+              onTogglePlay={() => void window.spotifyAPI.togglePlay()}
+              onNext={() => void window.spotifyAPI.next()}
+              onPrev={() => void window.spotifyAPI.prev()}
+              onShuffle={() => void window.spotifyAPI.setShuffle(!spotifyState.shuffle)}
+              onRepeat={() => {
+                const next = spotifyState.repeat === 'off' ? 'context' : spotifyState.repeat === 'context' ? 'track' : 'off'
+                void window.spotifyAPI.setRepeat(next)
+              }}
+            />
           )}
 
           {vscodeInstallMsg && (
@@ -2369,20 +2362,26 @@ export const HudExpanded = memo(function HudExpanded({
         <div className="w-9 h-6 flex-shrink-0 flex items-center justify-center">
           <LogoMark className="h-[26px] w-[10px] text-white" />
         </div>
-        <div className="flex items-center gap-5">
-          {[1, 2, 3].map(stage => {
-            const onPress =
-              stage === 1 ? onShowStage1 : stage === 2 ? onShowStage2 : onShowStage3
-
+        <div className="flex items-center gap-4">
+          {([
+            { stage: 1, Icon: StageCompactIcon,      label: 'Compacto',     active: false },
+            { stage: 2, Icon: StageIntermediateIcon, label: 'Intermediário', active: false },
+            { stage: 3, Icon: StageExpandedIcon,     label: 'Expandido',    active: true  },
+          ] as const).map(({ stage, Icon, label, active }) => {
+            const onPress = stage === 1 ? onShowStage1 : stage === 2 ? onShowStage2 : onShowStage3
             return (
               <button
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
-                className="text-[11px] transition-opacity duration-150"
-                style={{ color: stage === 3 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.62)' }}
-                aria-label={`Abrir estágio ${stage}`}
+                className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
+                style={{ color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.38)' }}
+                aria-label={label}
               >
-                {stage}
+                <Icon className={
+                  stage === 1 ? 'w-[18px] h-auto' :
+                  stage === 2 ? 'w-[20px] h-auto' :
+                  'w-[14px] h-auto'
+                } />
               </button>
             )
           })}
@@ -2455,18 +2454,31 @@ export const HudExpanded = memo(function HudExpanded({
           </div>
 
           <div className="flex gap-2 flex-wrap justify-center">
-            {suggestionPills.map(pill => (
+            {suggestionPills.map(({ text, Icon }) => (
               <button
-                key={pill}
-                onMouseDown={e => { e.preventDefault(); onQuickPrompt(pill) }}
-                className="px-3.5 py-2 rounded-full text-[12px] transition-opacity duration-150 hover:opacity-80"
+                key={text}
+                onMouseDown={e => { e.preventDefault(); onQuickPrompt(text) }}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-full transition-all duration-150"
                 style={{
-                  background: 'rgba(255,255,255,0.05)',
-                  color: 'rgba(255,255,255,0.64)',
-                  border: '1px solid rgba(255,255,255,0.08)'
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.13)',
+                  color: 'rgba(255,255,255,0.78)',
+                  fontSize: 'calc(var(--hud-font-size, 15px) - 2px)',
+                  letterSpacing: '0.003em'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.95)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.13)'
+                  e.currentTarget.style.color = 'rgba(255,255,255,0.78)'
                 }}
               >
-                {pill}
+                <Icon size={12} strokeWidth={1.8} style={{ flexShrink: 0, opacity: 0.7 }} aria-hidden="true" />
+                {text}
               </button>
             ))}
           </div>
@@ -2633,7 +2645,6 @@ export const HudExpanded = memo(function HudExpanded({
                   fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
                   lineHeight: 1.35,
                   minHeight: INPUT_MIN_HEIGHT,
-                  height: INPUT_MIN_HEIGHT,
                   maxHeight: INPUT_MAX_HEIGHT
                 }}
                 placeholder={inputPlaceholder()}
@@ -2643,7 +2654,6 @@ export const HudExpanded = memo(function HudExpanded({
                 onChange={e => {
                   onInputChange(e.target.value)
                   onActivity()
-                  syncInputHeight()
                 }}
                 onKeyDown={handleKey}
                 onFocus={onInputFocus}

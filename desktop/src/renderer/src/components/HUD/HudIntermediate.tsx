@@ -1,8 +1,9 @@
-import { useEffect, useRef, KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useRef, KeyboardEvent } from 'react'
 import { CaptureIndicator } from './CaptureIndicator'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
+import { StageCompactIcon, StageIntermediateIcon, StageExpandedIcon } from './StageIcons'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import type {
   IntermediateThought,
@@ -56,6 +57,13 @@ export function HudIntermediate({
     return () => clearTimeout(t)
   }, [])
 
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = '24px'
+    el.style.height = `${Math.min(el.scrollHeight, 72)}px`
+  }, [inputValue])
+
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onActivity()
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -78,22 +86,26 @@ export function HudIntermediate({
         <div className="w-9 h-5 flex-shrink-0 flex items-center justify-center">
           <LogoMark className="h-[26px] w-[10px] text-white" />
         </div>
-        <div className="flex items-center gap-5">
-          {[1, 2, 3].map(stage => {
-            const onPress =
-              stage === 1 ? onShowStage1
-              : stage === 2 ? onShowStage2
-              : onShowStage3
-
+        <div className="flex items-center gap-4">
+          {([
+            { stage: 1, Icon: StageCompactIcon,      label: 'Compacto',     active: false },
+            { stage: 2, Icon: StageIntermediateIcon, label: 'Intermediário', active: true  },
+            { stage: 3, Icon: StageExpandedIcon,     label: 'Expandido',    active: false },
+          ] as const).map(({ stage, Icon, label, active }) => {
+            const onPress = stage === 1 ? onShowStage1 : stage === 2 ? onShowStage2 : onShowStage3
             return (
               <button
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
-                className="text-[11px] transition-opacity duration-150"
-                style={{ color: stage === 2 ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.62)' }}
-                aria-label={`Abrir estágio ${stage}`}
+                className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
+                style={{ color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.38)' }}
+                aria-label={label}
               >
-                {stage}
+                <Icon className={
+                  stage === 1 ? 'w-[18px] h-auto' :
+                  stage === 2 ? 'w-[20px] h-auto' :
+                  'w-[14px] h-auto'
+                } />
               </button>
             )
           })}
@@ -107,19 +119,6 @@ export function HudIntermediate({
         )}
 
         <CaptureIndicator isCapturing={isCapturing} isPrivate={isPrivate} onTogglePrivate={onTogglePrivate} />
-
-        <button
-          onMouseDown={e => { e.preventDefault(); onCollapse() }}
-          className="w-5 h-5 rounded-full flex items-center justify-center transition-colors duration-150"
-          style={{ color: 'rgba(255,255,255,0.25)' }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
-          aria-label="Minimizar"
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M2 6.5L5 3.5L8 6.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
       </div>
 
       {intermediateThought && !isStreaming && (
@@ -152,10 +151,14 @@ export function HudIntermediate({
               <button
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
                 onClick={e => { e.stopPropagation(); onShowStage3() }}
-                className="mt-3 text-[12px] transition-opacity duration-150 hover:opacity-80 self-start"
-                style={{ color: 'rgba(255,255,255,0.38)' }}
+                className="mt-3 self-start text-[12px] px-2.5 py-1 rounded-full transition-opacity duration-150 hover:opacity-80"
+                style={{
+                  color: 'rgba(255,255,255,0.62)',
+                  background: 'rgba(255,255,255,0.07)',
+                  border: '1px solid rgba(255,255,255,0.10)'
+                }}
               >
-                abrir resposta completa
+                ver resposta completa
               </button>
             )}
           </div>
@@ -185,7 +188,7 @@ export function HudIntermediate({
               style={{
                 color: 'rgba(255,255,255,0.88)',
                 fontSize: 'var(--hud-font-size, 15px)',
-                lineHeight: 1.3,
+                lineHeight: 1.5,
                 minHeight: 24,
                 maxHeight: 72
               }}
