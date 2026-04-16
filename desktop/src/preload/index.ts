@@ -227,6 +227,18 @@ const spotifyAPI = {
   }
 }
 
+const tickerAPI = {
+  getQuote: (): Promise<import('./index.d').TickerQuote | null> =>
+    ipcRenderer.invoke('ticker:get-quote'),
+  setSymbol: (sym: string): Promise<import('./index.d').TickerQuote | null> =>
+    ipcRenderer.invoke('ticker:set-symbol', sym),
+  onUpdate: (cb: (quote: import('./index.d').TickerQuote | null) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, q: import('./index.d').TickerQuote | null) => cb(q)
+    ipcRenderer.on('ticker:update', handler)
+    return () => ipcRenderer.removeListener('ticker:update', handler)
+  }
+}
+
 const tradingViewAPI = {
   open: (): Promise<TradingViewConnectorState> =>
     ipcRenderer.invoke('tradingview:open'),
@@ -260,6 +272,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
     contextBridge.exposeInMainWorld('spotifyAPI', spotifyAPI)
     contextBridge.exposeInMainWorld('tradingViewAPI', tradingViewAPI)
+    contextBridge.exposeInMainWorld('tickerAPI', tickerAPI)
     contextBridge.exposeInMainWorld('codexAuthAPI', codexAuthAPI)
     contextBridge.exposeInMainWorld('elevenLabsAPI', elevenLabsAPI)
   } catch (e) {
@@ -292,6 +305,8 @@ if (process.contextIsolated) {
   window.spotifyAPI = spotifyAPI
   // @ts-ignore
   window.tradingViewAPI = tradingViewAPI
+  // @ts-ignore
+  window.tickerAPI = tickerAPI
   // @ts-ignore
   window.codexAuthAPI = codexAuthAPI
   // @ts-ignore

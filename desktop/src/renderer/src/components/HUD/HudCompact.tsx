@@ -10,6 +10,7 @@ interface HudCompactProps {
   isCapturing: boolean
   minimalMode: boolean
   passiveSuggestion: string | null
+  fallbackLabel: string | null
   hasProactiveHint: boolean
 }
 
@@ -20,10 +21,11 @@ export const HudCompact = memo(function HudCompact({
   isCapturing,
   minimalMode,
   passiveSuggestion,
+  fallbackLabel,
   hasProactiveHint: _hasProactiveHint
 }: HudCompactProps) {
   const { handleMouseDown, wasDragged } = useDragWindow()
-  const label = minimalMode ? '' : passiveSuggestion ?? 'digite alguma coisa'
+  const label = minimalMode ? '' : passiveSuggestion ?? fallbackLabel ?? 'digite alguma coisa'
   const isSuggestion = !minimalMode && Boolean(passiveSuggestion)
 
   return (

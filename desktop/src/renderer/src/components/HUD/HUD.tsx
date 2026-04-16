@@ -116,6 +116,8 @@ export function HUD() {
   const [memoryFeedback, setMemoryFeedback] = useState<string | null>(null)
   const [screenshotMode, setScreenshotMode] = useState(false)
   const [pendingActionIds, setPendingActionIds] = useState<string[]>([])
+  const [spotifyState, setSpotifyState] = useState<import('../../../../preload/index.d').SpotifyPlaybackState | null>(null)
+  const [tickerQuote, setTickerQuote] = useState<import('../../../../preload/index.d').TickerQuote | null>(null)
   const prevVisual = useRef<HudVisual>('compact')
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -228,6 +230,16 @@ export function HUD() {
     window.proactiveAPI.getState().then(state => setProactiveHint(state.currentHint))
     const unsub = window.proactiveAPI.onHint(hint => setProactiveHint(hint))
     return () => unsub()
+  }, [])
+
+  useEffect(() => {
+    window.spotifyAPI.getState().then(setSpotifyState).catch(() => {})
+    return window.spotifyAPI.onStateUpdate(setSpotifyState)
+  }, [])
+
+  useEffect(() => {
+    window.tickerAPI.getQuote().then(setTickerQuote).catch(() => {})
+    return window.tickerAPI.onUpdate(setTickerQuote)
   }, [])
 
   useEffect(() => {
@@ -654,6 +666,13 @@ export function HUD() {
         ?? null
       : null
 
+  const compactFallbackLabel =
+    spotifyState?.isPlaying && spotifyState.trackName
+      ? `${spotifyState.trackName}${spotifyState.artistName ? ` — ${spotifyState.artistName}` : ''}`
+      : tickerQuote
+        ? `${tickerQuote.symbol} · ${tickerQuote.price} · ${tickerQuote.change}`
+        : null
+
   const typography = settings?.typography
   const hudTypographyStyle = typography
     ? {
@@ -675,6 +694,7 @@ export function HUD() {
               isCapturing={isCapturing}
               minimalMode={settings?.minimalMode ?? false}
               passiveSuggestion={passiveSuggestion}
+              fallbackLabel={compactFallbackLabel}
               hasProactiveHint={Boolean(proactiveHint)}
             />
           )}
@@ -697,6 +717,7 @@ export function HUD() {
               isCapturing={isCapturing}
               isPrivate={privateMode}
               onTogglePrivate={handleTogglePrivate}
+              voiceEnabled={settings?.featureFlags.voiceMode ?? false}
               onShowStage1={collapse}
               onShowStage2={showIntermediate}
               onShowStage3={showExpanded}

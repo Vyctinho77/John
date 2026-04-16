@@ -94,6 +94,7 @@ export interface ProactiveState {
   currentHint: ProactiveHint | null
   recentHints: ProactiveHint[]
   cooldownUntil: number
+  ignoredStreak: number
   lastUserActivityAt: number
   lastActivityType: ProactiveActivityType | null
   lastUserSubmitAt: number | null

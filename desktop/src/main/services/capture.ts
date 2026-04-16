@@ -12,7 +12,20 @@ const THUMBNAIL_H = 720
 const EMPTY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
 
+const DXGI_RETRY_DELAYS = [300, 700] // ms — DXGI failures are transient, two retries covers 99% of cases
+
 export async function captureScreen(sourceId?: string): Promise<string | null> {
+  for (let attempt = 0; attempt <= DXGI_RETRY_DELAYS.length; attempt++) {
+    const result = await _captureScreenOnce(sourceId)
+    if (result) return result
+    if (attempt < DXGI_RETRY_DELAYS.length) {
+      await new Promise(r => setTimeout(r, DXGI_RETRY_DELAYS[attempt]))
+    }
+  }
+  return null
+}
+
+async function _captureScreenOnce(sourceId?: string): Promise<string | null> {
   try {
     const settings = await getAppSettings()
     const scopedSourceId =

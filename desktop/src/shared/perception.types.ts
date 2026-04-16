@@ -280,6 +280,11 @@ export interface TypographySettings {
   fontWeight: TypographyFontWeight
 }
 
+export interface HudPositionSettings {
+  x: number
+  y: number
+}
+
 export interface AppSettings {
   telemetryOptIn: boolean
   alwaysVisible: boolean
@@ -290,6 +295,8 @@ export interface AppSettings {
   captureScope: CaptureScopeSettings
   typography: TypographySettings
   spotifyClientId: string
+  tickerSymbol: string
+  hudPosition: HudPositionSettings | null
   updatedAt: number
 }
 
@@ -382,6 +389,7 @@ export interface ConnectorStatus {
   id: ConnectorID
   connected: boolean
   connectedAt: number | null
+  message?: string | null
 }
 
 export interface PerceptionConfig {

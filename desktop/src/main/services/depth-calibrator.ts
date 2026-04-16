@@ -135,6 +135,8 @@ export function calibrateDepth(signal: DepthSignal): DepthCalibration {
 
   // ─── Cross-session calibration from behavior patterns ──────────────────────
 
+  let behaviorPatternOverrode = false
+
   if (behaviorPattern && !wantsSimplification && !wantsDepth) {
     const { simplification_requests, depth_requests, preferred_mode_signal } = behaviorPattern
 
@@ -142,17 +144,31 @@ export function calibrateDepth(signal: DepthSignal): DepthCalibration {
       effectiveLevel = 'beginner'
       effectiveStyle = 'step_by_step'
       reason = `cross-session: ${simplification_requests} simplification requests`
+      behaviorPatternOverrode = true
     } else if (depth_requests >= DEPTH_PERSIST_THRESHOLD) {
       // Only raise to intermediate if profile says beginner; raise to advanced
       // only if already intermediate.
       effectiveLevel = profile.user_level === 'beginner' ? 'intermediate' : 'advanced'
       if (effectiveStyle === 'step_by_step') effectiveStyle = 'direct'
       reason = `cross-session: ${depth_requests} depth requests`
+      behaviorPatternOverrode = true
     }
 
     if (preferred_mode_signal && !styleSignal.style) {
       effectiveStyle = modeToStyle(preferred_mode_signal) ?? effectiveStyle
       reason += ' + preferred_mode_signal from history'
+      behaviorPatternOverrode = true
+    }
+  }
+
+  // ─── Close the loop: use the inferred mode as the style default when nothing
+  //     else has overridden it. This ensures calibrateDepth(modeUsed) isn't a
+  //     no-op — the mode inferMode resolved becomes the effective style baseline.
+  if (!wantsSimplification && !wantsDepth && !styleSignal.style && !behaviorPatternOverrode) {
+    const modeStyle = modeToStyle(signal.modeUsed)
+    if (modeStyle && modeStyle !== effectiveStyle) {
+      effectiveStyle = modeStyle
+      reason += ' + modeUsed as style baseline'
     }
   }
 

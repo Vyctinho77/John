@@ -7,6 +7,7 @@ import type {
   CaptureScopeSettings,
   FeatureFlags,
   FeaturePolicySnapshot,
+  HudPositionSettings,
   TypographySettings
 } from '../../shared/perception.types'
 import {
@@ -46,6 +47,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   captureScope: DEFAULT_CAPTURE_SCOPE,
   typography: DEFAULT_TYPOGRAPHY,
   spotifyClientId: '',
+  tickerSymbol: '',
+  hudPosition: null,
   updatedAt: Date.now()
 }
 
@@ -172,6 +175,8 @@ function normalizeStoredSettings(settings: Partial<StoredSettings>): StoredSetti
       fontWeight: settings.typography?.fontWeight ?? DEFAULT_TYPOGRAPHY.fontWeight
     },
     spotifyClientId: typeof settings.spotifyClientId === 'string' ? settings.spotifyClientId : '',
+    tickerSymbol: typeof settings.tickerSymbol === 'string' ? settings.tickerSymbol : '',
+    hudPosition: normalizeHudPosition(settings.hudPosition),
     featureFlags: resolveEffectiveFeatureFlags(
       installationId,
       requestedFeatureFlags
@@ -193,8 +198,18 @@ function toPublicSettings(settings: StoredSettings): AppSettings {
     captureScope: settings.captureScope,
     typography: settings.typography,
     spotifyClientId: settings.spotifyClientId,
+    tickerSymbol: settings.tickerSymbol,
+    hudPosition: settings.hudPosition,
     updatedAt: settings.updatedAt
   }
+}
+
+function normalizeHudPosition(value: unknown): HudPositionSettings | null {
+  if (!value || typeof value !== 'object') return null
+  const maybe = value as { x?: unknown; y?: unknown }
+  if (typeof maybe.x !== 'number' || typeof maybe.y !== 'number') return null
+  if (!Number.isFinite(maybe.x) || !Number.isFinite(maybe.y)) return null
+  return { x: Math.round(maybe.x), y: Math.round(maybe.y) }
 }
 
 function normalizeDailyCostLimit(value: unknown): number | null {

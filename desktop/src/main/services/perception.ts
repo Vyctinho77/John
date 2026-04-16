@@ -37,7 +37,7 @@ import type {
 //   ↑                                                              │
 //   └──────── analysis complete, cooldown 8s ──────────────────────┘
 //
-// IDLE:      poll every 12s  (cheap hash-only check)
+// IDLE:      poll every 20s base, up to 40s after 5+ unchanged cycles (adaptive)
 // WATCHING:  poll every 2s   (cheap hash-only, waiting for settle)
 // SETTLED:   run full analyzeOnce(), then → IDLE with cooldown
 // ---------------------------------------------------------------------------
@@ -45,7 +45,10 @@ import type {
 type PerceptionPhase = 'idle' | 'watching' | 'settled' | 'analyzing'
 
 const FAST_POLL_MS = 2_000
-const IDLE_POLL_MS = 12_000
+const IDLE_POLL_MS = 20_000
+const IDLE_POLL_MAX_MS = 40_000        // ceiling for adaptive throttling
+const IDLE_THROTTLE_AFTER = 5         // consecutive unchanged cycles before stepping up
+const IDLE_THROTTLE_STEP_MS = 5_000   // how much to add per extra unchanged cycle
 const POST_ANALYSIS_COOLDOWN_MS = 8_000
 const SETTLE_THRESHOLD = 2
 const MAX_WATCHING_WITHOUT_SETTLE = 15 // safety: force analysis after 30s of watching
@@ -93,11 +96,11 @@ export function setPrivateMode(enabled: boolean): void {
 }
 
 function getPhaseInterval(): number {
-  switch (phase) {
-    case 'watching': return FAST_POLL_MS
-    case 'idle': return IDLE_POLL_MS
-    default: return IDLE_POLL_MS
-  }
+  if (phase === 'watching') return FAST_POLL_MS
+  // Adaptive idle: step up interval for every unchanged cycle beyond the threshold,
+  // capped at IDLE_POLL_MAX_MS. Resets to base whenever the screen changes.
+  const extra = Math.max(0, consecutiveUnchanged - IDLE_THROTTLE_AFTER) * IDLE_THROTTLE_STEP_MS
+  return Math.min(IDLE_POLL_MS + extra, IDLE_POLL_MAX_MS)
 }
 
 function scheduleNextPoll(): void {
@@ -128,10 +131,11 @@ async function pollFrame(): Promise<void> {
   // --- State transitions ---
 
   if (hashChanged || titleChanged) {
-    // Screen or app changed — enter watching mode
+    // Screen or app changed — enter watching mode, reset adaptive throttle
     appSwitchDetected = titleChanged
     stableFrameCount = 0
     watchingPollCount = 0
+    consecutiveUnchanged = 0
     pendingFrame = frame
     lastFrameHash = frame.hash
     lastWindowTitle = frame.windowTitle
@@ -263,8 +267,17 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
       return snapshot
     }
 
-    // Run OCR in parallel — it serves as fallback and supplies detected_text
-    const perception = await recognizeImage(dataUrl)
+    // Skip OCR when Vision LLM is enabled and the previous frame was a graphic
+    // surface. Tesseract produces near-zero-confidence output on charts/images,
+    // and Vision can read the frame directly without needing OCR text as input.
+    // First graphic frame still runs OCR (latestSnapshot is null or has a
+    // different surface) — the skip kicks in from the second cycle onward.
+    const prevSurface = latestSnapshot?.semanticState.surface_type
+    const skipOcr = config.useVisionLLM && prevSurface === 'graphic'
+
+    const perception: PerceptionResult = skipOcr
+      ? { rawText: '', confidence: 0, regions: [], capturedAt: Date.now() }
+      : await recognizeImage(dataUrl)
 
     // --- Vision LLM path (primary) ---
     let semanticState: SemanticState | null = null

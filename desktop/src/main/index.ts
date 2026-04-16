@@ -66,6 +66,7 @@ import { codexAuth, codexClient } from './auth/codex-singleton'
 import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
 import { maybeHandleTradingViewTutorRequest } from './services/tradingview-command-router'
 import { speakWithElevenLabs } from './services/elevenlabs'
+import { tickerService } from './services/ticker-service'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -73,15 +74,32 @@ let screenshotModeTimer: ReturnType<typeof setTimeout> | null = null
 
 const HUD_COMPACT = { width: 488, height: 55 }
 const SCREENSHOT_MODE_DURATION_MS = 30_000
+const HUD_MARGIN = 24
 
-function getInitialPosition(width: number) {
+function getInitialPosition(
+  width: number,
+  height: number,
+  settings: Awaited<ReturnType<typeof getAppSettings>>
+) {
   const display = screen.getPrimaryDisplay()
-  const { width: sw } = display.workAreaSize
-  return { x: Math.round((sw - width) / 2), y: 24 }
+  const area = display.workArea
+  const saved = settings.hudPosition
+
+  if (saved) {
+    const maxX = area.x + area.width - width - HUD_MARGIN
+    const maxY = area.y + area.height - height - HUD_MARGIN
+    return {
+      x: Math.max(area.x + HUD_MARGIN, Math.min(saved.x, maxX)),
+      y: Math.max(area.y + HUD_MARGIN, Math.min(saved.y, maxY))
+    }
+  }
+
+  return { x: area.x + Math.round((area.width - width) / 2), y: area.y + HUD_MARGIN }
 }
 
-function createHudWindow(): void {
-  const pos = getInitialPosition(HUD_COMPACT.width)
+async function createHudWindow(): Promise<void> {
+  const settings = await getAppSettings()
+  const pos = getInitialPosition(HUD_COMPACT.width, HUD_COMPACT.height, settings)
 
   hudWindow = new BrowserWindow({
     width: HUD_COMPACT.width,
@@ -147,6 +165,12 @@ async function applyWindowSettings(): Promise<void> {
   hudWindow.setVisibleOnAllWorkspaces(settings.alwaysVisible, { visibleOnFullScreen: false })
 }
 
+function persistHudPosition(): void {
+  if (!hudWindow || sidebarDocked) return
+  const { x, y } = hudWindow.getBounds()
+  void updateAppSettings({ hudPosition: { x, y } })
+}
+
 // ─── Drag + sidebar snap ──────────────────────────────────────────────────────
 
 const SNAP_THRESHOLD = 80   // px from edge to trigger sidebar snap
@@ -186,6 +210,8 @@ ipcMain.on('window:drag-end', () => {
     sidebarDocked = 'right'
     hudWindow.setBounds({ x: wx + sw - SIDEBAR_WIDTH, y: wy, width: SIDEBAR_WIDTH, height: sh }, true)
     hudWindow.webContents.send('hud:sidebar-docked', 'right')
+  } else {
+    persistHudPosition()
   }
 })
 
@@ -197,6 +223,7 @@ ipcMain.handle('hud:undock-sidebar', () => {
   const { x: wx, y: wy, width: sw } = display.workArea
   const x = wx + Math.round((sw - HUD_COMPACT.width) / 2)
   hudWindow.setBounds({ x, y: wy + 24, width: HUD_COMPACT.width, height: HUD_COMPACT.height }, true)
+  persistHudPosition()
 })
 
 // ─── Sidebar width resize (user drag on free edge) ────────────────────────────
@@ -222,10 +249,11 @@ ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number
   const display = screen.getDisplayMatching(hudWindow.getBounds())
   const { width: sw, height: sh } = display.workArea
   const { x: cx, y: cy } = hudWindow.getBounds()
-  const margin = 24
+  const margin = HUD_MARGIN
   const newX = Math.max(margin, Math.min(cx, sw - width - margin))
   const newY = Math.max(margin, Math.min(cy, sh - height - margin))
   hudWindow.setBounds({ x: newX, y: newY, width, height }, false)
+  persistHudPosition()
 })
 
 // ─── Screenshot mode ─────────────────────────────────────────────────────────
@@ -726,6 +754,15 @@ ipcMain.handle('tradingview:get-status', () => tradingViewService.getState())
 ipcMain.handle('tradingview:set-symbol', (_e, symbol: string) => tradingViewService.setSymbol(symbol))
 ipcMain.handle('tradingview:set-timeframe', (_e, timeframe: string) => tradingViewService.setTimeframe(timeframe))
 
+// ─── Ticker IPC ───────────────────────────────────────────────────────────────
+
+ipcMain.handle('ticker:get-quote', () => tickerService.getQuote())
+ipcMain.handle('ticker:set-symbol', async (_e, sym: string) => {
+  tickerService.setSymbol(sym)
+  await updateAppSettings({ tickerSymbol: sym.trim().toUpperCase() })
+  return tickerService.getQuote()
+})
+
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 
 ipcMain.handle('spotify:start-auth', async () => {
@@ -832,8 +869,7 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.john.desktop')
   void installCrashHandlers()
   app.on('browser-window-created', (_, w) => optimizer.watchWindowShortcuts(w))
-  createHudWindow()
-  void applyWindowSettings()
+  void createHudWindow().then(() => applyWindowSettings())
   bridgeServer.start()
   bridgeServer.onStatusChange(status => {
     hudWindow?.webContents.send('bridge:status-update', status)
@@ -875,9 +911,19 @@ app.whenReady().then(() => {
   })
   bridgeServer.setInternalStatus('tradingview', tradingViewService.getState().connected)
 
+  // Start standalone ticker with saved symbol
+  getAppSettings().then(s => {
+    if (s.tickerSymbol?.trim()) {
+      tickerService.setSymbol(s.tickerSymbol.trim())
+    }
+  })
+  tickerService.onQuoteUpdate(quote => {
+    hudWindow?.webContents.send('ticker:update', quote)
+  })
+
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createHudWindow()
+    if (BrowserWindow.getAllWindows().length === 0) void createHudWindow()
   })
 })
 
@@ -889,6 +935,7 @@ app.on('will-quit', async (event) => {
   event.preventDefault()
   globalShortcut.unregisterAll()
   bridgeServer.stop()
+  tickerService.stop()
   await shutdown()
   app.exit(0)
 })

@@ -24,14 +24,16 @@ async function getWorker(): Promise<Worker> {
   initPromise = (async () => {
     console.log('[ocr] Initializing tesseract worker...')
     worker = await Tesseract.createWorker(OCR_LANG, 1, {
-      // Suppress tesseract verbose logs
       logger: () => {}
     })
     await worker.setParameters({
-      // PSM.AUTO handles mixed UI content (text, icons, charts) without triggering
-      // the Leptonica bbox overflow errors that SPARSE_TEXT causes on graphical frames.
+      // PSM.AUTO handles mixed UI content without triggering Leptonica bbox errors.
       tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-      user_defined_dpi: OCR_DPI
+      user_defined_dpi: OCR_DPI,
+      // Redirect Tesseract/Leptonica debug output to null device to suppress
+      // "pixScanForForeground: invalid box" warnings on graphical frames.
+      // @ts-ignore — debug_file is a valid Tesseract config variable not yet typed in tesseract.js
+      debug_file: process.platform === 'win32' ? 'NUL' : '/dev/null'
     })
     console.log('[ocr] Worker ready.')
   })()
@@ -108,7 +110,7 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   const normalizedDataUrl = ocrImage.toDataURL()
   const w = await getWorker()
-  const { data } = await suppressLeptonicaNoise(() => w.recognize(normalizedDataUrl))
+  const { data } = await w.recognize(normalizedDataUrl)
 
   const regions: TextRegion[] = (data.blocks ?? [])
     .filter(b => b.text.trim().length > 0)
@@ -255,18 +257,3 @@ function estimateVisualComplexity(image: Electron.NativeImage): {
   }
 }
 
-// Leptonica prints internal warnings directly to stderr, bypassing the Tesseract.js
-// logger callback. Filter the known-harmless patterns so they don't pollute the console.
-const LEPTONICA_NOISE = /pixScanForForeground|boxClipToRectangle/
-
-function suppressLeptonicaNoise<T>(fn: () => Promise<T>): Promise<T> {
-  const orig = process.stderr.write.bind(process.stderr)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ;(process.stderr as any).write = (chunk: any, ...args: any[]) => {
-    if (LEPTONICA_NOISE.test(String(chunk))) return true
-    return orig(chunk, ...args)
-  }
-  return fn().finally(() => {
-    process.stderr.write = orig
-  })
-}

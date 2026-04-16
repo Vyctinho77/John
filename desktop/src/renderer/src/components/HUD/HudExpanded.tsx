@@ -28,6 +28,7 @@ import { SendIcon } from './SendIcon'
 import { ChatSidebar } from './ChatSidebar'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
+import { useSpeechInput } from '@renderer/hooks/useSpeechInput'
 import type {
   AICostSnapshot,
   AIProviderId,
@@ -59,7 +60,7 @@ import type {
   MemoryImportMode,
   MemoryImportPreview
 } from '@shared/memory.types'
-import type { SpotifyPlaybackState } from '../../../../preload/index.d'
+import type { SpotifyPlaybackState, TickerQuote } from '../../../../preload/index.d'
 import { TutorActionChips } from './TutorActionChips'
 import { SpotifyBanner } from './SpotifyBanner'
 
@@ -430,6 +431,17 @@ function getCostAlertState(costs: AICostSnapshot | null): {
   return { level: 'none', label: null, message: null }
 }
 
+function MicIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 18 18" fill="none"
+      aria-hidden="true" style={{ pointerEvents: 'none' }}>
+      <rect x="6" y="1" width="6" height="10" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M3 9a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="9" y1="15" x2="9" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
 export const HudExpanded = memo(function HudExpanded({
   activeChatId,
   chatMetas,
@@ -531,6 +543,9 @@ export const HudExpanded = memo(function HudExpanded({
   const [tradingViewState, setTradingViewState] = useState<TradingViewConnectorState | null>(null)
   const [spotifyClientIdCard, setSpotifyClientIdCard] = useState(false)
   const [spotifyClientIdDraft, setSpotifyClientIdDraft] = useState('')
+  const [tickerQuote, setTickerQuote] = useState<TickerQuote | null>(null)
+  const [tickerCard, setTickerCard] = useState(false)
+  const [tickerDraft, setTickerDraft] = useState('')
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
   const [codexStatus, setCodexStatus] = useState<import('@shared/auth.types').AuthStatus>({ authenticated: false })
   const [codexLoading, setCodexLoading] = useState(false)
@@ -545,6 +560,8 @@ export const HudExpanded = memo(function HudExpanded({
       if (incoming.id === 'vscode' && incoming.connected) {
         setVscodePendingReload(false)
         setVscodeInstallMsg(null)
+      } else if (incoming.id === 'vscode' && incoming.message) {
+        setVscodeInstallMsg(incoming.message)
       }
     })
   }, [])
@@ -557,6 +574,11 @@ export const HudExpanded = memo(function HudExpanded({
   useEffect(() => {
     window.tradingViewAPI.getStatus().then(setTradingViewState)
     return window.tradingViewAPI.onStatusUpdate(setTradingViewState)
+  }, [])
+
+  useEffect(() => {
+    window.tickerAPI.getQuote().then(setTickerQuote)
+    return window.tickerAPI.onUpdate(setTickerQuote)
   }, [])
 
   useEffect(() => {
@@ -761,6 +783,13 @@ export const HudExpanded = memo(function HudExpanded({
       if (inputValue.trim() && !isStreaming) onSubmit()
     }
   }
+
+  const voiceEnabled = Boolean(settings?.featureFlags.voiceMode)
+  const { isListening, isSupported, toggle: toggleMic } = useSpeechInput(transcript => {
+    const next = inputValue.trim() ? `${inputValue} ${transcript}` : transcript
+    onInputChange(next)
+    onActivity()
+  })
 
   const selectedProvider = aiSettings?.providers.find(provider => provider.id === activeProviderId) ?? null
   const providerDraft = providerDrafts[activeProviderId]
@@ -1415,7 +1444,8 @@ export const HudExpanded = memo(function HudExpanded({
           <div className="mt-4 flex gap-5">
             {/* VS Code connector */}
             {(() => {
-              const connected = connectorStatuses.find(s => s.id === 'vscode')?.connected ?? false
+              const vscodeStatus = connectorStatuses.find(s => s.id === 'vscode')
+              const connected = vscodeStatus?.connected ?? false
               return (
                 <div className="flex flex-col items-center gap-2" style={{ width: 72 }}>
                   <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
@@ -1440,6 +1470,11 @@ export const HudExpanded = memo(function HudExpanded({
                   >
                     {installingVSCode ? 'Instalando…' : vscodePendingReload ? 'Aguardando…' : connected ? 'Desconectar' : 'Conectar'}
                   </button>
+                  {!connected && vscodeStatus?.message && (
+                    <span className="text-center text-[9px]" style={{ color: 'rgba(255,255,255,0.34)', lineHeight: 1.3, maxWidth: 120 }}>
+                      bridge indisponível
+                    </span>
+                  )}
                 </div>
               )
             })()}
@@ -1538,6 +1573,35 @@ export const HudExpanded = memo(function HudExpanded({
               )
             })()}
 
+            {/* Ticker tile */}
+            {(() => {
+              const sym = settings?.tickerSymbol?.trim()
+              return (
+                <div className="flex flex-col items-center gap-2" style={{ width: 92 }}>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                    <polyline points="2 12 6 8 10 14 14 9 18 13 22 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                  </svg>
+                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>Cotação</span>
+                  <button
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => {
+                      setTickerDraft(sym ?? '')
+                      setTickerCard(true)
+                    }}
+                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50"
+                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: sym ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: sym ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
+                  >
+                    {sym ? sym : 'Configurar'}
+                  </button>
+                  {tickerQuote && (
+                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+                      {tickerQuote.price} <span style={{ color: tickerQuote.positive ? 'rgba(45,213,80,0.8)' : 'rgba(255,95,95,0.8)' }}>{tickerQuote.change}</span>
+                    </span>
+                  )}
+                </div>
+              )
+            })()}
+
           </div>
 
           {/* Spotify Client ID floating card */}
@@ -1596,6 +1660,62 @@ export const HudExpanded = memo(function HudExpanded({
                 <button
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => setSpotifyClientIdCard(false)}
+                  className="transition-opacity hover:opacity-80 active:opacity-50"
+                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.44)', border: '1px solid rgba(255,255,255,0.1)' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Ticker symbol floating card */}
+          {tickerCard && (
+            <div
+              className="mt-3 rounded-[10px] p-4"
+              style={{ background: 'rgba(30,30,30,0.98)', border: '1px solid rgba(255,255,255,0.1)' }}
+            >
+              <p className="text-[12px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.88)' }}>
+                Símbolo do ativo
+              </p>
+              <p className="text-[10px] mb-3" style={{ color: 'rgba(255,255,255,0.36)', lineHeight: 1.5 }}>
+                Ações: <span style={{ color: 'rgba(255,255,255,0.54)' }}>AAPL · PETR4.SA</span>
+                {' · '}Cripto: <span style={{ color: 'rgba(255,255,255,0.54)' }}>BTC-USD · ETH-USD</span>
+                {' · '}Commodities: <span style={{ color: 'rgba(255,255,255,0.54)' }}>GC=F (ouro) · CL=F (petróleo) · SI=F (prata) · NG=F (gás)</span>
+                {' · '}Índices: <span style={{ color: 'rgba(255,255,255,0.54)' }}>^GSPC · ^BVSP</span>
+              </p>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Cole o símbolo aqui"
+                value={tickerDraft}
+                onChange={e => setTickerDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') setTickerCard(false)
+                  if (e.key === 'Enter' && tickerDraft.trim()) {
+                    void window.tickerAPI.setSymbol(tickerDraft.trim())
+                      .then(q => { setTickerQuote(q); setTickerCard(false) })
+                  }
+                }}
+                className="w-full bg-transparent outline-none text-[11px] mb-3"
+                style={{ color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, padding: '5px 8px', caretColor: 'white' }}
+              />
+              <div className="flex gap-2">
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  disabled={!tickerDraft.trim()}
+                  onClick={() => {
+                    void window.tickerAPI.setSymbol(tickerDraft.trim())
+                      .then(q => { setTickerQuote(q); setTickerCard(false) })
+                  }}
+                  className="transition-opacity hover:opacity-80 active:opacity-50 disabled:opacity-40 disabled:cursor-default"
+                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.92)', color: 'rgba(0,0,0,0.85)', fontWeight: 500 }}
+                >
+                  Salvar
+                </button>
+                <button
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => setTickerCard(false)}
                   className="transition-opacity hover:opacity-80 active:opacity-50"
                   style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.44)', border: '1px solid rgba(255,255,255,0.1)' }}
                 >
@@ -2356,7 +2476,7 @@ export const HudExpanded = memo(function HudExpanded({
 
       <div
         className="flex items-center gap-3 px-5 flex-shrink-0 cursor-grab active:cursor-grabbing"
-        style={{ height: 48 }}
+        style={{ height: 48, position: 'relative' }}
         onMouseDown={handleMouseDown}
       >
         <div className="w-9 h-6 flex-shrink-0 flex items-center justify-center">
@@ -2387,6 +2507,49 @@ export const HudExpanded = memo(function HudExpanded({
           })}
         </div>
         <div className="flex-1" />
+
+        {/* ── Price ticker — centered absolute, never disrupts flex layout ── */}
+        {tickerQuote && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              pointerEvents: 'none',
+              userSelect: 'none'
+            }}
+          >
+            <span style={{
+              width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+              background: tickerQuote.positive ? 'rgba(45,213,80,0.9)' : 'rgba(255,95,95,0.9)'
+            }} />
+            <span style={{
+              fontSize: 11.5, fontWeight: 500,
+              color: 'rgba(255,255,255,0.60)',
+              letterSpacing: '0.03em'
+            }}>
+              {tickerQuote.symbol}
+            </span>
+            <span style={{
+              fontSize: 11.5, fontWeight: 500,
+              color: 'rgba(255,255,255,0.88)',
+              letterSpacing: '-0.01em'
+            }}>
+              {tickerQuote.price}
+            </span>
+            <span style={{
+              fontSize: 10.5, fontWeight: 500,
+              letterSpacing: '0.005em',
+              color: tickerQuote.positive ? 'rgba(45,213,80,0.92)' : 'rgba(255,95,95,0.92)'
+            }}>
+              {tickerQuote.change}
+            </span>
+          </div>
+        )}
 
         {isStreaming && (
           <div className="flex items-center">
@@ -2659,6 +2822,24 @@ export const HudExpanded = memo(function HudExpanded({
                 onFocus={onInputFocus}
                 onBlur={onInputBlur}
               />
+
+              {voiceEnabled && isSupported && (
+                <button
+                  onMouseDown={e => { e.preventDefault(); toggleMic() }}
+                  disabled={isStreaming}
+                  className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
+                  style={{ color: isListening ? 'rgba(255,95,95,0.90)' : 'rgba(255,255,255,0.38)' }}
+                  aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
+                >
+                  {isListening && (
+                    <span
+                      className="absolute inset-0 rounded-full"
+                      style={{ background: 'rgba(255,95,95,0.12)', animation: 'capture-pulse 1.2s ease-out infinite' }}
+                    />
+                  )}
+                  <MicIcon className="w-[18px] h-auto relative" />
+                </button>
+              )}
 
               <button
                 onMouseDown={e => {

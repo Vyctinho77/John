@@ -154,11 +154,23 @@ declare global {
       setTimeframe: (timeframe: string) => Promise<TradingViewConnectorState>
       onStatusUpdate: (cb: (state: TradingViewConnectorState) => void) => () => void
     }
+    tickerAPI: {
+      getQuote: () => Promise<TickerQuote | null>
+      setSymbol: (symbol: string) => Promise<TickerQuote | null>
+      onUpdate: (cb: (quote: TickerQuote | null) => void) => () => void
+    }
     elevenLabsAPI: {
       hasKey: () => Promise<boolean>
       speak:  (text: string) => Promise<string>
     }
   }
+}
+
+export interface TickerQuote {
+  symbol: string
+  price: string
+  change: string
+  positive: boolean
 }
 
 export interface SpotifyPlaybackState {

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, KeyboardEvent } from 'react'
+import { useSpeechInput } from '@renderer/hooks/useSpeechInput'
 import { CaptureIndicator } from './CaptureIndicator'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { LogoMark } from './LogoMark'
@@ -29,6 +30,7 @@ interface HudIntermediateProps {
   isCapturing: boolean
   isPrivate: boolean
   onTogglePrivate: () => void
+  voiceEnabled?: boolean
   onShowStage1: () => void
   onShowStage2: () => void
   onShowStage3: () => void
@@ -37,8 +39,9 @@ interface HudIntermediateProps {
 export function HudIntermediate({
   inputValue, onInputChange, onSubmit,
   onInputFocus, onInputBlur, onActivity,
-  onCollapse, response, responseMeta: _responseMeta, isStreaming,
+  onCollapse: _onCollapse, response, responseMeta: _responseMeta, isStreaming,
   semanticState, sessionMemory, intermediateThought, isCapturing, isPrivate, onTogglePrivate,
+  voiceEnabled,
   onShowStage1, onShowStage2, onShowStage3
 }: HudIntermediateProps) {
   const { handleMouseDown } = useDragWindow()
@@ -63,6 +66,12 @@ export function HudIntermediate({
     el.style.height = '24px'
     el.style.height = `${Math.min(el.scrollHeight, 72)}px`
   }, [inputValue])
+
+  const { isListening, isSupported, toggle: toggleMic } = useSpeechInput(transcript => {
+    const next = inputValue.trim() ? `${inputValue} ${transcript}` : transcript
+    onInputChange(next)
+    onActivity()
+  })
 
   const handleKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     onActivity()
@@ -202,6 +211,22 @@ export function HudIntermediate({
               onBlur={onInputBlur}
             />
 
+            {voiceEnabled && isSupported && (
+              <button
+                onMouseDown={e => { e.preventDefault(); toggleMic() }}
+                disabled={isStreaming}
+                className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
+                style={{ color: isListening ? 'rgba(255,95,95,0.90)' : 'rgba(255,255,255,0.35)' }}
+                aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
+              >
+                {isListening && (
+                  <span className="absolute inset-0 rounded-full"
+                    style={{ background: 'rgba(255,95,95,0.12)', animation: 'capture-pulse 1.2s ease-out infinite' }} />
+                )}
+                <MicIconSm />
+              </button>
+            )}
+
             <button
               onMouseDown={e => { e.preventDefault(); onSubmit() }}
               disabled={isStreaming || !inputValue.trim()}
@@ -217,5 +242,16 @@ export function HudIntermediate({
         </div>
       </div>
     </div>
+  )
+}
+
+function MicIconSm() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 18 18" fill="none"
+      aria-hidden="true" style={{ pointerEvents: 'none' }}>
+      <rect x="6" y="1" width="6" height="10" rx="3" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M3 9a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="9" y1="15" x2="9" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>
   )
 }

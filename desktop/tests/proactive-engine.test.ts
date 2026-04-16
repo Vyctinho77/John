@@ -33,6 +33,7 @@ const baseSettings = {
     selectedSourceName: null,
     blockedSourceKeywords: []
   },
+  hudPosition: null,
   updatedAt: Date.now()
 }
 
@@ -41,6 +42,7 @@ function makeState(overrides: Partial<ProactiveState> = {}): ProactiveState {
     currentHint: null,
     recentHints: [],
     cooldownUntil: 0,
+    ignoredStreak: 0,
     lastUserActivityAt: 0,
     lastActivityType: null,
     lastUserSubmitAt: null,

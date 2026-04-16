@@ -65,6 +65,7 @@ const DEFAULT_STATE: ProactiveState = {
   currentHint: null,
   recentHints: [],
   cooldownUntil: 0,
+  ignoredStreak: 0,
   lastUserActivityAt: Date.now(),
   lastActivityType: null,
   lastUserSubmitAt: null,
@@ -118,7 +119,7 @@ export async function evaluateProactiveOpportunity(
     ...state,
     currentHint: hint,
     recentHints: [...state.recentHints, hint].slice(-18),
-    cooldownUntil: now + GLOBAL_COOLDOWN_MS,
+    cooldownUntil: now + getAdaptiveCooldownMs(state.ignoredStreak),
     sessionStats: {
       ...state.sessionStats,
       emittedCount: state.sessionStats.emittedCount + 1,
@@ -521,6 +522,12 @@ function closeCurrentHint(outcome: ProactiveOutcome): void {
   state = {
     ...state,
     currentHint: null,
+    ignoredStreak:
+      outcome === 'ignored'
+        ? Math.min(state.ignoredStreak + 1, 6)
+        : outcome === 'consumed'
+          ? 0
+          : Math.max(0, state.ignoredStreak - 1),
     recentHints: state.recentHints.map(hint => hint.id === currentHint.id ? currentHint : hint),
     sessionStats: {
       ...state.sessionStats,
@@ -607,4 +614,10 @@ function clamp(value: number): number {
 
 function round(value: number): number {
   return Number(value.toFixed(2))
+}
+
+function getAdaptiveCooldownMs(ignoredStreak: number): number {
+  if (ignoredStreak < 3) return GLOBAL_COOLDOWN_MS
+  const extraSteps = Math.min(ignoredStreak - 2, 4)
+  return GLOBAL_COOLDOWN_MS + extraSteps * 12_000
 }

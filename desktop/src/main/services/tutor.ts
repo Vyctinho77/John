@@ -44,15 +44,31 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
   try {
     const context = request.context ?? await getContextSnapshot()
 
-    // ─── Depth calibration ───────────────────────────────────────────────────
+    // ─── Behavior pattern summary for prompt injection ────────────────────────
     const behaviorPattern = await getBehaviorPattern()
+    const behaviorSummaryLines = await getBehaviorPatternSummary()
+
+    // ─── Resolve mode and domain BEFORE calibration so depth-calibrator gets
+    //     the real values — not placeholders ────────────────────────────────────
+    const mode = inferMode(request, context.userProfile)
+    const uncertainty = context.semanticState.uncertainty
+    const baseWarning = inferWarning(context)
+    const offScreen = isOffScreenQuestion(request.prompt, context)
+    const needsVisualConfirmation = !offScreen && (uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown')
+    const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
+
+    // Run domain router with base context — domain classification doesn't depend
+    // on calibrated depth, so this is safe and gives us the real domain name.
+    const domainOutput = runDomainTutor({ request, context: { ...context, userProfile: context.userProfile }, mode })
+
+    // ─── Depth calibration — now has real mode and domain ────────────────────
     const calibration = calibrateDepth({
       prompt: request.prompt,
       conversationLength: request.conversation.length,
       profile: context.userProfile,
       behaviorPattern,
-      domain: 'general', // resolved below; used here for cross-session depth only
-      modeUsed: 'direct' // placeholder; updated after inferMode
+      domain: domainOutput?.domain ?? 'general',
+      modeUsed: mode
     })
 
     // Build an effective profile that reflects calibrated depth for THIS response
@@ -67,18 +83,6 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       ...context,
       userProfile: effectiveProfile
     }
-
-    // ─── Behavior pattern summary for prompt injection ────────────────────────
-    const behaviorSummaryLines = await getBehaviorPatternSummary()
-
-    // ─── Core tutor pipeline ─────────────────────────────────────────────────
-    const mode = inferMode(request, effectiveProfile)
-    const uncertainty = context.semanticState.uncertainty
-    const baseWarning = inferWarning(context)
-    const offScreen = isOffScreenQuestion(request.prompt, context)
-    const needsVisualConfirmation = !offScreen && (uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown')
-    const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
-    const domainOutput = runDomainTutor({ request, context: effectiveContext, mode })
     const relevantPersistentMemory = await retrieveRelevantMemories({
       query: buildPersistentMemoryQuery(request.prompt, context),
       limit: 4
@@ -203,6 +207,23 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
   }
 }
 
+// ─── Retry helper — exponential backoff for transient network errors ─────────
+
+async function withRetry<T>(fn: () => Promise<T>, maxRetries: number, baseDelayMs: number): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, baseDelayMs * (2 ** attempt)))
+      }
+    }
+  }
+  throw lastError
+}
+
 // ─── Codex-first provider with graceful fallback ──────────────────────────────
 
 async function generateWithCodexFallback(input: {
@@ -244,11 +265,19 @@ async function generateWithCodexFallback(input: {
         { role: 'user',   content: input.prompt }
       ]
       try {
-        const text = await codexClient.chat({ model: 'gpt-4.1', messages, imageDataUrl: input.imageDataUrl })
+        const text = await withRetry(
+          () => codexClient.chat({ model: 'gpt-4.1', messages, imageDataUrl: input.imageDataUrl }),
+          2,   // up to 2 retries (3 total attempts)
+          400  // 400ms → 800ms backoff
+        )
         return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'gpt-4.1', text }
       } catch (primaryError) {
-        const text = await codexClient.chat({ messages, imageDataUrl: input.imageDataUrl })
-        console.warn('[Codex] fallback para modelo padrÃ£o da conta:', primaryError instanceof Error ? primaryError.message : primaryError)
+        console.warn('[Codex] gpt-4.1 falhou após retries, tentando modelo padrão da conta:', primaryError instanceof Error ? primaryError.message : primaryError)
+        const text = await withRetry(
+          () => codexClient.chat({ messages, imageDataUrl: input.imageDataUrl }),
+          1,   // 1 retry for account default
+          600
+        )
         return { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'codex-account-default', text }
       }
     } catch (e) {
