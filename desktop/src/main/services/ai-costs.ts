@@ -1,13 +1,14 @@
 import { app } from 'electron'
 import { mkdir, readFile, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
-import type { AICostSnapshot, AIProviderId } from '../../shared/ai-provider.types'
+import type { AICostSnapshot, AIFeatureTask, AIProviderId } from '../../shared/ai-provider.types'
 import { getAppSettings } from './settings'
 
 interface AICostEntry {
   providerId: AIProviderId
   model: string
   operation: 'chat' | 'embedding'
+  feature?: AIFeatureTask
   costUsd: number
   inputTokens: number
   cachedInputTokens: number
@@ -24,6 +25,8 @@ interface StoredAICostState {
 const AI_COSTS_PATH = join(app.getPath('userData'), 'ai-costs.json')
 let cachedState: StoredAICostState | null = null
 
+const ALL_FEATURE_TASKS: AIFeatureTask[] = ['tutor', 'vision', 'stage2', 'title', 'router']
+
 export async function getAICostSnapshot(): Promise<AICostSnapshot> {
   const settings = await getAppSettings()
   const state = await getStoredState()
@@ -38,6 +41,17 @@ export async function getAICostSnapshot(): Promise<AICostSnapshot> {
       ? null
       : roundUsd(Math.max(0, settings.dailyCostLimitUsd - spentUsd))
 
+  const byFeature = Object.fromEntries(
+    ALL_FEATURE_TASKS.map(task => [
+      task,
+      roundUsd(
+        state.entries
+          .filter(entry => entry.feature === task)
+          .reduce((sum, entry) => sum + entry.costUsd, 0)
+      )
+    ])
+  ) as Record<AIFeatureTask, number>
+
   return {
     date: state.day,
     dailyLimitUsd: settings.dailyCostLimitUsd,
@@ -45,7 +59,8 @@ export async function getAICostSnapshot(): Promise<AICostSnapshot> {
     remainingUsd,
     openaiSpentUsd,
     lastUpdatedAt: state.updatedAt,
-    blocked: settings.dailyCostLimitUsd !== null && spentUsd >= settings.dailyCostLimitUsd
+    blocked: settings.dailyCostLimitUsd !== null && spentUsd >= settings.dailyCostLimitUsd,
+    byFeature
   }
 }
 
@@ -113,6 +128,9 @@ function normalizeState(state: Partial<StoredAICostState>, today: string): Store
         providerId: entry.providerId,
         model: entry.model,
         operation: entry.operation === 'embedding' ? 'embedding' : 'chat',
+        feature: ALL_FEATURE_TASKS.includes(entry.feature as AIFeatureTask)
+          ? (entry.feature as AIFeatureTask)
+          : undefined,
         costUsd: roundUsd(entry.costUsd),
         inputTokens: typeof entry.inputTokens === 'number' ? entry.inputTokens : 0,
         cachedInputTokens: typeof entry.cachedInputTokens === 'number' ? entry.cachedInputTokens : 0,

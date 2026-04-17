@@ -2,6 +2,7 @@ import { getContextSnapshot } from './perception'
 import { runDomainTutor } from './tutor-domains'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 import { generateRemoteText } from './ai-provider'
+import { buildTutorCacheKey, getTutorCached, setTutorCache } from './tutor-cache'
 import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { retrieveRelevantMemories } from './memory-embeddings'
 import {
@@ -14,6 +15,7 @@ import {
   formatTradingViewConnectorContext
 } from './tutor-prompt'
 import { bridgeServer } from './bridge'
+import { buildVSCodeActionsFromContext, getVSCodeConnectorData } from './vscode-command-router'
 import {
   calibrateDepth,
   applyDepthCalibration,
@@ -27,10 +29,13 @@ import {
   flushBehaviorToMemory
 } from './behavior-tracker'
 import type {
+  ConnectorID,
   PerceptionContextSnapshot,
+  TutorDominantContextSource,
   TutorMode,
   TutorRequest,
   TutorResponse,
+  TutorSourceConfidence,
   UserProfile
 } from '../../shared/perception.types'
 
@@ -100,9 +105,31 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
     const vsCodeBlock  = vsCodeRaw  ? formatVSCodeConnectorContext(vsCodeRaw.data)   : undefined
     const spotifyBlock = spotifyRaw ? formatSpotifyConnectorContext(spotifyRaw.data) : undefined
     const tradingViewBlock = tradingViewRaw ? formatTradingViewConnectorContext(tradingViewRaw.data) : undefined
+    const connectorsUsed = ([
+      vsCodeRaw ? 'vscode' : null,
+      spotifyRaw ? 'spotify' : null,
+      tradingViewRaw ? 'tradingview' : null
+    ].filter(Boolean) as ConnectorID[])
 
     const sensitive = Boolean(domainOutput?.warning ?? baseWarning)
-    const system    = buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen)
+    const screenAgeMs = context.screenshotDataUrl
+      ? Math.max(0, Date.now() - context.semanticState.capturedAt)
+      : null
+    const staleContextGuarded =
+      Boolean(context.screenshotDataUrl)
+      && (context.semanticState.change_summary === 'major' || (screenAgeMs !== null && screenAgeMs > 45_000))
+    const systemLines = [
+      buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen),
+      staleContextGuarded
+        ? [
+            '[FreshScreenGuard]',
+            'The screen likely changed or the current capture is no longer fresh.',
+            'Prioritize the latest screenshot and current semantic state over older conversation assumptions.',
+            'If earlier turns conflict with the current screen, discard the older screen reading.'
+          ].join('\n')
+        : ''
+    ].filter(Boolean)
+    const system = systemLines.join('\n\n')
     const prompt    = buildRemoteUserPrompt(
       request,
       effectiveContext,
@@ -113,8 +140,45 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       spotifyBlock,
       tradingViewBlock
     )
-    const history   = request.conversation.slice(0, -1)
+    const baseHistory = request.conversation.slice(0, -1)
+    const history   = staleContextGuarded ? baseHistory.slice(-2) : baseHistory
     const imageDataUrl = context.screenshotDataUrl ?? null
+    const sourceConfidence = buildSourceConfidence({
+      context,
+      connectorsUsed
+    })
+    const dominantContextSource = determineDominantContextSource({
+      domain: domainOutput?.domain ?? 'general',
+      prompt: request.prompt,
+      connectorsUsed,
+      sourceConfidence
+    })
+
+    // ─── Tutor response cache ─────────────────────────────────────────────────
+    // Skip the strong-model call when the context hasn't changed meaningfully.
+    // Only cache when the screen is stable (no major change) and no sensitive
+    // content is involved.
+    const connectorKey = buildConnectorKey(connectorsUsed)
+    const cacheKey = buildTutorCacheKey({
+      prompt: request.prompt,
+      domain: domainOutput?.domain ?? 'general',
+      imageDataUrlPrefix: imageDataUrl ? imageDataUrl.slice(0, 80) : null,
+      connectorKey
+    })
+    const cached = !sensitive && context.semanticState.change_summary !== 'major'
+      ? getTutorCached(cacheKey)
+      : null
+
+    if (cached) {
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'tutor',
+        action: 'cache_hit',
+        sessionId: context.sessionMemory.session_id,
+        details: { domain: domainOutput?.domain ?? 'general', cacheKey: cacheKey.slice(0, 60) }
+      })
+      return cached
+    }
 
     const remoteResult = await generateWithCodexFallback({
       sensitive,
@@ -127,6 +191,7 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       screenVisualSummary: context.semanticState.visual_summary
     })
     const content = remoteResult?.text?.trim() || localContent
+    const latencyMs = Date.now() - startedAt
 
     // ─── Post-response: record behavior signal ────────────────────────────────
     recordInteractionSignal({
@@ -164,6 +229,12 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         model: remoteResult?.model ?? 'local',
         uncertainty: Number(uncertainty.toFixed(2)),
         asksConfirmation: shouldAskConfirmation,
+        dominantSource: dominantContextSource,
+        staleContextGuarded,
+        connectorsUsed: connectorsUsed.join(','),
+        screenshotIncluded: Boolean(imageDataUrl),
+        screenAgeMs,
+        latencyMs,
         calibratedLevel: calibration.effective_level,
         calibrationReason: calibration.reason
       }
@@ -171,22 +242,48 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
 
     void recordPerformanceTrace({
       operation: 'tutor.respond',
-      durationMs: Date.now() - startedAt,
+      durationMs: latencyMs,
       status: 'ok'
     })
 
-    return {
+    const responseActions =
+      connectorsUsed.includes('vscode') && (domainOutput?.domain === 'code' || dominantContextSource === 'vscode')
+        ? buildVSCodeActionsFromContext(getVSCodeConnectorData())
+        : undefined
+
+    const tutorResponse: TutorResponse = {
       domain: domainOutput?.domain ?? 'general',
       mode,
       content,
+      actions: responseActions,
       provider: remoteResult?.providerId ?? 'local',
       model: remoteResult?.model ?? 'local',
       uncertainty,
       should_ask_confirmation: shouldAskConfirmation,
       needs_visual_confirmation: needsVisualConfirmation,
       suggested_follow_ups: domainOutput?.suggested_follow_ups ?? buildFollowUps(mode, effectiveContext),
-      warning: domainOutput?.warning ?? baseWarning
+      warning: domainOutput?.warning ?? baseWarning,
+      debug: {
+        provider: remoteResult?.providerId ?? 'local',
+        model: remoteResult?.model ?? 'local',
+        latencyMs,
+        screenshotIncluded: Boolean(imageDataUrl),
+        screenCapturedAt: context.screenshotDataUrl ? context.semanticState.capturedAt : null,
+        screenAgeMs,
+        changeSummary: context.semanticState.change_summary,
+        connectorsUsed,
+        dominantContextSource,
+        sourceConfidence,
+        staleContextGuarded
+      }
     }
+
+    // Store in cache for stable-context follow-ups
+    if (!sensitive && context.semanticState.change_summary !== 'major' && remoteResult?.text) {
+      setTutorCache(cacheKey, tutorResponse)
+    }
+
+    return tutorResponse
   } catch (error) {
     void recordDiagnosticEvent({
       type: 'error',
@@ -291,7 +388,8 @@ async function generateWithCodexFallback(input: {
     system: input.system,
     prompt: input.prompt,
     messages: input.history,
-    imageDataUrl: input.imageDataUrl
+    imageDataUrl: input.imageDataUrl,
+    feature: 'tutor'
   })
 }
 
@@ -382,4 +480,110 @@ function buildPersistentMemoryQuery(
   ]
     .filter(Boolean)
     .join(' | ')
+}
+
+function buildSourceConfidence(input: {
+  context: PerceptionContextSnapshot
+  connectorsUsed: ConnectorID[]
+}): TutorSourceConfidence {
+  const { context, connectorsUsed } = input
+  const hasVisionSignals = Boolean(
+    context.semanticState.ui_elements?.length
+      || context.semanticState.visual_context
+      || context.semanticState.app_identifier
+      || context.semanticState.code_context
+      || (context.semanticState.key_values && Object.keys(context.semanticState.key_values).length)
+  )
+  const hasOcrSignals = Boolean(
+    context.semanticState.detected_text
+      && !/context unavailable|private mode active|capture failed|ocr sem contexto/i.test(context.semanticState.detected_text)
+  )
+
+  return {
+    bridge: connectorsUsed.length
+      ? Number(Math.min(0.98, 0.86 + connectorsUsed.length * 0.06).toFixed(2))
+      : 0,
+    vision: context.screenshotDataUrl
+      ? Number((hasVisionSignals ? 0.88 : 0.58).toFixed(2))
+      : 0,
+    ocr: hasOcrSignals
+      ? Number((context.semanticState.surface_type === 'graphic' ? 0.38 : 0.68).toFixed(2))
+      : 0,
+    memory: Number(
+      (
+        context.sessionMemory.frame_count > 1
+          ? context.semanticState.change_summary === 'none'
+            ? 0.62
+            : context.semanticState.change_summary === 'minor'
+              ? 0.46
+              : 0.18
+          : 0.12
+      ).toFixed(2)
+    )
+  }
+}
+
+function determineDominantContextSource(input: {
+  domain: TutorResponse['domain']
+  prompt: string
+  connectorsUsed: ConnectorID[]
+  sourceConfidence: TutorSourceConfidence
+}): TutorDominantContextSource {
+  const { domain, prompt, connectorsUsed, sourceConfidence } = input
+  const lowerPrompt = prompt.toLowerCase()
+
+  if (connectorsUsed.includes('tradingview') && (domain === 'market' || /\b(tradingview|grafico|gr[aá]fico|candle|ticker|timeframe)\b/i.test(lowerPrompt))) {
+    return 'tradingview'
+  }
+
+  if (connectorsUsed.includes('vscode') && (domain === 'code' || /\b(c[oó]digo|erro|bug|arquivo|diff|terminal|vscode)\b/i.test(lowerPrompt))) {
+    return 'vscode'
+  }
+
+  if (connectorsUsed.includes('spotify') && /\b(spotify|m[uú]sica|musica|faixa|album|álbum|playlist|tocando)\b/i.test(lowerPrompt)) {
+    return 'spotify'
+  }
+
+  if (connectorsUsed.length === 1) {
+    return connectorsUsed[0]
+  }
+
+  if (sourceConfidence.vision >= sourceConfidence.ocr && sourceConfidence.vision >= sourceConfidence.memory && sourceConfidence.vision > 0) {
+    return 'vision'
+  }
+
+  if (sourceConfidence.ocr >= sourceConfidence.memory && sourceConfidence.ocr > 0) {
+    return 'ocr'
+  }
+
+  if (sourceConfidence.memory > 0.2) {
+    return 'memory'
+  }
+
+  return connectorsUsed[0] ?? 'unknown'
+}
+
+function buildConnectorKey(connectorsUsed: ConnectorID[]): string {
+  if (connectorsUsed.length === 0) return 'no-connectors'
+
+  const parts: string[] = []
+
+  if (connectorsUsed.includes('tradingview')) {
+    const raw = bridgeServer.getContext('tradingview')
+    const data = raw?.data as { symbol?: string; timeframe?: string } | undefined
+    parts.push(`tv:${data?.symbol ?? ''}:${data?.timeframe ?? ''}`)
+  }
+
+  if (connectorsUsed.includes('vscode')) {
+    const data = getVSCodeConnectorData()
+    parts.push(`vsc:${data?.editor?.filepath ?? data?.editor?.filename ?? ''}`)
+  }
+
+  if (connectorsUsed.includes('spotify')) {
+    const raw = bridgeServer.getContext('spotify')
+    const data = raw?.data as { trackName?: string } | undefined
+    parts.push(`sp:${data?.trackName ?? ''}`)
+  }
+
+  return parts.join('|')
 }

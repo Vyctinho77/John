@@ -65,6 +65,7 @@ import { tradingViewService } from './services/tradingview'
 import { codexAuth, codexClient } from './auth/codex-singleton'
 import { maybeHandleSpotifyTutorRequest } from './services/spotify-command-router'
 import { maybeHandleTradingViewTutorRequest } from './services/tradingview-command-router'
+import { executeVSCodeAction, maybeHandleVSCodeTutorRequest } from './services/vscode-command-router'
 import { speakWithElevenLabs } from './services/elevenlabs'
 import { tickerService } from './services/ticker-service'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
@@ -341,6 +342,8 @@ ipcMain.handle('tutor:respond', async (_e, request) => {
   if (spotifyResponse) return spotifyResponse
   const tradingViewResponse = await maybeHandleTradingViewTutorRequest(request.prompt)
   if (tradingViewResponse) return tradingViewResponse
+  const vscodeResponse = await maybeHandleVSCodeTutorRequest(request.prompt)
+  if (vscodeResponse) return vscodeResponse
   return generateTutorResponse(request)
 })
 
@@ -621,7 +624,8 @@ ipcMain.handle('chat:generate-title', async (_e, id: string, messages: TutorMess
       ].join('\n'),
       prompt,
       messages: [],
-      imageDataUrl: null
+      imageDataUrl: null,
+      feature: 'title'
     })
     rawTitle = result?.text?.trim() ?? null
   }
@@ -746,6 +750,10 @@ ipcMain.handle('bridge:disconnect', (_e, id: string) => {
   bridgeServer.disconnect(id as import('../shared/perception.types').ConnectorID)
 })
 
+ipcMain.handle('vscode:execute-action', (_e, payload) => {
+  return executeVSCodeAction(payload)
+})
+
 // ─── TradingView IPC ───────────────────────────────────────────────────────────
 
 ipcMain.handle('tradingview:open', () => tradingViewService.open())
@@ -753,6 +761,7 @@ ipcMain.handle('tradingview:close', () => tradingViewService.close())
 ipcMain.handle('tradingview:get-status', () => tradingViewService.getState())
 ipcMain.handle('tradingview:set-symbol', (_e, symbol: string) => tradingViewService.setSymbol(symbol))
 ipcMain.handle('tradingview:set-timeframe', (_e, timeframe: string) => tradingViewService.setTimeframe(timeframe))
+ipcMain.handle('tradingview:execute-action', (_e, payload) => tradingViewService.executeAction(payload))
 
 // ─── Ticker IPC ───────────────────────────────────────────────────────────────
 

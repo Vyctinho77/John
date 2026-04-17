@@ -3,6 +3,8 @@ import { mkdir, readFile, rm, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import type {
   AICostSnapshot,
+  AIFeatureTask,
+  AIFeatureTier,
   AIRoutingSettings,
   AIProviderId,
   AIProviderModelOption,
@@ -15,10 +17,25 @@ import { assertOpenAIBudgetAvailable, getAICostSnapshot, recordAICost } from './
 
 const AI_SETTINGS_PATH = join(app.getPath('userData'), 'ai-providers.json')
 
+const DEFAULT_FEATURE_ROUTING: Record<AIFeatureTask, AIFeatureTier> = {
+  tutor:  'strong',
+  vision: 'strong',
+  stage2: 'cheap',
+  title:  'cheap',
+  router: 'cheap'
+}
+
+const CHEAP_MODELS: Partial<Record<AIProviderId, string>> = {
+  openai:    'gpt-4.1-mini',
+  anthropic: 'claude-haiku-4-5-20251001',
+  gemini:    'gemini-2.5-flash-lite'
+}
+
 const DEFAULT_ROUTING: AIRoutingSettings = {
   textPrimary: null,
   textFallback: null,
-  preferLocalForSensitive: true
+  preferLocalForSensitive: true,
+  featureRouting: DEFAULT_FEATURE_ROUTING
 }
 
 interface StoredAIProvider {
@@ -63,6 +80,7 @@ interface RemoteChatRequest {
   prompt: string
   imageDataUrl?: string | null
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+  feature?: AIFeatureTask
 }
 
 let cachedSettings: StoredAISettings | null = null
@@ -250,15 +268,27 @@ export async function generateRemoteText(input: {
   prompt: string
   imageDataUrl?: string | null
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+  feature?: AIFeatureTask
 }): Promise<ProviderExecutionResult | null> {
   const settings = await getStoredSettings()
+
+  // Resolve effective tier for this feature
+  const featureRouting = settings.routing.featureRouting ?? DEFAULT_FEATURE_ROUTING
+  const tier: AIFeatureTier = input.feature
+    ? (featureRouting[input.feature] ?? DEFAULT_FEATURE_ROUTING[input.feature])
+    : 'strong'
+
+  // Heuristic tier means no LLM call
+  if (tier === 'heuristic') return null
+
   const providerOrder = buildProviderOrder(settings.routing)
 
   const chatRequest: RemoteChatRequest = {
     system: input.system,
     prompt: input.prompt,
     imageDataUrl: input.imageDataUrl,
-    messages: input.messages
+    messages: input.messages,
+    feature: input.feature
   }
 
   if (settings.routing.preferLocalForSensitive && input.sensitive) {
@@ -272,8 +302,14 @@ export async function generateRemoteText(input: {
     const provider = settings.providers[providerId]
     if (!canUseProvider(provider)) continue
 
+    // Apply cheap model override when tier is 'cheap'
+    const effectiveProvider =
+      tier === 'cheap' && CHEAP_MODELS[provider.id]
+        ? { ...provider, selectedModel: CHEAP_MODELS[provider.id]! }
+        : provider
+
     try {
-      return await sendProviderChat(provider, chatRequest)
+      return await sendProviderChat(effectiveProvider, chatRequest)
     } catch {
       continue
     }
@@ -406,7 +442,8 @@ function normalizeStoredSettings(settings: Partial<StoredAISettings>): StoredAIS
     routing: {
       textPrimary: settings.routing?.textPrimary ?? DEFAULT_ROUTING.textPrimary,
       textFallback: settings.routing?.textFallback ?? DEFAULT_ROUTING.textFallback,
-      preferLocalForSensitive: settings.routing?.preferLocalForSensitive ?? DEFAULT_ROUTING.preferLocalForSensitive
+      preferLocalForSensitive: settings.routing?.preferLocalForSensitive ?? DEFAULT_ROUTING.preferLocalForSensitive,
+      featureRouting: normalizeFeatureRouting(settings.routing?.featureRouting)
     }
   }
 }
@@ -455,6 +492,22 @@ function toPublicProvider(provider: StoredAIProvider): AIProviderSnapshot {
     lastTestedAt: provider.lastTestedAt,
     lastError: provider.lastError
   }
+}
+
+function normalizeFeatureRouting(
+  stored: Partial<Record<AIFeatureTask, AIFeatureTier>> | undefined
+): Record<AIFeatureTask, AIFeatureTier> {
+  const validTiers: AIFeatureTier[] = ['heuristic', 'cheap', 'strong']
+  const result = { ...DEFAULT_FEATURE_ROUTING }
+  if (!stored) return result
+
+  for (const task of Object.keys(DEFAULT_FEATURE_ROUTING) as AIFeatureTask[]) {
+    const v = stored[task]
+    if (v && validTiers.includes(v)) {
+      result[task] = v
+    }
+  }
+  return result
 }
 
 function buildProviderOrder(routing: AIRoutingSettings): AIProviderId[] {
@@ -657,6 +710,7 @@ async function sendOpenAIChat(
     providerId: 'openai',
     model,
     operation: 'chat',
+    feature: request.feature,
     costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
     inputTokens: promptTokens,
     cachedInputTokens,

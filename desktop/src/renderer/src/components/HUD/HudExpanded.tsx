@@ -31,6 +31,8 @@ import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import { useSpeechInput } from '@renderer/hooks/useSpeechInput'
 import type {
   AICostSnapshot,
+  AIFeatureTask,
+  AIFeatureTier,
   AIProviderId,
   AIProviderSnapshot,
   AIRoutingSettings,
@@ -63,6 +65,7 @@ import type {
 import type { SpotifyPlaybackState, TickerQuote } from '../../../../preload/index.d'
 import { TutorActionChips } from './TutorActionChips'
 import { SpotifyBanner } from './SpotifyBanner'
+import { ResponseSourceBadge } from './ResponseSourceBadge'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -391,6 +394,20 @@ function labelEmbeddingState(state: MemoryEmbeddingStatus['state']): string {
     default:
       return 'ocioso'
   }
+}
+
+const FEATURE_TASK_LABELS: Record<AIFeatureTask, string> = {
+  tutor:  'tutor',
+  vision: 'visão',
+  stage2: 'estágio 2',
+  title:  'títulos',
+  router: 'roteador'
+}
+
+const FEATURE_TIER_LABELS: Record<AIFeatureTier, string> = {
+  heuristic: 'local',
+  cheap:     'barato',
+  strong:    'forte'
 }
 
 function getCostAlertState(costs: AICostSnapshot | null): {
@@ -1209,8 +1226,21 @@ export const HudExpanded = memo(function HudExpanded({
                 <SettingsRow
                   label="Restante"
                   value={aiCosts.remainingUsd === null ? 'sem limite' : `$${aiCosts.remainingUsd.toFixed(4)}`}
-                  last
                 />
+                {aiCosts.byFeature && (Object.entries(aiCosts.byFeature) as [AIFeatureTask, number][])
+                  .filter(([, cost]) => cost > 0)
+                  .map(([task, cost], idx, arr) => (
+                    <SettingsRow
+                      key={task}
+                      label={FEATURE_TASK_LABELS[task]}
+                      value={`$${cost.toFixed(5)}`}
+                      last={idx === arr.length - 1}
+                    />
+                  ))
+                }
+                {aiCosts.byFeature && (Object.values(aiCosts.byFeature) as number[]).every(c => c === 0) && (
+                  <SettingsRow label="por feature" value="sem dados hoje" last />
+                )}
               </div>
             )}
           </div>
@@ -1368,6 +1398,22 @@ export const HudExpanded = memo(function HudExpanded({
               </button>
             ))}
           </div>
+
+          <p className="mt-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+            Trilha por feature
+          </p>
+          <div className="mt-2">
+            {(Object.entries(aiSettings.routing.featureRouting ?? {}) as [AIFeatureTask, AIFeatureTier][])
+              .map(([task, tier], idx, arr) => (
+                <SettingsRow
+                  key={task}
+                  label={FEATURE_TASK_LABELS[task]}
+                  value={FEATURE_TIER_LABELS[tier]}
+                  last={idx === arr.length - 1}
+                />
+              ))
+            }
+          </div>
         </div>
 
         <div className="mt-4">
@@ -1391,6 +1437,15 @@ export const HudExpanded = memo(function HudExpanded({
             storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo básico'} | traces:{' '}
             {diagnostics.performance.traceCount} | consentimentos: {privacy.consentTrail.length}
             {lastDeletion ? ' | limpeza registrada' : ''}
+          </p>
+        )}
+
+        {diagnostics?.latestTutorDebug && (
+          <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.34)' }}>
+            ultima resposta: {diagnostics.latestTutorDebug.dominantContextSource} via {diagnostics.latestTutorDebug.model}
+            {diagnostics.latestTutorDebug.latencyMs !== null ? ` | ${diagnostics.latestTutorDebug.latencyMs} ms` : ''}
+            {diagnostics.latestTutorDebug.screenAgeMs !== null ? ` | frame ${diagnostics.latestTutorDebug.screenAgeMs} ms` : ''}
+            {diagnostics.latestTutorDebug.staleContextGuarded ? ' | fresh-screen guard' : ''}
           </p>
         )}
       </>
@@ -1556,6 +1611,11 @@ export const HudExpanded = memo(function HudExpanded({
                           {tradingViewState.priceChange ? ` · ${tradingViewState.priceChange}` : ''}
                         </span>
                       )}
+                      {(tradingViewState.recentHigh || tradingViewState.recentLow) && (
+                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          H {tradingViewState.recentHigh ?? '?'} · L {tradingViewState.recentLow ?? '?'}
+                        </span>
+                      )}
                       {tradingViewState.ohlc.close && (
                         <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                           {tradingViewState.crosshairActive ? 'vela sob o mouse' : 'última vela'}
@@ -1565,6 +1625,11 @@ export const HudExpanded = memo(function HudExpanded({
                       {tradingViewState.candleStructure && (
                         <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                           {tradingViewState.candleStructure}
+                        </span>
+                      )}
+                      {tradingViewState.rangeState !== 'unknown' && (
+                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          range {tradingViewState.rangeState}
                         </span>
                       )}
                     </div>
@@ -2752,6 +2817,11 @@ export const HudExpanded = memo(function HudExpanded({
                     </div>
                   ) : (
                     <div style={{ maxWidth: 860, width: '100%' }}>
+                      {msg.meta?.debug?.dominantContextSource && (
+                        <div style={{ marginBottom: 10 }}>
+                          <ResponseSourceBadge meta={msg.meta} />
+                        </div>
+                      )}
                       <MessageBody content={msg.content} />
                       {msg.meta?.actions?.length ? (
                         <TutorActionChips

@@ -1,5 +1,9 @@
 export type AIProviderId = 'openai' | 'anthropic' | 'gemini' | 'ollama'
 
+export type AIFeatureTask = 'tutor' | 'vision' | 'stage2' | 'title' | 'router'
+
+export type AIFeatureTier = 'heuristic' | 'cheap' | 'strong'
+
 export interface AIProviderModelOption {
   id: string
   label: string
@@ -36,6 +40,7 @@ export interface AIRoutingSettings {
   textPrimary: AIProviderId | null
   textFallback: AIProviderId | null
   preferLocalForSensitive: boolean
+  featureRouting: Record<AIFeatureTask, AIFeatureTier>
 }
 
 export interface AISettingsSnapshot {
@@ -67,4 +72,5 @@ export interface AICostSnapshot {
   openaiSpentUsd: number
   lastUpdatedAt: number | null
   blocked: boolean
+  byFeature: Record<AIFeatureTask, number>
 }

@@ -12,6 +12,15 @@ let lastOcrResult: PerceptionResult | null = null
 const OCR_LANG = 'eng+por'
 const OCR_DPI = '110'
 
+// If N consecutive full-run frames all return zero confidence (pure graphics),
+// back off for COOLDOWN_MS before trying again. This prevents Tesseract from
+// repeatedly hammering graphic frames and emitting Leptonica bbox errors.
+const ZERO_CONFIDENCE_STRIKE_LIMIT = 2
+const ZERO_CONFIDENCE_COOLDOWN_MS  = 12_000
+
+let consecutiveZeroRuns = 0
+let zeroCooldownUntil   = 0
+
 async function getWorker(): Promise<Worker> {
   if (worker) return worker
 
@@ -27,11 +36,11 @@ async function getWorker(): Promise<Worker> {
       logger: () => {}
     })
     await worker.setParameters({
-      // PSM.AUTO handles mixed UI content without triggering Leptonica bbox errors.
-      tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+      // PSM.SPARSE_TEXT scans for text without imposing layout structure.
+      // It avoids the column/paragraph analysis that triggers Leptonica's
+      // "boxClipToRectangle: box outside rectangle" on graphic frames.
+      tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
       user_defined_dpi: OCR_DPI,
-      // Redirect Tesseract/Leptonica debug output to null device to suppress
-      // "pixScanForForeground: invalid box" warnings on graphical frames.
       // @ts-ignore — debug_file is a valid Tesseract config variable not yet typed in tesseract.js
       debug_file: process.platform === 'win32' ? 'NUL' : '/dev/null'
     })
@@ -58,6 +67,12 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   if (image.isEmpty() || width < 32 || height < 32) {
     console.warn('[ocr] Skipping invalid capture before OCR.')
+    return emptyResult(startedAt)
+  }
+
+  // Back off when recent frames have been pure graphics — avoids repeated
+  // Leptonica bbox errors on chart-heavy surfaces.
+  if (Date.now() < zeroCooldownUntil) {
     return emptyResult(startedAt)
   }
 
@@ -110,7 +125,21 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
 
   const normalizedDataUrl = ocrImage.toDataURL()
   const w = await getWorker()
-  const { data } = await w.recognize(normalizedDataUrl)
+
+  let data: Awaited<ReturnType<typeof w.recognize>>['data']
+  try {
+    ;({ data } = await w.recognize(normalizedDataUrl))
+  } catch (err) {
+    // Tesseract/Leptonica threw internally (invalid box on graphic frame, etc.)
+    // Treat it as an empty frame so the pipeline continues cleanly.
+    console.warn(`[ocr] recognize() threw on frame, treating as empty. (${err instanceof Error ? err.message : err})`)
+    consecutiveZeroRuns = Math.min(consecutiveZeroRuns + 1, ZERO_CONFIDENCE_STRIKE_LIMIT)
+    if (consecutiveZeroRuns >= ZERO_CONFIDENCE_STRIKE_LIMIT) {
+      zeroCooldownUntil   = Date.now() + ZERO_CONFIDENCE_COOLDOWN_MS
+      consecutiveZeroRuns = 0
+    }
+    return emptyResult(startedAt)
+  }
 
   const regions: TextRegion[] = (data.blocks ?? [])
     .filter(b => b.text.trim().length > 0)
@@ -140,6 +169,19 @@ export async function recognizeImage(dataUrl: string): Promise<PerceptionResult>
     regions.length > 0
       ? regions.reduce((s, r) => s + r.confidence, 0) / regions.length
       : 0
+
+  // Track consecutive zero-confidence results (pure graphic frames).
+  // After STRIKE_LIMIT zero runs, enter a cooldown to avoid thrashing
+  // Tesseract on chart/image surfaces that produce no useful text.
+  if (avgConfidence === 0) {
+    consecutiveZeroRuns++
+    if (consecutiveZeroRuns >= ZERO_CONFIDENCE_STRIKE_LIMIT) {
+      zeroCooldownUntil   = Date.now() + ZERO_CONFIDENCE_COOLDOWN_MS
+      consecutiveZeroRuns = 0
+    }
+  } else {
+    consecutiveZeroRuns = 0
+  }
 
   console.log(`[ocr] Done in ${Date.now() - startedAt}ms, confidence: ${avgConfidence.toFixed(1)}`)
 

@@ -52,6 +52,8 @@ const IDLE_THROTTLE_STEP_MS = 5_000   // how much to add per extra unchanged cyc
 const POST_ANALYSIS_COOLDOWN_MS = 8_000
 const SETTLE_THRESHOLD = 2
 const MAX_WATCHING_WITHOUT_SETTLE = 15 // safety: force analysis after 30s of watching
+const SNAPSHOT_STALE_MS = 15_000
+const WATCHING_SNAPSHOT_STALE_MS = 4_000
 
 const DEFAULT_CONFIG: PerceptionConfig = {
   enabled: false,
@@ -267,13 +269,18 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
       return snapshot
     }
 
-    // Skip OCR when Vision LLM is enabled and the previous frame was a graphic
-    // surface. Tesseract produces near-zero-confidence output on charts/images,
-    // and Vision can read the frame directly without needing OCR text as input.
-    // First graphic frame still runs OCR (latestSnapshot is null or has a
-    // different surface) — the skip kicks in from the second cycle onward.
+    // Skip OCR when the previous frame was already classified as a graphic
+    // surface. Tesseract produces near-zero-confidence output on charts and
+    // images, and repeatedly processing them triggers Leptonica bbox errors.
+    //
+    // With Vision LLM: skip from the second graphic frame onward (Vision reads
+    // the frame directly without needing OCR text).
+    //
+    // Without Vision LLM: also skip if prevSurface is 'graphic' — the heuristic
+    // analyzer already classified it, and re-running OCR on charts adds noise
+    // without improving accuracy.
     const prevSurface = latestSnapshot?.semanticState.surface_type
-    const skipOcr = config.useVisionLLM && prevSurface === 'graphic'
+    const skipOcr = prevSurface === 'graphic'
 
     const perception: PerceptionResult = skipOcr
       ? { rawText: '', confidence: 0, regions: [], capturedAt: Date.now() }
@@ -393,7 +400,24 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
 }
 
 export async function getContextSnapshot(): Promise<PerceptionContextSnapshot> {
-  if (latestSnapshot) return latestSnapshot
+  if (latestSnapshot) {
+    const refresh = await getSnapshotRefreshPlan(latestSnapshot)
+    if (!refresh) return latestSnapshot
+
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'perception',
+      action: 'refresh_snapshot_for_tutor',
+      sessionId: sessionMemory.session_id,
+      details: {
+        reason: refresh.reason,
+        phase,
+        ageMs: Math.max(0, Date.now() - latestSnapshot.semanticState.capturedAt)
+      }
+    })
+
+    return analyzeOnce(refresh.frame?.dataUrl)
+  }
   return analyzeOnce()
 }
 
@@ -499,6 +523,49 @@ export function onSnapshotUpdate(cb: (snapshot: PerceptionContextSnapshot) => vo
 
 function notifySnapshotUpdate(snapshot: PerceptionContextSnapshot): void {
   for (const listener of snapshotListeners) listener(snapshot)
+}
+
+async function getSnapshotRefreshPlan(
+  snapshot: PerceptionContextSnapshot
+): Promise<{ reason: string; frame?: CaptureFrame } | null> {
+  if (config.privateMode || !config.enabled) return null
+
+  const ageMs = Math.max(0, Date.now() - snapshot.semanticState.capturedAt)
+  const staleThreshold = phase === 'watching' ? WATCHING_SNAPSHOT_STALE_MS : SNAPSHOT_STALE_MS
+
+  if (phase === 'watching' && pendingFrame) {
+    return {
+      reason: appSwitchDetected ? 'watching_app_switch' : 'watching_pending_frame',
+      frame: pendingFrame
+    }
+  }
+
+  if (ageMs >= staleThreshold) {
+    return { reason: 'snapshot_stale' }
+  }
+
+  const frame = await captureFrame(config.targetSourceId ?? undefined)
+  if (!frame) return null
+
+  const hashChanged = lastFrameHash !== null && frame.hash !== lastFrameHash
+  const titleChanged = lastWindowTitle !== null
+    && frame.windowTitle !== null
+    && frame.windowTitle !== lastWindowTitle
+
+  if (!hashChanged && !titleChanged) return null
+
+  pendingFrame = frame
+  lastFrameHash = frame.hash
+  lastWindowTitle = frame.windowTitle
+  stableFrameCount = 0
+  watchingPollCount = 0
+  appSwitchDetected = titleChanged
+  phase = 'watching'
+
+  return {
+    reason: titleChanged ? 'window_changed_before_tutor' : 'frame_changed_before_tutor',
+    frame
+  }
 }
 
 
