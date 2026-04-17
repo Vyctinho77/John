@@ -166,6 +166,37 @@ export interface TutorRequest {
   context?: PerceptionContextSnapshot | null
 }
 
+export type TutorDominantContextSource =
+  | 'vscode'
+  | 'spotify'
+  | 'tradingview'
+  | 'vision'
+  | 'ocr'
+  | 'memory'
+  | 'local'
+  | 'unknown'
+
+export interface TutorSourceConfidence {
+  bridge: number
+  vision: number
+  ocr: number
+  memory: number
+}
+
+export interface TutorDebugEnvelope {
+  provider: string
+  model: string
+  latencyMs: number
+  screenshotIncluded: boolean
+  screenCapturedAt: number | null
+  screenAgeMs: number | null
+  changeSummary: ChangeSummary | null
+  connectorsUsed: ConnectorID[]
+  dominantContextSource: TutorDominantContextSource
+  sourceConfidence: TutorSourceConfidence
+  staleContextGuarded: boolean
+}
+
 export interface TutorResponse {
   domain: TutorDomain
   mode: TutorMode
@@ -178,6 +209,7 @@ export interface TutorResponse {
   suggested_follow_ups: string[]
   warning: string | null
   actions?: TutorAction[]
+  debug?: TutorDebugEnvelope
 }
 
 export type SpotifyEntityType = 'track' | 'artist' | 'album' | 'playlist'
@@ -189,11 +221,59 @@ export type SpotifyActionPayload = {
   query?: string
 }
 
+export type TradingViewActionPayload = {
+  action: 'open' | 'set_symbol' | 'set_timeframe' | 'report_state'
+  symbol?: string
+  timeframe?: string
+}
+
+export interface VSCodeConnectorData {
+  editor: {
+    filename: string
+    filepath: string
+    language: string
+    cursorLine: number
+    selectedText: string | null
+    visibleRange: { start: number; end: number }
+    surroundingCode: string
+  } | null
+  diagnostics: {
+    hasErrors: boolean
+    errorCount: number
+    items: Array<{ message: string; severity: number; line: number; source?: string }>
+  } | null
+  git: {
+    branch?: string
+    ahead: number
+    behind: number
+    changedFiles: number
+    stagedFiles: number
+  } | null
+  terminal: {
+    lastOutput: string
+    activeTerminalName: string | null
+  } | null
+}
+
+export type VSCodeActionPayload = {
+  action: 'report_state' | 'read_code' | 'explain_diagnostics' | 'review_diff' | 'summarize_terminal'
+}
+
 export type TutorAction = {
   id: string
   label: string
   kind: 'spotify'
   payload: SpotifyActionPayload
+} | {
+  id: string
+  label: string
+  kind: 'tradingview'
+  payload: TradingViewActionPayload
+} | {
+  id: string
+  label: string
+  kind: 'vscode'
+  payload: VSCodeActionPayload
 }
 
 export interface SpotifyCommandResult {
@@ -225,8 +305,10 @@ export interface TradingViewConnectorState {
   exchange: string | null
   timeframe: string | null
   crosshairActive: boolean
+  crosshairConfidence: number
   hoveredCandleTime: string | null
   ohlcSource: 'hovered' | 'last-visible' | 'unknown'
+  ohlcConfidence: number
   currentPrice: string | null
   priceChange: string | null
   ohlc: {
@@ -235,6 +317,9 @@ export interface TradingViewConnectorState {
     low: string | null
     close: string | null
   }
+  recentHigh: string | null
+  recentLow: string | null
+  rangeState: 'expanding' | 'contracting' | 'balanced' | 'unknown'
   previousOhlc: {
     open: string | null
     high: string | null
@@ -245,15 +330,32 @@ export interface TradingViewConnectorState {
   candleDirection: 'bullish' | 'bearish' | 'neutral' | 'unknown'
   candleStructure: string | null
   patternHints: string[]
+  structureHints: string[]
   contextualPatternHints: string[]
   sequencePatternHints: string[]
   indicatorValues: Record<string, string>
+  indicatorSignals: string[]
+  indicatorConfidence: number
   layoutHints: string[]
   watchlistVisible: boolean
   indicatorsVisible: boolean
   drawingToolsVisible: boolean
   selectedPanel: string | null
   lastObservedAt: number | null
+}
+
+export interface TradingViewCommandResult {
+  ok: boolean
+  message: string
+  state: TradingViewConnectorState
+  errorCode?: 'not_open' | 'invalid_action' | 'invalid_symbol' | 'invalid_timeframe' | 'unknown'
+}
+
+export interface VSCodeCommandResult {
+  ok: boolean
+  message: string
+  state: VSCodeConnectorData | null
+  errorCode?: 'not_connected' | 'no_editor' | 'no_diagnostics' | 'no_git' | 'no_terminal' | 'invalid_action' | 'unknown'
 }
 
 export interface FeatureFlags {
@@ -336,12 +438,23 @@ export interface FeatureFlagPolicyState {
 
 export type FeaturePolicySnapshot = Record<keyof FeatureFlags, FeatureFlagPolicyState>
 
+export interface TutorDebugSummary {
+  provider: string
+  model: string
+  dominantContextSource: TutorDominantContextSource
+  connectorsUsed: ConnectorID[]
+  latencyMs: number | null
+  screenAgeMs: number | null
+  staleContextGuarded: boolean
+}
+
 export interface DiagnosticsSnapshot {
   appVersion: string
   telemetryOptIn: boolean
   eventCount: number
   recentEvents: DiagnosticEvent[]
   replayEvents: ReplayEvent[]
+  latestTutorDebug: TutorDebugSummary | null
   performance: {
     traceCount: number
     averageDurationMs: number

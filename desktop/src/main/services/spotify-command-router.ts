@@ -377,7 +377,25 @@ function createSpotifyTutorResponse(
     needs_visual_confirmation: false,
     suggested_follow_ups,
     warning: null,
-    actions
+    actions,
+    debug: {
+      provider: 'spotify-local',
+      model: 'spotify-local',
+      latencyMs: 0,
+      screenshotIncluded: false,
+      screenCapturedAt: null,
+      screenAgeMs: null,
+      changeSummary: null,
+      connectorsUsed: ['spotify'],
+      dominantContextSource: 'spotify',
+      sourceConfidence: {
+        bridge: 0.98,
+        vision: 0,
+        ocr: 0,
+        memory: 0
+      },
+      staleContextGuarded: false
+    }
   }
 }
 

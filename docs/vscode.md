@@ -242,6 +242,30 @@ O prompt tambem injeta um `CodeVoice` proprio quando a superficie detectada e co
 - ler erro antes de dar teoria
 - evitar conselho generico quando o trecho visivel ja mostra o problema
 
+## Acoes inline locais
+
+O VS Code agora tambem participa do fluxo de `TutorResponse.actions`.
+
+Isso permite que a HUD mostre chips clicaveis sem depender do tutor remoto para "fingir" uma acao.
+
+Acoes locais atuais:
+
+- `Resumir VS Code`
+- `Ler codigo atual`
+- `Explicar erro`
+- `Revisar diff`
+- `Ler terminal`
+
+Fluxo:
+
+1. o `vscode-command-router.ts` intercepta pedidos claros como `explica esse erro` ou `olha o terminal`
+2. ele usa apenas o contexto atual do bridge
+3. devolve uma resposta local com `actions`
+4. a HUD executa essas actions via `window.vscodeAPI.executeAction(...)`
+5. a resposta volta direto para o chat, sem nova rodada do tutor
+
+Mesmo quando o pedido vai para o tutor principal, respostas de dominio `code` com contexto do VS Code podem receber essas actions como follow-up local.
+
 ## UI atual
 
 Na Biblioteca, o card do VS Code permite:

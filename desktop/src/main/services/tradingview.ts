@@ -1,9 +1,39 @@
 import { BrowserView, BrowserWindow, session } from 'electron'
-import type { TradingViewConnectorState } from '../../shared/perception.types'
+import type {
+  TradingViewActionPayload,
+  TradingViewCommandResult,
+  TradingViewConnectorState
+} from '../../shared/perception.types'
 
 const TRADINGVIEW_PARTITION = 'persist:tradingview'
 const TRADINGVIEW_URL = 'https://www.tradingview.com/chart/'
 const OBSERVE_INTERVAL_MS = 2_500
+
+function formatTimeframeLabel(timeframe: string | null | undefined): string | null {
+  if (!timeframe) return null
+  switch (timeframe) {
+    case '1':
+      return '1m'
+    case '3':
+      return '3m'
+    case '5':
+      return '5m'
+    case '15':
+      return '15m'
+    case '30':
+      return '30m'
+    case '45':
+      return '45m'
+    case '60':
+      return '1h'
+    case '120':
+      return '2h'
+    case '240':
+      return '4h'
+    default:
+      return timeframe
+  }
+}
 
 type StatusListener = (state: TradingViewConnectorState) => void
 
@@ -17,8 +47,10 @@ const EMPTY_STATE: TradingViewConnectorState = {
   exchange: null,
   timeframe: null,
   crosshairActive: false,
+  crosshairConfidence: 0,
   hoveredCandleTime: null,
   ohlcSource: 'unknown',
+  ohlcConfidence: 0,
   currentPrice: null,
   priceChange: null,
   ohlc: {
@@ -27,14 +59,20 @@ const EMPTY_STATE: TradingViewConnectorState = {
     low: null,
     close: null
   },
+  recentHigh: null,
+  recentLow: null,
+  rangeState: 'unknown',
   previousOhlc: null,
   previousCandleTime: null,
   candleDirection: 'unknown',
   candleStructure: null,
   patternHints: [],
+  structureHints: [],
   contextualPatternHints: [],
   sequencePatternHints: [],
   indicatorValues: {},
+  indicatorSignals: [],
+  indicatorConfidence: 0,
   layoutHints: [],
   watchlistVisible: false,
   indicatorsVisible: false,
@@ -47,7 +85,9 @@ const OBSERVER_SCRIPT = String.raw`
 (() => {
   const bridge = window.__johnTradingViewBridge || (window.__johnTradingViewBridge = {
     installed: false,
-    lastChartPointerAt: 0
+    lastChartPointerAt: 0,
+    lastOhlcSignature: '',
+    lastOhlcChangeAt: 0
   })
   if (!bridge.installed) {
     bridge.installed = true
@@ -136,12 +176,14 @@ const OBSERVER_SCRIPT = String.raw`
   }
   const parseIndicators = (texts, symbol, timeframe) => {
     const map = {}
+    const banned = /^(watchlist|alert|alerts|object tree|pine editor|strategy tester|publishing|layout|compare|replay)$/i
     for (const text of texts) {
       if (!text) continue
       if (symbol && text.includes(symbol)) continue
       if (timeframe && text === timeframe) continue
-      if (/^(watchlist|alert|object tree|pine editor|strategy tester)$/i.test(text)) continue
+      if (banned.test(text)) continue
       const compact = text.replace(/\s+/g, ' ').trim()
+      if (/^O\s*[0-9.,+-]+\s*H\s*[0-9.,+-]+\s*L\s*[0-9.,+-]+\s*C\s*[0-9.,+-]+/i.test(compact)) continue
       const colonMatch = compact.match(/^([^:]{2,40}):\s*([0-9.,%+\- ].{0,32})$/)
       if (colonMatch) {
         map[colonMatch[1].trim()] = colonMatch[2].trim()
@@ -150,9 +192,83 @@ const OBSERVER_SCRIPT = String.raw`
       const pairMatch = compact.match(/^([A-Za-z][A-Za-z0-9 ()/_-]{1,32})\s+([0-9][0-9.,%+\- ]{0,24})$/)
       if (pairMatch) {
         map[pairMatch[1].trim()] = pairMatch[2].trim()
+        continue
+      }
+      const inlineMatch = compact.match(/^([A-Za-z][A-Za-z0-9/_ ()-]{1,24})\s+(?:[A-Za-z0-9._-]+\s+){0,4}([+-]?\d[\d.,]*(?:%|[A-Za-z]*)?(?:\s+[+-]?\d[\d.,%]*){0,2})$/)
+      if (inlineMatch && !map[inlineMatch[1].trim()]) {
+        map[inlineMatch[1].trim()] = inlineMatch[2].trim()
       }
     }
     return map
+  }
+  const deriveIndicatorSignals = (indicatorMap) => {
+    const signals = []
+    const entries = Object.entries(indicatorMap)
+    const parseNumeric = (value) => {
+      if (!value) return null
+      const candidate = String(value).match(/[+-]?\d[\d.,]*/) ? String(value).match(/[+-]?\d[\d.,]*/)[0] : null
+      if (!candidate) return null
+      const normalized = candidate
+        .replace(/(?<=\d)\.(?=\d{3}(?:\D|$))/g, '')
+        .replace(',', '.')
+      const parsed = Number(normalized)
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    for (const [name, rawValue] of entries) {
+      const label = name.toLowerCase()
+      const value = String(rawValue)
+      const numeric = parseNumeric(value)
+
+      if (/\brsi\b/.test(label)) {
+        signals.push('rsi-visible')
+        if (numeric != null) {
+          if (numeric >= 70) signals.push('rsi-overbought')
+          else if (numeric <= 30) signals.push('rsi-oversold')
+          else if (numeric >= 55) signals.push('rsi-firm')
+          else if (numeric <= 45) signals.push('rsi-soft')
+          else signals.push('rsi-mid')
+        }
+        continue
+      }
+
+      if (/\bmacd\b/.test(label)) {
+        signals.push('macd-visible')
+        if (/[+]\d/.test(value)) signals.push('macd-positive')
+        if (/[-]\d/.test(value)) signals.push('macd-negative')
+        continue
+      }
+
+      if (/\bema\b/.test(label)) {
+        signals.push('ema-visible')
+        continue
+      }
+
+      if (/\bsma\b/.test(label)) {
+        signals.push('sma-visible')
+        continue
+      }
+
+      if (/\bvwap\b/.test(label)) {
+        signals.push('vwap-visible')
+        continue
+      }
+
+      if (/\bvolume\b|\bvol\b/.test(label)) {
+        signals.push('volume-visible')
+        continue
+      }
+
+      if (/\bbb\b|bollinger/.test(label)) {
+        signals.push('bollinger-visible')
+      }
+    }
+
+    if (signals.includes('ema-visible') || signals.includes('sma-visible')) {
+      signals.push('moving-averages-visible')
+    }
+
+    return Array.from(new Set(signals))
   }
   const parseNumeric = (value) => {
     if (!value) return null
@@ -284,25 +400,62 @@ const OBSERVER_SCRIPT = String.raw`
     '[class*="legend"] [class*="item"]'
   ], 32)
   const indicatorValues = parseIndicators(indicatorTexts, symbol, timeframe)
+  const indicatorSignals = deriveIndicatorSignals(indicatorValues)
   const candleAnalysis = analyzeCandle(ohlc)
+  const ohlcSignature = [ohlc.open, ohlc.high, ohlc.low, ohlc.close, hoveredCandleTime].join('|')
+  if (ohlc.close && ohlcSignature !== bridge.lastOhlcSignature) {
+    bridge.lastOhlcSignature = ohlcSignature
+    bridge.lastOhlcChangeAt = Date.now()
+  }
+  const ohlcFreshMs = bridge.lastOhlcChangeAt ? Date.now() - bridge.lastOhlcChangeAt : Infinity
+  const crosshairConfidence = crosshairActive
+    ? hoveredCandleTime
+      ? ohlcFreshMs < 3500 ? 0.94 : 0.76
+      : 0.42
+    : 0
+  const ohlcConfidence = ohlc.close
+    ? crosshairActive
+      ? (hoveredCandleTime ? (ohlcFreshMs < 3500 ? 0.92 : 0.72) : 0.48)
+      : 0.68
+    : 0
+  const indicatorConfidence = Math.max(
+    0,
+    Math.min(
+      1,
+      Object.keys(indicatorValues).length
+        ? 0.34
+          + Math.min(Object.keys(indicatorValues).length, 6) * 0.09
+          + Math.min(indicatorTexts.length, 10) * 0.015
+          + Math.min(indicatorSignals.length, 6) * 0.03
+        : 0
+    )
+  )
   return {
     loggedIn: hasUserMenu && !hasSignInButton,
-    lowConfidence: !symbol || !timeframe || (!currentPrice && !ohlc.close),
+    lowConfidence: !symbol || !timeframe || (!currentPrice && !ohlc.close) || (crosshairActive && crosshairConfidence < 0.55),
     url,
     title,
     symbol,
     exchange,
     timeframe,
     crosshairActive,
+    crosshairConfidence,
     hoveredCandleTime,
-    ohlcSource: ohlc.close ? (crosshairActive ? 'hovered' : 'last-visible') : 'unknown',
+    ohlcSource: ohlc.close ? (crosshairActive && hoveredCandleTime ? 'hovered' : 'last-visible') : 'unknown',
+    ohlcConfidence,
     currentPrice,
     priceChange,
     ohlc,
+    recentHigh: null,
+    recentLow: null,
+    rangeState: 'unknown',
     candleDirection: candleAnalysis.candleDirection,
     candleStructure: candleAnalysis.candleStructure,
     patternHints: candleAnalysis.patternHints,
+    structureHints: [],
     indicatorValues,
+    indicatorSignals,
+    indicatorConfidence,
     layoutHints,
     watchlistVisible,
     indicatorsVisible,
@@ -461,6 +614,94 @@ function analyzeCandleSequence(
   return hints
 }
 
+function analyzeRangeStructure(
+  recent: Array<{ ohlc: TradingViewConnectorState['ohlc'] }>
+): {
+  recentHigh: string | null
+  recentLow: string | null
+  rangeState: TradingViewConnectorState['rangeState']
+  structureHints: string[]
+} {
+  const normalized = recent
+    .map(entry => ({
+      high: parseTradingViewNumber(entry.ohlc.high),
+      low: parseTradingViewNumber(entry.ohlc.low),
+      range: candleRange(entry.ohlc),
+      direction: candleDirectionFromOhlc(entry.ohlc)
+    }))
+    .filter(entry => entry.high != null && entry.low != null) as Array<{
+      high: number
+      low: number
+      range: number | null
+      direction: ReturnType<typeof candleDirectionFromOhlc>
+    }>
+
+  if (!normalized.length) {
+    return {
+      recentHigh: null,
+      recentLow: null,
+      rangeState: 'unknown',
+      structureHints: []
+    }
+  }
+
+  const recentHigh = Math.max(...normalized.map(entry => entry.high))
+  const recentLow = Math.min(...normalized.map(entry => entry.low))
+  const structureHints: string[] = []
+  let rangeState: TradingViewConnectorState['rangeState'] = 'balanced'
+
+  if (normalized.length >= 2) {
+    const last = normalized[normalized.length - 1]
+    const prev = normalized[normalized.length - 2]
+    const lastRange = last.range
+    const prevRange = prev.range
+
+    if (lastRange != null && prevRange != null && prevRange > 0) {
+      if (lastRange > prevRange * 1.18) rangeState = 'expanding'
+      else if (lastRange < prevRange * 0.84) rangeState = 'contracting'
+    }
+
+    if (last.high > prev.high && last.low > prev.low) {
+      structureHints.push('higher-structure')
+    }
+    if (last.high < prev.high && last.low < prev.low) {
+      structureHints.push('lower-structure')
+    }
+    if (last.high <= prev.high && last.low >= prev.low) {
+      structureHints.push('range-compression')
+    }
+    if (last.high >= prev.high && last.low <= prev.low) {
+      structureHints.push('range-expansion')
+    }
+  }
+
+  if (normalized.length >= 3) {
+    const [a, b, c] = normalized.slice(-3)
+    if (a.high >= b.high && b.high >= c.high && a.low <= b.low && b.low <= c.low) {
+      structureHints.push('three-candle-tightening')
+    }
+    if (
+      a.direction !== 'unknown'
+      && a.direction === b.direction
+      && b.direction === c.direction
+    ) {
+      structureHints.push('directional-sequence')
+    }
+  }
+
+  return {
+    recentHigh: formatTradingViewNumber(recentHigh),
+    recentLow: formatTradingViewNumber(recentLow),
+    rangeState,
+    structureHints
+  }
+}
+
+function formatTradingViewNumber(value: number | null): string | null {
+  if (value == null || !Number.isFinite(value)) return null
+  return Number.isInteger(value) ? String(value) : value.toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 function statesEqual(a: TradingViewConnectorState, b: TradingViewConnectorState): boolean {
   return a.connected === b.connected
     && a.loggedIn === b.loggedIn
@@ -471,14 +712,19 @@ function statesEqual(a: TradingViewConnectorState, b: TradingViewConnectorState)
     && a.exchange === b.exchange
     && a.timeframe === b.timeframe
     && a.crosshairActive === b.crosshairActive
+    && a.crosshairConfidence === b.crosshairConfidence
     && a.hoveredCandleTime === b.hoveredCandleTime
     && a.ohlcSource === b.ohlcSource
+    && a.ohlcConfidence === b.ohlcConfidence
     && a.currentPrice === b.currentPrice
     && a.priceChange === b.priceChange
     && a.ohlc.open === b.ohlc.open
     && a.ohlc.high === b.ohlc.high
     && a.ohlc.low === b.ohlc.low
     && a.ohlc.close === b.ohlc.close
+    && a.recentHigh === b.recentHigh
+    && a.recentLow === b.recentLow
+    && a.rangeState === b.rangeState
     && a.previousOhlc?.open === b.previousOhlc?.open
     && a.previousOhlc?.high === b.previousOhlc?.high
     && a.previousOhlc?.low === b.previousOhlc?.low
@@ -487,9 +733,12 @@ function statesEqual(a: TradingViewConnectorState, b: TradingViewConnectorState)
     && a.candleDirection === b.candleDirection
     && a.candleStructure === b.candleStructure
     && sameArray(a.patternHints, b.patternHints)
+    && sameArray(a.structureHints, b.structureHints)
     && sameArray(a.contextualPatternHints, b.contextualPatternHints)
     && sameArray(a.sequencePatternHints, b.sequencePatternHints)
     && sameRecord(a.indicatorValues, b.indicatorValues)
+    && sameArray(a.indicatorSignals, b.indicatorSignals)
+    && a.indicatorConfidence === b.indicatorConfidence
     && sameArray(a.layoutHints, b.layoutHints)
     && a.watchlistVisible === b.watchlistVisible
     && a.indicatorsVisible === b.indicatorsVisible
@@ -539,9 +788,11 @@ export class TradingViewService {
       ohlc: { ...this.state.ohlc },
       previousOhlc: this.state.previousOhlc ? { ...this.state.previousOhlc } : null,
       patternHints: [...this.state.patternHints],
+      structureHints: [...this.state.structureHints],
       contextualPatternHints: [...this.state.contextualPatternHints],
       sequencePatternHints: [...this.state.sequencePatternHints],
       indicatorValues: { ...this.state.indicatorValues },
+      indicatorSignals: [...this.state.indicatorSignals],
       layoutHints: [...this.state.layoutHints]
     }
   }
@@ -666,6 +917,81 @@ export class TradingViewService {
     return this.getState()
   }
 
+  async executeAction(payload: TradingViewActionPayload): Promise<TradingViewCommandResult> {
+    try {
+      switch (payload.action) {
+        case 'open': {
+          const state = await this.open()
+          return { ok: true, message: 'Abrindo o TradingView no app.', state }
+        }
+        case 'set_symbol': {
+          const symbol = payload.symbol?.trim()
+          if (!symbol) {
+            return {
+              ok: false,
+              message: 'Preciso de um simbolo valido para abrir no TradingView.',
+              state: this.getState(),
+              errorCode: 'invalid_symbol'
+            }
+          }
+          let state = this.getState()
+          if (!state.connected) state = await this.open()
+          state = await this.setSymbol(symbol)
+          if (payload.timeframe?.trim()) {
+            state = await this.setTimeframe(payload.timeframe.trim())
+          }
+          const timeframeLabel = payload.timeframe?.trim()
+            ? ` em ${formatTimeframeLabel(payload.timeframe.trim()) ?? payload.timeframe.trim()}`
+            : ''
+          return {
+            ok: true,
+            message: `Abrindo ${state.symbol ?? symbol}${timeframeLabel}.`,
+            state
+          }
+        }
+        case 'set_timeframe': {
+          const timeframe = payload.timeframe?.trim()
+          if (!timeframe) {
+            return {
+              ok: false,
+              message: 'Preciso de um timeframe valido para ajustar o grafico.',
+              state: this.getState(),
+              errorCode: 'invalid_timeframe'
+            }
+          }
+          let state = this.getState()
+          if (!state.connected) state = await this.open()
+          state = await this.setTimeframe(timeframe)
+          return {
+            ok: true,
+            message: `Ajustando o grafico para ${formatTimeframeLabel(timeframe) ?? timeframe}.`,
+            state
+          }
+        }
+        case 'report_state':
+          return {
+            ok: true,
+            message: 'Atualizando o resumo do TradingView.',
+            state: this.getState()
+          }
+        default:
+          return {
+            ok: false,
+            message: 'Acao do TradingView nao reconhecida.',
+            state: this.getState(),
+            errorCode: 'invalid_action'
+          }
+      }
+    } catch {
+      return {
+        ok: false,
+        message: 'Nao consegui executar essa acao no TradingView agora.',
+        state: this.getState(),
+        errorCode: 'unknown'
+      }
+    }
+  }
+
   private async ensureOpen(): Promise<void> {
     if (!this.hostWindow || this.hostWindow.isDestroyed() || !this.view) {
       await this.open()
@@ -711,19 +1037,27 @@ export class TradingViewService {
         exchange: observed.exchange ?? null,
         timeframe: observed.timeframe ?? null,
         crosshairActive: Boolean(observed.crosshairActive),
+        crosshairConfidence: typeof observed.crosshairConfidence === 'number' ? observed.crosshairConfidence : 0,
         hoveredCandleTime: observed.hoveredCandleTime ?? null,
         ohlcSource: observed.ohlcSource ?? 'unknown',
+        ohlcConfidence: typeof observed.ohlcConfidence === 'number' ? observed.ohlcConfidence : 0,
         currentPrice: observed.currentPrice ?? null,
         priceChange: observed.priceChange ?? null,
         ohlc: observed.ohlc ?? { ...EMPTY_STATE.ohlc },
+        recentHigh: this.state.recentHigh ?? null,
+        recentLow: this.state.recentLow ?? null,
+        rangeState: this.state.rangeState ?? 'unknown',
         previousOhlc: this.state.previousOhlc ? { ...this.state.previousOhlc } : null,
         previousCandleTime: this.state.previousCandleTime ?? null,
         candleDirection: observed.candleDirection ?? 'unknown',
         candleStructure: observed.candleStructure ?? null,
         patternHints: Array.isArray(observed.patternHints) ? observed.patternHints : [],
+        structureHints: [...this.state.structureHints],
         contextualPatternHints: [...this.state.contextualPatternHints],
         sequencePatternHints: [...this.state.sequencePatternHints],
         indicatorValues: observed.indicatorValues ?? {},
+        indicatorSignals: Array.isArray(observed.indicatorSignals) ? observed.indicatorSignals : [],
+        indicatorConfidence: typeof observed.indicatorConfidence === 'number' ? observed.indicatorConfidence : 0,
         layoutHints: Array.isArray(observed.layoutHints) ? observed.layoutHints : [],
         watchlistVisible: Boolean(observed.watchlistVisible),
         indicatorsVisible: Boolean(observed.indicatorsVisible),
@@ -736,8 +1070,12 @@ export class TradingViewService {
       if (symbolChanged) {
         this.lastComparableCandle = null
         this.recentComparableCandles = []
+        nextState.recentHigh = null
+        nextState.recentLow = null
+        nextState.rangeState = 'unknown'
         nextState.previousOhlc = null
         nextState.previousCandleTime = null
+        nextState.structureHints = []
         nextState.contextualPatternHints = []
         nextState.sequencePatternHints = []
       }
@@ -771,6 +1109,20 @@ export class TradingViewService {
           this.recentComparableCandles = [...this.recentComparableCandles, comparableCandle].slice(-3)
         }
         nextState.sequencePatternHints = analyzeCandleSequence(this.recentComparableCandles)
+        const rangeAnalysis = analyzeRangeStructure(this.recentComparableCandles)
+        nextState.recentHigh = rangeAnalysis.recentHigh
+        nextState.recentLow = rangeAnalysis.recentLow
+        nextState.rangeState = rangeAnalysis.rangeState
+        nextState.structureHints = rangeAnalysis.structureHints
+      } else {
+        nextState.recentHigh = null
+        nextState.recentLow = null
+        nextState.rangeState = 'unknown'
+        nextState.structureHints = []
+        nextState.previousOhlc = null
+        nextState.previousCandleTime = null
+        nextState.contextualPatternHints = []
+        nextState.sequencePatternHints = []
       }
 
       this.setState(nextState)
@@ -796,9 +1148,11 @@ export class TradingViewService {
       ohlc: { ...next.ohlc },
       previousOhlc: next.previousOhlc ? { ...next.previousOhlc } : null,
       patternHints: [...next.patternHints],
+      structureHints: [...next.structureHints],
       contextualPatternHints: [...next.contextualPatternHints],
       sequencePatternHints: [...next.sequencePatternHints],
       indicatorValues: { ...next.indicatorValues },
+      indicatorSignals: [...next.indicatorSignals],
       layoutHints: [...next.layoutHints]
     }
     const changed = !statesEqual(this.state, normalized)

@@ -1,4 +1,9 @@
-import type { TutorResponse, TradingViewConnectorState } from '../../shared/perception.types'
+import type {
+  TradingViewActionPayload,
+  TutorAction,
+  TutorResponse,
+  TradingViewConnectorState
+} from '../../shared/perception.types'
 import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { generateRemoteText } from './ai-provider'
 import { tradingViewService } from './tradingview'
@@ -45,7 +50,7 @@ export async function maybeHandleTradingViewTutorRequest(
   switch (intent.kind) {
     case 'open': {
       const state = await deps.open()
-      return createTradingViewResponse('Abrindo o TradingView no app.', state)
+      return createTradingViewResponse('Abrindo o TradingView no app.', state, buildTradingViewActions(state))
     }
     case 'set_symbol': {
       let state = deps.getState()
@@ -58,7 +63,8 @@ export async function maybeHandleTradingViewTutorRequest(
       }
       return createTradingViewResponse(
         buildNavigationMessage(intent.symbol, intent.timeframe, state),
-        state
+        state,
+        buildTradingViewActions(state)
       )
     }
     case 'set_timeframe': {
@@ -69,11 +75,16 @@ export async function maybeHandleTradingViewTutorRequest(
       state = await deps.setTimeframe(intent.timeframe)
       return createTradingViewResponse(
         `Ajustando o gráfico para ${formatTimeframeLabel(intent.timeframe)}.`,
-        state
+        state,
+        buildTradingViewActions(state)
       )
     }
     case 'report_state':
-      return createTradingViewResponse(buildStateSummary(deps.getState()), deps.getState())
+      return createTradingViewResponse(
+        buildStateSummary(deps.getState()),
+        deps.getState(),
+        buildTradingViewActions(deps.getState())
+      )
   }
 }
 
@@ -221,18 +232,78 @@ async function maybeInferTradingViewIntent(rawPrompt: string): Promise<TradingVi
   }
 }
 
-function createTradingViewResponse(content: string, state: TradingViewConnectorState): TutorResponse {
+function createTradingViewResponse(
+  content: string,
+  state: TradingViewConnectorState,
+  actions: TutorAction[] = []
+): TutorResponse {
   return {
     domain: 'market',
     mode: 'direct',
     content,
+    actions,
     provider: 'tradingview-local',
     model: 'tradingview-local',
     uncertainty: state.lowConfidence ? 0.28 : 0.12,
     should_ask_confirmation: false,
     needs_visual_confirmation: false,
     suggested_follow_ups: buildTradingViewFollowUps(state),
-    warning: null
+    warning: null,
+    debug: {
+      provider: 'tradingview-local',
+      model: 'tradingview-local',
+      latencyMs: 0,
+      screenshotIncluded: false,
+      screenCapturedAt: state.lastObservedAt,
+      screenAgeMs: state.lastObservedAt ? Math.max(0, Date.now() - state.lastObservedAt) : null,
+      changeSummary: null,
+      connectorsUsed: ['tradingview'],
+      dominantContextSource: 'tradingview',
+      sourceConfidence: {
+        bridge: 0.98,
+        vision: 0,
+        ocr: 0,
+        memory: 0
+      },
+      staleContextGuarded: false
+    }
+  }
+}
+
+function buildTradingViewActions(state: TradingViewConnectorState): TutorAction[] {
+  const actions: TutorAction[] = []
+
+  if (!state.connected) {
+    actions.push(tradingViewAction('Abrir TradingView', { action: 'open' }))
+    return actions
+  }
+
+  actions.push(tradingViewAction('Resumir gráfico', { action: 'report_state' }))
+
+  if (state.symbol !== 'BTCUSDT') {
+    actions.push(tradingViewAction('Abrir BTCUSDT', { action: 'set_symbol', symbol: 'BTCUSDT' }))
+  }
+
+  if (state.timeframe !== '15') {
+    actions.push(tradingViewAction('15m', { action: 'set_timeframe', timeframe: '15' }))
+  }
+
+  if (state.timeframe !== '60') {
+    actions.push(tradingViewAction('1h', { action: 'set_timeframe', timeframe: '60' }))
+  }
+
+  return actions.slice(0, 4)
+}
+
+function tradingViewAction(
+  label: string,
+  payload: TradingViewActionPayload
+): TutorAction {
+  return {
+    id: `tradingview:${payload.action}:${payload.symbol ?? payload.timeframe ?? label}`,
+    label,
+    kind: 'tradingview',
+    payload
   }
 }
 

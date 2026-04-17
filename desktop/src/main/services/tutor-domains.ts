@@ -132,10 +132,17 @@ function buildMarketTutor(input: DomainTutorInput): DomainTutorOutput {
     lines.push(
       `O usuário está apontando para uma vela específica${tradingView.hoveredCandleTime ? ` em ${tradingView.hoveredCandleTime}` : ''}. Leia essa vela primeiro: O ${tradingView.ohlc.open ?? '?'} | H ${tradingView.ohlc.high ?? '?'} | L ${tradingView.ohlc.low ?? '?'} | C ${tradingView.ohlc.close ?? '?'}.`
     )
+    if (typeof tradingView.crosshairConfidence === 'number' && tradingView.crosshairConfidence < 0.6) {
+      lines.push(`A leitura do crosshair está útil, mas ainda provisória (confiança ${tradingView.crosshairConfidence.toFixed(2)}).`)
+    }
   } else if (tradingView?.ohlc.close) {
     lines.push(
       `OHLC visível mais confiável: O ${tradingView.ohlc.open ?? '?'} | H ${tradingView.ohlc.high ?? '?'} | L ${tradingView.ohlc.low ?? '?'} | C ${tradingView.ohlc.close ?? '?'}.`
     )
+  }
+
+  if (typeof tradingView?.ohlcConfidence === 'number' && tradingView.ohlcConfidence > 0) {
+    lines.push(`Confiança do OHLC atual: ${tradingView.ohlcConfidence.toFixed(2)}.`)
   }
 
   if (tradingView?.currentPrice) {
@@ -156,6 +163,18 @@ function buildMarketTutor(input: DomainTutorInput): DomainTutorOutput {
     lines.push(`Pistas de padrão: ${tradingView.patternHints.join(', ')}.`)
   }
 
+  if (tradingView?.recentHigh || tradingView?.recentLow) {
+    lines.push(`Faixa recente visível: máxima ${tradingView.recentHigh ?? '?'} | mínima ${tradingView.recentLow ?? '?'}.`)
+  }
+
+  if (tradingView?.rangeState && tradingView.rangeState !== 'unknown') {
+    lines.push(`Estado local do range: ${translateRangeState(tradingView.rangeState)}.`)
+  }
+
+  if (tradingView?.structureHints?.length) {
+    lines.push(`Estrutura local: ${tradingView.structureHints.join(', ')}.`)
+  }
+
   if (tradingView?.contextualPatternHints?.length) {
     lines.push(`Contexto entre velas: ${tradingView.contextualPatternHints.join(', ')}.`)
   }
@@ -171,6 +190,14 @@ function buildMarketTutor(input: DomainTutorInput): DomainTutorOutput {
         .map(([name, value]) => `${name}=${value}`)
         .join(' | ')}.`
     )
+  }
+
+  if (tradingView?.indicatorSignals?.length) {
+    lines.push(`Sinais de indicadores: ${tradingView.indicatorSignals.join(', ')}.`)
+  }
+
+  if (typeof tradingView?.indicatorConfidence === 'number' && tradingView.indicatorConfidence > 0) {
+    lines.push(`Confiança da leitura de indicadores: ${tradingView.indicatorConfidence.toFixed(2)}.`)
   }
 
   lines.push(`O trecho central do gráfico parece ser ${semanticState.probable_user_focus}.`)
@@ -293,5 +320,18 @@ function translateCandleDirection(direction: TradingViewConnectorState['candleDi
       return 'neutra'
     default:
       return 'indefinida'
+  }
+}
+
+function translateRangeState(state: TradingViewConnectorState['rangeState']): string {
+  switch (state) {
+    case 'expanding':
+      return 'expandindo'
+    case 'contracting':
+      return 'contraindo'
+    case 'balanced':
+      return 'equilibrado'
+    default:
+      return 'indefinido'
   }
 }

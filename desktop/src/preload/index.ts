@@ -4,6 +4,10 @@ import type {
   AppSettings,
   ConnectorStatus,
   SpotifyActionPayload,
+  VSCodeActionPayload,
+  VSCodeCommandResult,
+  TradingViewActionPayload,
+  TradingViewCommandResult,
   TradingViewConnectorState,
   TutorRequest,
   UserProfile
@@ -186,6 +190,11 @@ const bridgeAPI = {
   }
 }
 
+const vscodeAPI = {
+  executeAction: (payload: VSCodeActionPayload): Promise<VSCodeCommandResult> =>
+    ipcRenderer.invoke('vscode:execute-action', payload)
+}
+
 const conversationAPI = {
   load: (): Promise<{ messages: StoredMessage[]; summary: string | null } | null> =>
     ipcRenderer.invoke('conversation:load'),
@@ -250,6 +259,8 @@ const tradingViewAPI = {
     ipcRenderer.invoke('tradingview:set-symbol', symbol),
   setTimeframe: (timeframe: string): Promise<TradingViewConnectorState> =>
     ipcRenderer.invoke('tradingview:set-timeframe', timeframe),
+  executeAction: (payload: TradingViewActionPayload): Promise<TradingViewCommandResult> =>
+    ipcRenderer.invoke('tradingview:execute-action', payload),
   onStatusUpdate: (cb: (state: TradingViewConnectorState) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, state: TradingViewConnectorState) => cb(state)
     ipcRenderer.on('tradingview:status-update', handler)
@@ -269,6 +280,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('memoryAPI', memoryAPI)
     contextBridge.exposeInMainWorld('chatAPI', chatAPI)
     contextBridge.exposeInMainWorld('bridgeAPI', bridgeAPI)
+    contextBridge.exposeInMainWorld('vscodeAPI', vscodeAPI)
     contextBridge.exposeInMainWorld('conversationAPI', conversationAPI)
     contextBridge.exposeInMainWorld('spotifyAPI', spotifyAPI)
     contextBridge.exposeInMainWorld('tradingViewAPI', tradingViewAPI)
@@ -299,6 +311,7 @@ if (process.contextIsolated) {
   window.chatAPI = chatAPI
   // @ts-ignore
   window.bridgeAPI = bridgeAPI
+  window.vscodeAPI = vscodeAPI
   // @ts-ignore
   window.conversationAPI = conversationAPI
   // @ts-ignore

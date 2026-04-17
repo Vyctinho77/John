@@ -10,6 +10,10 @@ import type {
   PrivacySnapshot,
   SpotifyActionPayload,
   SpotifyCommandResult,
+  VSCodeActionPayload,
+  VSCodeCommandResult,
+  TradingViewActionPayload,
+  TradingViewCommandResult,
   TradingViewConnectorState,
   SessionMemory,
   TutorRequest,
@@ -123,6 +127,9 @@ declare global {
       disconnect: (id: string) => Promise<void>
       onStatusUpdate: (cb: (status: ConnectorStatus) => void) => () => void
     }
+    vscodeAPI: {
+      executeAction: (payload: VSCodeActionPayload) => Promise<VSCodeCommandResult>
+    }
     conversationAPI: {
       load: () => Promise<{ messages: StoredMessage[]; summary: string | null } | null>
       save: (data: { messages: StoredMessage[]; summary: string | null }) => Promise<void>
@@ -152,6 +159,7 @@ declare global {
       getStatus: () => Promise<TradingViewConnectorState>
       setSymbol: (symbol: string) => Promise<TradingViewConnectorState>
       setTimeframe: (timeframe: string) => Promise<TradingViewConnectorState>
+      executeAction: (payload: TradingViewActionPayload) => Promise<TradingViewCommandResult>
       onStatusUpdate: (cb: (state: TradingViewConnectorState) => void) => () => void
     }
     tickerAPI: {

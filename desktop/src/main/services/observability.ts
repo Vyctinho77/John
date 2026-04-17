@@ -7,7 +7,8 @@ import type {
   DiagnosticsSnapshot,
   PerformanceTrace,
   PrivacySnapshot,
-  ReplayEvent
+  ReplayEvent,
+  TutorDebugSummary
 } from '../../shared/perception.types'
 import { getAppSettings, getFeaturePolicySnapshot } from './settings'
 
@@ -79,6 +80,7 @@ export async function getDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
     eventCount: recentEvents.length,
     recentEvents: [...recentEvents].reverse().slice(0, 20),
     replayEvents: [...recentEvents].reverse().slice(0, 12).map(toReplayEvent),
+    latestTutorDebug: getLatestTutorDebugSummary(),
     performance: {
       traceCount: recentTraces.length,
       averageDurationMs,
@@ -167,6 +169,34 @@ export async function clearConsentTrail(): Promise<void> {
 
 export function markDataDeletion(): void {
   lastDataDeletionAt = Date.now()
+}
+
+function getLatestTutorDebugSummary(): TutorDebugSummary | null {
+  const latestTutorEvent = [...recentEvents]
+    .reverse()
+    .find(event => event.source === 'tutor' && event.action === 'generate_response')
+
+  if (!latestTutorEvent) return null
+
+  const { details } = latestTutorEvent
+  const connectorsRaw = typeof details.connectorsUsed === 'string' ? details.connectorsUsed : ''
+  const connectorsUsed = connectorsRaw
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean) as TutorDebugSummary['connectorsUsed']
+
+  return {
+    provider: typeof details.provider === 'string' ? details.provider : 'unknown',
+    model: typeof details.model === 'string' ? details.model : 'unknown',
+    dominantContextSource:
+      typeof details.dominantSource === 'string'
+        ? details.dominantSource as TutorDebugSummary['dominantContextSource']
+        : 'unknown',
+    connectorsUsed,
+    latencyMs: typeof details.latencyMs === 'number' ? details.latencyMs : null,
+    screenAgeMs: typeof details.screenAgeMs === 'number' ? details.screenAgeMs : null,
+    staleContextGuarded: Boolean(details.staleContextGuarded)
+  }
 }
 
 function toReplayEvent(event: DiagnosticEvent): ReplayEvent {

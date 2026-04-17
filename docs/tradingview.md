@@ -90,19 +90,26 @@ Campos relevantes:
   exchange: string | null
   timeframe: string | null
   crosshairActive: boolean
+  crosshairConfidence: number
   hoveredCandleTime: string | null
   ohlcSource: 'hovered' | 'last-visible' | 'unknown'
+  ohlcConfidence: number
   currentPrice: string | null
   priceChange: string | null
   ohlc: { open; high; low; close }
+  recentHigh: string | null
+  recentLow: string | null
+  rangeState: 'expanding' | 'contracting' | 'balanced' | 'unknown'
   previousOhlc: { open; high; low; close } | null
   previousCandleTime: string | null
   candleDirection: 'bullish' | 'bearish' | 'neutral' | 'unknown'
   candleStructure: string | null
   patternHints: string[]
+  structureHints: string[]
   contextualPatternHints: string[]
   sequencePatternHints: string[]
   indicatorValues: Record<string, string>
+  indicatorConfidence: number
   layoutHints: string[]
   watchlistVisible: boolean
   indicatorsVisible: boolean
@@ -165,6 +172,61 @@ Exemplos:
 - `fresh-compression`
 - `compression-then-expansion`
 
+### Estrutura local de range
+
+O conector agora tambem deriva sinais simples de estrutura local a partir da sequencia curta de candles comparaveis:
+
+- `recentHigh`
+- `recentLow`
+- `rangeState`
+- `structureHints`
+
+Exemplos:
+
+- `expanding`
+- `contracting`
+- `balanced`
+- `higher-structure`
+- `lower-structure`
+- `range-compression`
+- `range-expansion`
+- `three-candle-tightening`
+- `directional-sequence`
+
+### Confianca de leitura
+
+O conector agora expõe sinais explícitos de confiança para a parte mais sensível da leitura:
+
+- `crosshairConfidence`
+- `ohlcConfidence`
+- `indicatorConfidence`
+
+Tambem normaliza sinais semânticos simples de indicadores em:
+
+- `indicatorSignals`
+
+Uso esperado:
+
+- quando o crosshair estiver ativo e o tempo da vela estiver coerente, a leitura da vela sob o mouse sobe de confiança
+- quando o crosshair estiver ativo mas a legenda nao parecer fresca, o tutor trata a leitura como provisoria
+- indicadores so devem pesar forte quando o parser consegue extrair pares nome/valor com confiança razoável
+
+Exemplos de `indicatorSignals`:
+
+- `rsi-visible`
+- `rsi-overbought`
+- `rsi-oversold`
+- `rsi-mid`
+- `macd-visible`
+- `macd-positive`
+- `macd-negative`
+- `ema-visible`
+- `sma-visible`
+- `moving-averages-visible`
+- `vwap-visible`
+- `volume-visible`
+- `bollinger-visible`
+
 ## Crosshair e candle sob o mouse
 
 Quando o ponteiro esta sobre o chart, o conector marca:
@@ -210,8 +272,29 @@ window.tradingViewAPI.close()
 window.tradingViewAPI.getStatus()
 window.tradingViewAPI.setSymbol(symbol)
 window.tradingViewAPI.setTimeframe(tf)
+window.tradingViewAPI.executeAction(payload)
 window.tradingViewAPI.onStatusUpdate(cb)
 ```
+
+## Acoes inline na HUD
+
+Pedidos locais do TradingView agora podem voltar com `TutorResponse.actions`, no mesmo padrao usado pelo Spotify.
+
+Hoje o roteador monta acoes rapidas como:
+
+- `Abrir TradingView`
+- `Resumir grafico`
+- `Abrir BTCUSDT`
+- `15m`
+- `1h`
+
+Fluxo:
+
+1. o pedido cai no `tradingview-command-router.ts`
+2. o main responde com texto curto + `actions`
+3. a HUD renderiza chips clicaveis
+4. o clique chama `window.tradingViewAPI.executeAction(...)`
+5. a resposta volta localmente, sem nova rodada do tutor
 
 ## Como o tutor usa isso
 
@@ -221,6 +304,7 @@ Prioridade:
 
 - simbolo, timeframe, OHLC, preco e indicadores devem vir primeiro do conector
 - screenshot e OCR entram para complementar leitura visual do grafico
+- quando houver `recentHigh`, `recentLow`, `rangeState` e `structureHints`, eles passam a ancorar leituras de compressao, expansao e range local
 
 O dominio `market` em `tutor-domains.ts` usa esses campos para:
 
@@ -238,7 +322,9 @@ Na Biblioteca, o card do TradingView mostra:
 - simbolo e timeframe
 - preco atual
 - variacao
+- high/low recente quando disponivel
 - resumo da leitura da candle
+- estado local de range quando disponivel
 
 Tambem ha abertura e fechamento da janela do TradingView pelo HUD.
 

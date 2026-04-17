@@ -5,6 +5,7 @@ import { SendIcon } from './SendIcon'
 import { MessageBody } from './MessageBody'
 import { TutorActionChips } from './TutorActionChips'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
+import { ResponseSourceBadge } from './ResponseSourceBadge'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -411,7 +412,10 @@ function MessageBubble({
         alignItems: isUser ? 'flex-end' : 'flex-start'
       }}
     >
-      <Label>{isUser ? 'VOCÊ' : 'JOHN'}</Label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Label>{isUser ? 'VOCÊ' : 'JOHN'}</Label>
+        {!isUser ? <ResponseSourceBadge meta={message.meta} compact /> : null}
+      </div>
       <div
         style={{
           background: isUser ? 'rgba(255,255,255,0.07)' : 'transparent',

@@ -8,6 +8,8 @@ import type {
   DiagnosticsSnapshot,
   PrivacySnapshot,
   SpotifyCommandResult,
+  TradingViewCommandResult,
+  VSCodeCommandResult,
   TutorAction,
   TutorMessage,
   TutorResponse
@@ -602,7 +604,25 @@ export function HUD() {
             should_ask_confirmation: true,
             needs_visual_confirmation: true,
             suggested_follow_ups: ['Tentar novamente'],
-            warning: null
+            warning: null,
+            debug: {
+              provider: 'spotify-local',
+              model: 'spotify-local',
+              latencyMs: 0,
+              screenshotIncluded: false,
+              screenCapturedAt: null,
+              screenAgeMs: null,
+              changeSummary: null,
+              connectorsUsed: ['spotify'],
+              dominantContextSource: 'spotify',
+              sourceConfidence: {
+                bridge: 0.98,
+                vision: 0,
+                ocr: 0,
+                memory: 0
+              },
+              staleContextGuarded: false
+            }
           }
         }
       ])
@@ -612,21 +632,42 @@ export function HUD() {
   }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, maybeGenerateChatTitle, messages, refreshPrivacyState, setStreaming, visual])
 
   const handleExecuteAction = useCallback(async (action: TutorAction) => {
-    if (action.kind !== 'spotify') return
     if (pendingActionIds.includes(action.id)) return
 
     setPendingActionIds(prev => [...prev, action.id])
 
     try {
-      const result = await window.spotifyAPI.executeAction(action.payload)
-      setMessages(prev => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: result.message,
-          meta: buildSpotifyActionMeta(result)
-        }
-      ])
+      if (action.kind === 'spotify') {
+        const result = await window.spotifyAPI.executeAction(action.payload)
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.message,
+            meta: buildSpotifyActionMeta(result)
+          }
+        ])
+      } else if (action.kind === 'tradingview') {
+        const result = await window.tradingViewAPI.executeAction(action.payload)
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.message,
+            meta: buildTradingViewActionMeta(result)
+          }
+        ])
+      } else {
+        const result = await window.vscodeAPI.executeAction(action.payload)
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.message,
+            meta: buildVSCodeActionMeta(result)
+          }
+        ])
+      }
       void refreshPrivacyState()
     } catch (error) {
       const content = error instanceof Error
@@ -913,7 +954,25 @@ function buildSpotifyActionMeta(result: SpotifyCommandResult): TutorResponse {
     should_ask_confirmation: false,
     needs_visual_confirmation: false,
     suggested_follow_ups: suggested,
-    warning: result.ok ? null : result.message
+    warning: result.ok ? null : result.message,
+    debug: {
+      provider: 'spotify-local',
+      model: 'spotify-local',
+      latencyMs: 0,
+      screenshotIncluded: false,
+      screenCapturedAt: null,
+      screenAgeMs: null,
+      changeSummary: null,
+      connectorsUsed: ['spotify'],
+      dominantContextSource: 'spotify',
+      sourceConfidence: {
+        bridge: 0.98,
+        vision: 0,
+        ocr: 0,
+        memory: 0
+      },
+      staleContextGuarded: false
+    }
   }
 }
 
@@ -927,5 +986,98 @@ function buildSpotifyActionFollowUps(state: SpotifyCommandResult['state']): stri
   followUps.add('Próxima')
   if (state.albumName) followUps.add(`Toca o álbum ${state.albumName}`)
   followUps.add('O que tá tocando?')
+  return [...followUps].slice(0, 4)
+}
+
+function buildTradingViewActionMeta(result: TradingViewCommandResult): TutorResponse {
+  const state = result.state
+  const suggested = buildTradingViewActionFollowUps(state)
+
+  return {
+    domain: 'market',
+    mode: 'direct',
+    content: result.message,
+    provider: 'tradingview-local',
+    model: 'tradingview-local',
+    uncertainty: state.lowConfidence ? 0.22 : 0.08,
+    should_ask_confirmation: false,
+    needs_visual_confirmation: false,
+    suggested_follow_ups: suggested,
+    warning: result.ok ? null : result.message,
+    debug: {
+      provider: 'tradingview-local',
+      model: 'tradingview-local',
+      latencyMs: 0,
+      screenshotIncluded: false,
+      screenCapturedAt: state.lastObservedAt,
+      screenAgeMs: state.lastObservedAt ? Math.max(0, Date.now() - state.lastObservedAt) : null,
+      changeSummary: null,
+      connectorsUsed: ['tradingview'],
+      dominantContextSource: 'tradingview',
+      sourceConfidence: {
+        bridge: 0.98,
+        vision: 0,
+        ocr: 0,
+        memory: 0
+      },
+      staleContextGuarded: false
+    }
+  }
+}
+
+function buildTradingViewActionFollowUps(
+  state: TradingViewCommandResult['state']
+): string[] {
+  const followUps = new Set<string>()
+  if (state.symbol) followUps.add('Resume o gráfico')
+  if (state.crosshairActive) followUps.add('Lê essa vela')
+  if (state.timeframe !== '15') followUps.add('Muda para 15m')
+  if (state.timeframe !== '60') followUps.add('Muda para 1h')
+  if (state.symbol !== 'BTCUSDT') followUps.add('Abre BTCUSDT')
+  return [...followUps].slice(0, 4)
+}
+
+function buildVSCodeActionMeta(result: VSCodeCommandResult): TutorResponse {
+  const suggested = buildVSCodeActionFollowUps(result.state)
+
+  return {
+    domain: 'code',
+    mode: 'direct',
+    content: result.message,
+    provider: 'vscode-local',
+    model: 'vscode-local',
+    uncertainty: result.ok ? 0.08 : 0.24,
+    should_ask_confirmation: false,
+    needs_visual_confirmation: false,
+    suggested_follow_ups: suggested,
+    warning: result.ok ? null : result.message,
+    debug: {
+      provider: 'vscode-local',
+      model: 'vscode-local',
+      latencyMs: 0,
+      screenshotIncluded: false,
+      screenCapturedAt: null,
+      screenAgeMs: null,
+      changeSummary: null,
+      connectorsUsed: ['vscode'],
+      dominantContextSource: 'vscode',
+      sourceConfidence: {
+        bridge: 0.98,
+        vision: 0,
+        ocr: 0,
+        memory: 0
+      },
+      staleContextGuarded: false
+    }
+  }
+}
+
+function buildVSCodeActionFollowUps(state: VSCodeCommandResult['state']): string[] {
+  const followUps = new Set<string>()
+  followUps.add('Resume o VS Code')
+  if (state?.editor) followUps.add('Lê o código atual')
+  if (state?.diagnostics?.hasErrors) followUps.add('Explica esse erro')
+  if ((state?.git?.changedFiles ?? 0) > 0 || (state?.git?.stagedFiles ?? 0) > 0) followUps.add('Revisa o diff')
+  if (state?.terminal?.lastOutput?.trim()) followUps.add('Olha o terminal')
   return [...followUps].slice(0, 4)
 }

@@ -203,6 +203,8 @@ O roteador em `desktop/src/main/services/tradingview-command-router.ts` intercep
 
 ## Proximos docs relacionados
 
+- `docs/arquitetura.md`
+- `docs/roadmap.md`
 - `docs/john-codex-oauth.md`
 - `docs/vscode.md`
 - `docs/spotify.md`
