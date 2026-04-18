@@ -107,13 +107,13 @@ export function HudIntermediate({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.38)' }}
+                style={{ color: active ? 'var(--john-text-strong)' : 'var(--john-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={
-                  stage === 1 ? 'w-[18px] h-auto' :
-                  stage === 2 ? 'w-[20px] h-auto' :
-                  'w-[14px] h-auto'
+                  stage === 1 ? 'w-[var(--john-icon-md)] h-auto' :
+                  stage === 2 ? 'w-[var(--john-icon-lg)] h-auto' :
+                  'w-[var(--john-icon-sm)] h-auto'
                 } />
               </button>
             )
@@ -138,7 +138,7 @@ export function HudIntermediate({
               style={{
                 color: 'rgba(214,214,214,0.72)',
                 fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
-                letterSpacing: '-0.005em'
+                letterSpacing: 'var(--hud-muted-tracking, -0.01em)'
               }}
             >
               {intermediateThought.primary}
@@ -162,9 +162,9 @@ export function HudIntermediate({
                 onClick={e => { e.stopPropagation(); onShowStage3() }}
                 className="mt-3 self-start text-[12px] px-2.5 py-1 rounded-full transition-opacity duration-150 hover:opacity-80"
                 style={{
-                  color: 'rgba(255,255,255,0.62)',
-                  background: 'rgba(255,255,255,0.07)',
-                  border: '1px solid rgba(255,255,255,0.10)'
+                  color: 'var(--john-text-secondary)',
+                  background: 'color-mix(in srgb, var(--john-surface-1) 80%, transparent)',
+                  border: '1px solid var(--john-border-soft)'
                 }}
               >
                 ver resposta completa
@@ -187,17 +187,18 @@ export function HudIntermediate({
 
       <div className="flex-shrink-0 px-4 pb-3.5 pt-3">
         <div
-          className="pt-3"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.42)' }}
+          className={`pt-3${isStreaming ? ' john-stream-pulse' : ''}`}
+          style={{ borderTop: '1px solid rgba(255,255,255,0.42)', transition: 'border-color 0.3s ease' }}
         >
           <div className="flex items-end gap-3">
             <textarea
               ref={inputRef}
               className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
               style={{
-                color: 'rgba(255,255,255,0.88)',
+                color: 'var(--john-text-primary)',
                 fontSize: 'var(--hud-font-size, 15px)',
-                lineHeight: 1.5,
+                lineHeight: 'var(--hud-body-leading, 1.66)',
+                letterSpacing: 'var(--hud-input-tracking, -0.015em)',
                 minHeight: 24,
                 maxHeight: 72
               }}
@@ -216,12 +217,12 @@ export function HudIntermediate({
                 onMouseDown={e => { e.preventDefault(); toggleMic() }}
                 disabled={isStreaming}
                 className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
-                style={{ color: isListening ? 'rgba(255,95,95,0.90)' : 'rgba(255,255,255,0.35)' }}
+                style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
                 aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
               >
                 {isListening && (
                   <span className="absolute inset-0 rounded-full"
-                    style={{ background: 'rgba(255,95,95,0.12)', animation: 'capture-pulse 1.2s ease-out infinite' }} />
+                    style={{ background: 'var(--john-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }} />
                 )}
                 <MicIconSm />
               </button>
@@ -232,11 +233,11 @@ export function HudIntermediate({
               disabled={isStreaming || !inputValue.trim()}
               className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150"
               style={{
-                color: inputValue.trim() && !isStreaming ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.28)'
+                color: inputValue.trim() && !isStreaming ? 'var(--john-text-primary)' : 'var(--john-text-muted)'
               }}
               aria-label="Enviar"
             >
-              <SendIcon className="w-[20px] h-auto" />
+              <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
             </button>
           </div>
         </div>

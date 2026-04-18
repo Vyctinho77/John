@@ -5,10 +5,7 @@
   useMemo,
   useRef,
   useState,
-  KeyboardEvent,
-  type HTMLAttributes,
-  type MouseEvent,
-  type ReactNode
+  KeyboardEvent
 } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -27,6 +24,22 @@ import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { ChatSidebar } from './ChatSidebar'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
+import { StreamingTimeline } from './StreamingTimeline'
+import {
+  PillButton,
+  SectionTitle,
+  SettingsCard,
+  SettingsNavItem,
+  SettingsRow,
+  StatusBadge
+} from './HudSettingsPrimitives'
+import {
+  AccountSettingsPanel,
+  DataSettingsPanel,
+  GeneralSettingsPanel,
+  NotificationsSettingsPanel,
+  TypographySettingsPanel
+} from './HudSettingsPanels'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
 import { useSpeechInput } from '@renderer/hooks/useSpeechInput'
 import type {
@@ -50,10 +63,9 @@ import type {
   SemanticState,
   SessionMemory,
   TradingViewConnectorState,
-  TypographyFontFamily,
-  TypographyFontWeight,
   TutorResponse,
   TutorAction,
+  TutorStep,
   UserProfile
 } from '@shared/perception.types'
 import type {
@@ -64,7 +76,6 @@ import type {
 } from '@shared/memory.types'
 import type { SpotifyPlaybackState, TickerQuote } from '../../../../preload/index.d'
 import { TutorActionChips } from './TutorActionChips'
-import { SpotifyBanner } from './SpotifyBanner'
 import { ResponseSourceBadge } from './ResponseSourceBadge'
 
 interface Message {
@@ -98,6 +109,7 @@ interface HudExpandedProps {
   messages: Message[]
   isStreaming: boolean
   streamingContent: string
+  streamingSteps?: TutorStep[]
   latestResponseMeta: TutorResponse | null
   semanticState: SemanticState | null
   sessionMemory: SessionMemory | null
@@ -171,141 +183,6 @@ type ProviderDraftMap = Record<
 const INPUT_MIN_HEIGHT = 24
 const INPUT_MAX_HEIGHT = 132
 
-const TYPOGRAPHY_FAMILY_OPTIONS: Array<{ id: TypographyFontFamily; label: string; sample: string }> = [
-  { id: 'system-sans', label: 'SF Pro / System Sans', sample: 'Apple-like, limpa e neutra' },
-  { id: 'system-serif', label: 'New York / Serif', sample: 'Mais editorial e refinada' },
-  { id: 'mono', label: 'SF Mono / Monospace', sample: 'Tecnica e utilitaria' }
-]
-
-const TYPOGRAPHY_SIZE_OPTIONS = [13, 14, 15, 16, 18]
-const TYPOGRAPHY_WEIGHT_OPTIONS: Array<{ id: TypographyFontWeight; label: string }> = [
-  { id: 'light', label: 'Light' },
-  { id: 'book', label: 'Book' },
-  { id: 'regular', label: 'Regular' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'bold', label: 'Bold' }
-]
-
-function Toggle({ on }: { on: boolean }) {
-  return (
-    <div
-      className="relative flex-shrink-0 transition-colors duration-200"
-      style={{
-        width: 32,
-        height: 18,
-        borderRadius: 9,
-        background: on ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.14)'
-      }}
-    >
-      <div
-        className="absolute top-0.5 transition-all duration-200"
-        style={{
-          width: 14,
-          height: 14,
-          borderRadius: '50%',
-          background: on ? 'rgba(0,0,0,0.88)' : 'rgba(255,255,255,0.52)',
-          left: on ? 16 : 2
-        }}
-      />
-    </div>
-  )
-}
-
-function SettingsRow({
-  label,
-  value,
-  muted = false,
-  last = false,
-  onClick,
-  toggle
-}: {
-  label: string
-  value: string
-  muted?: boolean
-  last?: boolean
-  onClick?: () => void
-  toggle?: boolean
-}) {
-  const Wrapper = onClick ? 'button' : 'div'
-  const wrapperProps = onClick
-    ? {
-        onMouseDown: (e: MouseEvent) => e.preventDefault(),
-        onClick,
-        className:
-          'w-full flex items-center justify-between gap-4 transition-opacity duration-150 hover:opacity-80 active:opacity-60'
-      }
-    : { className: 'flex items-center justify-between gap-4' }
-
-  return (
-    <Wrapper
-      {...(wrapperProps as HTMLAttributes<HTMLElement>)}
-      style={{
-        minHeight: 52,
-        borderBottom: last ? 'none' : '1px solid rgba(255,255,255,0.06)'
-      }}
-    >
-      <span
-        className="py-4 text-[14px] text-left"
-        style={{
-          color: muted ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.88)',
-          fontSize: 'var(--hud-font-size, 15px)'
-        }}
-      >
-        {label}
-      </span>
-      {toggle !== undefined ? (
-        <Toggle on={toggle} />
-      ) : (
-        <span
-          className="inline-flex items-center gap-1.5 text-[14px] py-4"
-          style={{ color: 'rgba(255,255,255,0.52)', fontSize: 'var(--hud-font-size, 15px)' }}
-        >
-          {value}
-          {onClick && (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path
-                d="M2.25 4.25L6 8L9.75 4.25"
-                stroke="currentColor"
-                strokeWidth="1.35"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          )}
-        </span>
-      )}
-    </Wrapper>
-  )
-}
-
-function SettingsNavItem({
-  label,
-  active,
-  onClick,
-  icon
-}: {
-  label: string
-  active: boolean
-  onClick: () => void
-  icon: ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150"
-      style={{
-        color: active ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.44)',
-        background: active ? 'rgba(255,255,255,0.06)' : 'transparent'
-      }}
-    >
-      <span className="w-[20px] h-[20px] flex items-center justify-center flex-shrink-0 opacity-80">
-        {icon}
-      </span>
-      <span className="text-[12px] leading-none whitespace-nowrap">{label}</span>
-    </button>
-  )
-}
-
 function ProviderPill({
   provider,
   active,
@@ -320,43 +197,14 @@ function ProviderPill({
       onClick={onClick}
       className="px-3 py-1.5 rounded-full text-[11px] transition-colors duration-150"
       style={{
-        background: active ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-        color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.48)',
-        border: `1px solid ${active ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`
+        background: active
+          ? 'color-mix(in srgb, var(--john-surface-2) 80%, transparent)'
+          : 'color-mix(in srgb, var(--john-surface-1) 70%, transparent)',
+        color: active ? 'var(--john-text-strong)' : 'var(--john-text-tertiary)',
+        border: `1px solid ${active ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`
       }}
     >
       {provider.label}
-    </button>
-  )
-}
-
-function TypographyChoice({
-  label,
-  active,
-  secondaryLabel,
-  onClick
-}: {
-  label: string
-  active: boolean
-  secondaryLabel?: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-2 rounded-2xl text-left transition-colors duration-150"
-      style={{
-        background: active ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.04)',
-        color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.6)',
-        border: `1px solid ${active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.08)'}`
-      }}
-    >
-      <div className="text-[12px] leading-none">{label}</div>
-      {secondaryLabel && (
-        <div className="mt-1 text-[10px]" style={{ color: active ? 'rgba(255,255,255,0.58)' : 'rgba(255,255,255,0.36)' }}>
-          {secondaryLabel}
-        </div>
-      )}
     </button>
   )
 }
@@ -476,6 +324,7 @@ export const HudExpanded = memo(function HudExpanded({
   messages,
   isStreaming,
   streamingContent,
+  streamingSteps = [],
   latestResponseMeta,
   semanticState,
   sessionMemory,
@@ -899,7 +748,7 @@ export const HudExpanded = memo(function HudExpanded({
   const renderAPISettings = () => {
     if (!settings) {
       return (
-        <p className="mt-4 text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="mt-4 text-[13px]" style={{ color: 'var(--john-text-secondary)' }}>
           Configurações indisponíveis.
         </p>
       )
@@ -907,7 +756,7 @@ export const HudExpanded = memo(function HudExpanded({
 
     if (!aiSettings || !selectedProvider) {
       return (
-        <p className="mt-4 text-[13px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="mt-4 text-[13px]" style={{ color: 'var(--john-text-secondary)' }}>
           Carregando provedores...
         </p>
       )
@@ -915,12 +764,7 @@ export const HudExpanded = memo(function HudExpanded({
 
     return (
       <>
-        <p
-          className="text-[18px] font-medium mb-1"
-          style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-        >
-          Minha API Key
-        </p>
+        <SectionTitle>Minha API Key</SectionTitle>
 
         <div className="mt-4 flex gap-2 flex-wrap">
           {aiSettings.providers.map(provider => (
@@ -936,43 +780,27 @@ export const HudExpanded = memo(function HudExpanded({
           ))}
         </div>
 
-        <div
-          className="mt-5 rounded-[22px] p-4"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.07)'
-          }}
-        >
+        <SettingsCard className="mt-5 rounded-[22px] p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
+              <p className="text-[15px]" style={{ color: 'var(--john-text-strong)' }}>
                 {selectedProvider.label}
               </p>
-              <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
                 {selectedProvider.capabilities.localOnly
                   ? 'projeto local e fallback privado'
                   : 'sua chave fica salva apenas neste dispositivo'}
               </p>
             </div>
-            <span
-              className="px-2.5 py-1 rounded-full text-[10px]"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                color:
-                  selectedProvider.status === 'valid'
-                    ? 'rgba(255,255,255,0.88)'
-                    : 'rgba(255,255,255,0.46)',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}
-            >
+            <StatusBadge tone={selectedProvider.status === 'valid' ? 'success' : 'neutral'}>
               {selectedProvider.status}
-            </span>
+            </StatusBadge>
           </div>
 
           <div className="mt-4 flex flex-col gap-3">
             {!selectedProvider.capabilities.localOnly && (
               <label className="flex flex-col gap-2">
-                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+                <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
                   API key
                 </span>
                 <input
@@ -981,15 +809,15 @@ export const HudExpanded = memo(function HudExpanded({
                   placeholder={selectedProvider.hasKey ? '••••••••••••••••' : 'cole sua chave aqui'}
                   className="bg-transparent outline-none rounded-xl px-3 h-10"
                   style={{
-                    color: 'rgba(255,255,255,0.92)',
-                    border: '1px solid rgba(255,255,255,0.1)'
+                    color: 'var(--john-text-primary)',
+                    border: '1px solid var(--john-border-strong)'
                   }}
                 />
               </label>
             )}
 
             <label className="flex flex-col gap-2">
-              <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+              <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
                 Base URL
               </span>
               <input
@@ -997,8 +825,8 @@ export const HudExpanded = memo(function HudExpanded({
                 onChange={e => updateProviderDraft({ baseUrl: e.target.value })}
                 className="bg-transparent outline-none rounded-xl px-3 h-10"
                 style={{
-                  color: 'rgba(255,255,255,0.92)',
-                  border: '1px solid rgba(255,255,255,0.1)'
+                  color: 'var(--john-text-primary)',
+                  border: '1px solid var(--john-border-strong)'
                 }}
               />
             </label>
@@ -1009,7 +837,7 @@ export const HudExpanded = memo(function HudExpanded({
               </span>
               <div className="flex gap-2 flex-wrap">
                 {selectedProvider.modelOptions.map(model => (
-                  <button
+                  <PillButton
                     key={model.id}
                     onMouseDown={e => {
                       e.preventDefault()
@@ -1020,108 +848,62 @@ export const HudExpanded = memo(function HudExpanded({
                       })
                       setAPIFeedback(`Modelo ${model.label} selecionado.`)
                     }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
-                    style={{
-                      background:
-                        providerDraft.selectedModel === model.id
-                          ? 'rgba(255,255,255,0.12)'
-                          : 'rgba(255,255,255,0.04)',
-                      color:
-                        providerDraft.selectedModel === model.id
-                          ? 'rgba(255,255,255,0.9)'
-                          : 'rgba(255,255,255,0.48)',
-                      border: `1px solid ${
-                        providerDraft.selectedModel === model.id
-                          ? 'rgba(255,255,255,0.18)'
-                          : 'rgba(255,255,255,0.08)'
-                      }`
-                    }}
+                    active={providerDraft.selectedModel === model.id}
                   >
                     {model.label}
-                  </button>
+                  </PillButton>
                 ))}
               </div>
             </div>
           </div>
 
           <div className="mt-4 flex gap-2 flex-wrap">
-            <button
+            <PillButton
               onMouseDown={e => {
                 e.preventDefault()
                 handleSaveActiveProvider()
               }}
-              className="px-3 py-1.5 rounded-full text-[10px]"
-              style={{
-                background: 'rgba(255,255,255,0.1)',
-                color: 'rgba(255,255,255,0.88)',
-                border: '1px solid rgba(255,255,255,0.14)'
-              }}
+              tone="strong"
             >
               salvar
-            </button>
-            <button
+            </PillButton>
+            <PillButton
               onMouseDown={e => {
                 e.preventDefault()
                 void handleTestActiveProvider()
               }}
-              className="px-3 py-1.5 rounded-full text-[10px]"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                color: 'rgba(255,255,255,0.72)',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}
             >
               {isTestingProvider === selectedProvider.id ? 'testando...' : 'testar conexão'}
-            </button>
-            <button
+            </PillButton>
+            <PillButton
               onMouseDown={e => {
                 e.preventDefault()
                 handleRemoveActiveProvider()
               }}
-              className="px-3 py-1.5 rounded-full text-[10px]"
-              style={{
-                background: 'rgba(255,255,255,0.04)',
-                color: 'rgba(255,255,255,0.48)',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}
+              tone="danger"
             >
               remover
-            </button>
+            </PillButton>
           </div>
 
           {apiFeedback && (
-            <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
+            <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
               {apiFeedback}
             </p>
           )}
-        </div>
+        </SettingsCard>
 
-        <div
-          className="mt-4 rounded-[22px] p-4"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.07)'
-          }}
-        >
+        <SettingsCard className="mt-4 rounded-[22px] p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
-                Custo diário
-              </p>
-              <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.46)' }}>
+              <SectionTitle className="text-[15px]">Custo diário</SectionTitle>
+              <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
                 Defina um teto diário em dólar para uso de API.
               </p>
             </div>
-            <span
-              className="px-2.5 py-1 rounded-full text-[10px]"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                color: 'rgba(255,255,255,0.66)',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}
-            >
+            <StatusBadge tone="neutral">
               {settings.dailyCostLimitUsd === null ? 'sem limite' : `$${settings.dailyCostLimitUsd.toFixed(2)}/dia`}
-            </span>
+            </StatusBadge>
           </div>
 
           {costAlert.level !== 'none' && (
@@ -1130,49 +912,42 @@ export const HudExpanded = memo(function HudExpanded({
               style={{
                 background:
                   costAlert.level === 'blocked'
-                    ? 'rgba(255,255,255,0.08)'
+                    ? 'color-mix(in srgb, var(--john-danger-soft) 60%, var(--john-surface-1))'
                     : costAlert.level === 'danger'
-                      ? 'rgba(255,255,255,0.06)'
-                      : 'rgba(255,255,255,0.04)',
+                      ? 'color-mix(in srgb, var(--john-danger-soft) 40%, var(--john-surface-1))'
+                      : 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
                 border:
                   costAlert.level === 'blocked'
-                    ? '1px solid rgba(255,255,255,0.16)'
+                    ? '1px solid var(--john-danger)'
                     : costAlert.level === 'danger'
-                      ? '1px solid rgba(255,255,255,0.12)'
-                      : '1px solid rgba(255,255,255,0.08)'
+                      ? '1px solid color-mix(in srgb, var(--john-danger) 60%, transparent)'
+                      : '1px solid var(--john-border-soft)'
               }}
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.86)' }}>
+                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)' }}>
                   Atenção de custo
                 </p>
-                <span
-                  className="px-2 py-1 rounded-full text-[10px]"
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    color: 'rgba(255,255,255,0.72)',
-                    border: '1px solid rgba(255,255,255,0.08)'
-                  }}
-                >
+                <StatusBadge className="px-2 py-1 rounded-full text-[10px]" tone="neutral">
                   {costAlert.label}
-                </span>
+                </StatusBadge>
               </div>
-              <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.5)', lineHeight: 1.45 }}>
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.45 }}>
                 {costAlert.message}
               </p>
             </div>
           )}
 
           <div className="mt-4 flex flex-col gap-2">
-            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
               Teto diário em USD
             </span>
             <div className="flex items-center gap-2">
               <div
                 className="flex items-center rounded-xl px-3 h-10 flex-1"
-                style={{ border: '1px solid rgba(255,255,255,0.1)' }}
+                style={{ border: '1px solid var(--john-border-strong)' }}
               >
-                <span className="text-[12px] mr-2" style={{ color: 'rgba(255,255,255,0.46)' }}>
+                <span className="text-[12px] mr-2" style={{ color: 'var(--john-text-tertiary)' }}>
                   $
                 </span>
                 <input
@@ -1195,26 +970,21 @@ export const HudExpanded = memo(function HudExpanded({
                   inputMode="decimal"
                   placeholder="ex: 2.50"
                   className="bg-transparent outline-none w-full text-[13px]"
-                  style={{ color: 'rgba(255,255,255,0.92)' }}
+                  style={{ color: 'var(--john-text-primary)' }}
                 />
               </div>
-              <button
+              <PillButton
                 onMouseDown={e => {
                   e.preventDefault()
                   setDailyCostDraft('')
                   onUpdateDailyCostLimit(null)
                 }}
-                className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  color: 'rgba(255,255,255,0.6)',
-                  border: '1px solid rgba(255,255,255,0.08)'
-                }}
+                className="flex-shrink-0"
               >
                 sem limite
-              </button>
+              </PillButton>
             </div>
-            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)', lineHeight: 1.45 }}>
+            <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.45 }}>
               Esse valor fica salvo na configuração do app e pode ser usado como teto operacional para chamadas remotas.
             </p>
             {aiCosts && (
@@ -1244,19 +1014,11 @@ export const HudExpanded = memo(function HudExpanded({
               </div>
             )}
           </div>
-        </div>
+        </SettingsCard>
 
-        <div
-          className="mt-4 rounded-[22px] p-4"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.07)'
-          }}
-        >
-          <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
-            ChatGPT (Codex OAuth)
-          </p>
-          <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)', lineHeight: 1.5 }}>
+        <SettingsCard className="mt-4 rounded-[22px] p-4">
+          <SectionTitle className="text-[15px]">ChatGPT (Codex OAuth)</SectionTitle>
+          <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
             Use sua assinatura ChatGPT Plus/Pro sem API key. John vai priorizar esse provider quando estiver conectado.
           </p>
 
@@ -1264,60 +1026,42 @@ export const HudExpanded = memo(function HudExpanded({
             {codexStatus.authenticated ? (
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-[13px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                  <p className="text-[13px]" style={{ color: 'var(--john-text-primary)' }}>
                     {codexStatus.email}
                   </p>
-                  <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+                  <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
                     plano: {codexStatus.planType}
                   </p>
                 </div>
-                <button
+                <PillButton
                   onMouseDown={e => { e.preventDefault(); void handleCodexLogout() }}
-                  className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
-                  style={{
-                    background: 'rgba(255,255,255,0.04)',
-                    color: 'rgba(255,255,255,0.5)',
-                    border: '1px solid rgba(255,255,255,0.08)'
-                  }}
+                  className="flex-shrink-0"
                 >
                   desconectar
-                </button>
+                </PillButton>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                <button
+                <PillButton
                   onMouseDown={e => { e.preventDefault(); void handleCodexLogin() }}
                   disabled={codexLoading}
-                  className="self-start px-3 py-1.5 rounded-full text-[10px]"
-                  style={{
-                    background: 'rgba(255,255,255,0.1)',
-                    color: codexLoading ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.88)',
-                    border: '1px solid rgba(255,255,255,0.14)',
-                    cursor: codexLoading ? 'default' : 'pointer'
-                  }}
+                  className="self-start"
+                  tone="strong"
                 >
                   {codexLoading ? 'abrindo browser...' : 'conectar com ChatGPT'}
-                </button>
+                </PillButton>
                 {codexError && (
-                  <p className="text-[11px]" style={{ color: 'rgba(255,100,100,0.8)' }}>
+                  <p className="text-[11px]" style={{ color: 'var(--john-danger)' }}>
                     {codexError}
                   </p>
                 )}
               </div>
             )}
           </div>
-        </div>
+        </SettingsCard>
 
-        <div
-          className="mt-4 rounded-[22px] p-4"
-          style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.07)'
-          }}
-        >
-          <p className="text-[15px]" style={{ color: 'rgba(255,255,255,0.94)' }}>
-            Roteamento
-          </p>
+        <SettingsCard className="mt-4 rounded-[22px] p-4">
+          <SectionTitle className="text-[15px]">Roteamento</SectionTitle>
 
           <div className="mt-4">
             <SettingsRow label="Primario de texto" value={aiSettings.routing.textPrimary || 'local'} />
@@ -1337,7 +1081,7 @@ export const HudExpanded = memo(function HudExpanded({
 
           <div className="mt-4 flex gap-2 flex-wrap">
             {(['openai', 'anthropic', 'gemini', 'ollama'] as AIProviderId[]).map(providerId => (
-              <button
+              <PillButton
                 key={`primary-${providerId}`}
                 onMouseDown={e => {
                   e.preventDefault()
@@ -1345,31 +1089,17 @@ export const HudExpanded = memo(function HudExpanded({
                     textPrimary: aiSettings.routing.textPrimary === providerId ? null : providerId
                   })
                 }}
-                className="px-3 py-1.5 rounded-full text-[10px]"
-                style={{
-                  background:
-                    aiSettings.routing.textPrimary === providerId
-                      ? 'rgba(255,255,255,0.12)'
-                      : 'rgba(255,255,255,0.04)',
-                  color:
-                    aiSettings.routing.textPrimary === providerId
-                      ? 'rgba(255,255,255,0.88)'
-                      : 'rgba(255,255,255,0.48)',
-                  border: `1px solid ${
-                    aiSettings.routing.textPrimary === providerId
-                      ? 'rgba(255,255,255,0.18)'
-                      : 'rgba(255,255,255,0.08)'
-                  }`
-                }}
+                active={aiSettings.routing.textPrimary === providerId}
+                tone={aiSettings.routing.textPrimary === providerId ? 'strong' : 'neutral'}
               >
                 primario: {providerId}
-              </button>
+              </PillButton>
             ))}
           </div>
 
           <div className="mt-2 flex gap-2 flex-wrap">
             {(['openai', 'anthropic', 'gemini', 'ollama'] as AIProviderId[]).map(providerId => (
-              <button
+              <PillButton
                 key={`fallback-${providerId}`}
                 onMouseDown={e => {
                   e.preventDefault()
@@ -1377,29 +1107,15 @@ export const HudExpanded = memo(function HudExpanded({
                     textFallback: aiSettings.routing.textFallback === providerId ? null : providerId
                   })
                 }}
-                className="px-3 py-1.5 rounded-full text-[10px]"
-                style={{
-                  background:
-                    aiSettings.routing.textFallback === providerId
-                      ? 'rgba(255,255,255,0.12)'
-                      : 'rgba(255,255,255,0.04)',
-                  color:
-                    aiSettings.routing.textFallback === providerId
-                      ? 'rgba(255,255,255,0.88)'
-                      : 'rgba(255,255,255,0.48)',
-                  border: `1px solid ${
-                    aiSettings.routing.textFallback === providerId
-                      ? 'rgba(255,255,255,0.18)'
-                      : 'rgba(255,255,255,0.08)'
-                  }`
-                }}
+                active={aiSettings.routing.textFallback === providerId}
+                tone={aiSettings.routing.textFallback === providerId ? 'strong' : 'neutral'}
               >
                 fallback: {providerId}
-              </button>
+              </PillButton>
             ))}
           </div>
 
-          <p className="mt-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
             Trilha por feature
           </p>
           <div className="mt-2">
@@ -1414,7 +1130,7 @@ export const HudExpanded = memo(function HudExpanded({
               ))
             }
           </div>
-        </div>
+        </SettingsCard>
 
         <div className="mt-4">
           <SettingsRow
@@ -1433,7 +1149,7 @@ export const HudExpanded = memo(function HudExpanded({
         </div>
 
         {diagnostics && privacy && (
-          <p className="mt-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
             storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo básico'} | traces:{' '}
             {diagnostics.performance.traceCount} | consentimentos: {privacy.consentTrail.length}
             {lastDeletion ? ' | limpeza registrada' : ''}
@@ -1441,7 +1157,7 @@ export const HudExpanded = memo(function HudExpanded({
         )}
 
         {diagnostics?.latestTutorDebug && (
-          <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.34)' }}>
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-muted)' }}>
             ultima resposta: {diagnostics.latestTutorDebug.dominantContextSource} via {diagnostics.latestTutorDebug.model}
             {diagnostics.latestTutorDebug.latencyMs !== null ? ` | ${diagnostics.latestTutorDebug.latencyMs} ms` : ''}
             {diagnostics.latestTutorDebug.screenAgeMs !== null ? ` | frame ${diagnostics.latestTutorDebug.screenAgeMs} ms` : ''}
@@ -1465,1056 +1181,164 @@ export const HudExpanded = memo(function HudExpanded({
 
     if (activeSettingsTab === 'general') {
       return (
-        <>
-          <p
-            className="text-[18px] font-medium mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Geral
-          </p>
-          <div className="mt-4">
-            <SettingsRow
-              label="Modo minimalista"
-              value={settings.minimalMode ? 'ativado' : 'desativado'}
-              toggle={settings.minimalMode}
-              onClick={onToggleMinimalMode}
-            />
-            <SettingsRow label="Cor de fundo" value="Preto" />
-            <SettingsRow label="Idioma" value={userProfile?.response_language || 'Português'} last />
-          </div>
-
-          {sessionMemory?.continuity_summary && (
-            <p className="mt-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>
-              {sessionMemory.continuity_summary}
-            </p>
-          )}
-
-          {/* ── Biblioteca ── */}
-          <p
-            className="text-[18px] font-medium mt-8 mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Biblioteca
-          </p>
-          <div className="mt-4 flex gap-5">
-            {/* VS Code connector */}
-            {(() => {
-              const vscodeStatus = connectorStatuses.find(s => s.id === 'vscode')
-              const connected = vscodeStatus?.connected ?? false
-              return (
-                <div className="flex flex-col items-center gap-2" style={{ width: 72 }}>
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.685 1.28739C22.4364 1.29611 22.1884 1.36091 21.9663 1.47739C22.5455 1.76411 22.9541 2.33039 23.0213 3.00239C23.0328 3.08303 23.04 3.15655 23.04 3.19239V28.7924C23.04 29.5514 22.5962 30.202 21.9575 30.5136C22.1905 30.641 22.4506 30.7124 22.72 30.7124C22.9587 30.7124 23.184 30.6571 23.3875 30.5636L23.3888 30.5661C24.4179 30.0337 29.5631 27.3693 29.7525 27.2611C30.3496 26.9187 30.72 26.2791 30.72 25.5924V6.39239C30.72 5.75367 30.4037 5.15951 29.8738 4.80239C29.669 4.66351 23.4125 1.43114 23.4125 1.43114L23.4113 1.43364C23.1834 1.32644 22.9337 1.27867 22.685 1.28739ZM21.12 2.55239C20.9563 2.55239 20.7923 2.61477 20.6675 2.73989C20.6675 2.73989 17.0038 6.85995 12.9475 11.4174L17.7438 15.3411L21.76 11.9586V3.19239C21.76 3.02855 21.6973 2.86469 21.5725 2.73989C21.4474 2.61477 21.2838 2.55239 21.12 2.55239ZM5.12003 7.03239C5.02019 7.03239 4.8345 7.03274 4.00378 7.41739C3.54618 7.62923 1.95253 8.46614 1.95253 8.46614C1.74133 8.5807 1.57096 8.76003 1.45128 8.96739C1.49992 8.9597 1.54822 8.95238 1.59878 8.95238H1.60003C2.02755 8.95238 2.28973 9.25075 2.38253 9.34739C2.38253 9.34739 20.4352 29.0126 20.6675 29.2449C20.7923 29.3697 20.9549 29.4324 21.1188 29.4324C21.2826 29.4324 21.4465 29.3697 21.5713 29.2449C21.6961 29.1201 21.76 28.9562 21.76 28.7924V20.2611C21.76 20.2611 6.10163 7.46345 5.98003 7.36488C5.74451 7.15112 5.43811 7.03239 5.12003 7.03239ZM1.40753 10.2324C1.33713 10.2324 1.28003 10.2901 1.28003 10.3611V22.2686C1.28003 22.3371 1.33591 22.3936 1.40503 22.3936C1.44087 22.3936 1.47263 22.3773 1.49503 22.3524L5.12003 18.3286V14.0849L1.49878 10.2699C1.47574 10.2468 1.44273 10.2324 1.40753 10.2324ZM7.84253 17.1536C7.84253 17.1536 2.3415 23.3297 2.27878 23.3924C2.10534 23.5658 1.86563 23.6724 1.60003 23.6724C1.55011 23.6724 1.50178 23.6663 1.45378 23.6586C1.58306 23.8833 1.77265 24.0685 2.00753 24.1824L2.00503 24.1861C2.56183 24.469 4.39936 25.4026 4.64128 25.5011C4.7936 25.5619 4.95427 25.5924 5.12003 25.5924C5.34211 25.5924 5.56166 25.535 5.75878 25.4224C5.7735 25.4141 11.2175 20.8336 11.2175 20.8336L7.84253 17.1536Z" fill="#0C75FF"/>
-                  </svg>
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>Vs Code</span>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    disabled={installingVSCode || vscodePendingReload}
-                    onClick={() => {
-                      if (connected) { window.bridgeAPI.disconnect('vscode'); return }
-                      setVscodeInstallMsg(null)
-                      setInstallingVSCode(true)
-                      window.bridgeAPI.installVSCodeConnector().then(res => {
-                        setInstallingVSCode(false)
-                        if (res.ok) { setVscodePendingReload(true); setVscodeInstallMsg(res.message) }
-                        else { setVscodeInstallMsg(res.message); setTimeout(() => setVscodeInstallMsg(null), 6000) }
-                      })
-                    }}
-                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50 disabled:opacity-50 disabled:cursor-default"
-                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: connected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: connected ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
-                  >
-                    {installingVSCode ? 'Instalando…' : vscodePendingReload ? 'Aguardando…' : connected ? 'Desconectar' : 'Conectar'}
-                  </button>
-                  {!connected && vscodeStatus?.message && (
-                    <span className="text-center text-[9px]" style={{ color: 'rgba(255,255,255,0.34)', lineHeight: 1.3, maxWidth: 120 }}>
-                      bridge indisponível
-                    </span>
-                  )}
-                </div>
-              )
-            })()}
-
-            {/* Spotify connector */}
-            {(() => {
-              const connected = connectorStatuses.find(s => s.id === 'spotify')?.connected ?? false
-              return (
-                <div className="flex flex-col items-center gap-2" style={{ width: 72 }}>
-                  <svg width="30" height="30" viewBox="0 0 30 30" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M15 0C6.72911 0 0 6.7291 0 15C0 23.2709 6.72911 30 15 30C23.2709 30 30 23.2715 30 15C30 6.72845 23.2709 0 15 0ZM21.349 21.7421C21.1606 22.0251 20.8503 22.1776 20.5341 22.1776C20.3477 22.1776 20.1593 22.1248 19.9924 22.0133C18.3802 20.9383 15.6461 20.2212 13.3643 20.2219C10.9431 20.2232 9.12817 20.8177 9.10991 20.8236C8.59881 20.997 8.04403 20.718 7.87322 20.2056C7.70242 19.6932 7.97949 19.139 8.49189 18.9689C8.57795 18.9402 10.6295 18.2681 13.3643 18.2668C15.6461 18.2655 18.8196 18.8809 21.0778 20.3862C21.5277 20.686 21.6489 21.293 21.349 21.7421ZM23.2996 17.7394C23.0877 18.0797 22.722 18.2668 22.3484 18.2668C22.1463 18.2668 21.9416 18.2127 21.7578 18.0973C18.8346 16.2758 15.8305 15.8905 13.2424 15.9133C10.3205 15.9394 7.98405 16.4968 7.94428 16.5085C7.35299 16.6767 6.73106 16.3312 6.56221 15.7373C6.39337 15.1421 6.73954 14.5234 7.33409 14.3553C7.51467 14.3038 9.84658 13.7301 13.039 13.7033C15.9498 13.6792 19.5771 14.101 22.9423 16.1976C23.4658 16.5235 23.6268 17.2146 23.2996 17.7394ZM25.2456 13.0586C25.0024 13.4719 24.5669 13.702 24.1197 13.702C23.8954 13.702 23.6686 13.644 23.4606 13.5228C20.0537 11.5227 15.9114 11.0983 13.0364 11.0944C13.0227 11.0944 13.009 11.0944 12.9953 11.0944C9.51867 11.0944 6.84124 11.7059 6.81451 11.7124C6.11174 11.8734 5.41223 11.4392 5.24925 10.7378C5.08627 10.0369 5.5211 9.33678 6.22191 9.17315C6.34252 9.14512 9.20314 8.48668 12.9953 8.48668C13.0103 8.48668 13.0253 8.48668 13.0403 8.48668C16.238 8.49124 20.8705 8.97757 24.7814 11.2736C25.402 11.6387 25.61 12.438 25.2456 13.0586Z" fill="#2DFF42"/>
-                  </svg>
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>Spotify</span>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    disabled={spotifyAuthing}
-                    onClick={() => {
-                      if (connected) { void window.spotifyAPI.disconnect(); return }
-                      if (!settings?.spotifyClientId?.trim()) {
-                        setSpotifyClientIdDraft(settings?.spotifyClientId ?? '')
-                        setSpotifyClientIdCard(true)
-                        return
-                      }
-                      setSpotifyAuthing(true)
-                      window.spotifyAPI.startAuth()
-                        .catch(() => {})
-                        .finally(() => setSpotifyAuthing(false))
-                    }}
-                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50 disabled:opacity-50 disabled:cursor-default"
-                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: connected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: connected ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
-                  >
-                    {spotifyAuthing ? 'Autenticando…' : connected ? 'Desconectar' : 'Conectar'}
-                  </button>
-                </div>
-              )
-            })()}
-
-            {(() => {
-              const connected = connectorStatuses.find(s => s.id === 'tradingview')?.connected ?? false
-              return (
-                <div className="flex flex-col items-center gap-2" style={{ width: 92 }}>
-                  <svg
-                    width="30"
-                    height="30"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                    style={{ color: 'rgba(255,255,255,0.9)' }}
-                  >
-                    <path
-                      d="M15.8654 8.2789c0 1.3541 -1.0978 2.4519 -2.452 2.4519 -1.354 0 -2.4519 -1.0978 -2.4519 -2.452 0 -1.354 1.0978 -2.4518 2.452 -2.4518 1.3541 0 2.4519 1.0977 2.4519 2.4519zM9.75 6H0v4.9038h4.8462v7.2692H9.75Zm8.5962 0H24l-5.1058 12.173h-5.6538z"
-                      fill="currentColor"
-                    />
-                  </svg>
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>TradingView</span>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => {
-                      if (connected) {
-                        void window.tradingViewAPI.close()
-                        return
-                      }
-                      void window.tradingViewAPI.open()
-                    }}
-                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50"
-                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: connected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: connected ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
-                  >
-                    {connected ? 'Fechar' : 'Abrir'}
-                  </button>
-                  {tradingViewState?.symbol && (
-                    <div className="text-center leading-tight" style={{ maxWidth: 120 }}>
-                      <span className="block text-[10px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-                        {tradingViewState.symbol}
-                        {tradingViewState.timeframe ? ` · ${tradingViewState.timeframe}` : ''}
-                      </span>
-                      {tradingViewState.currentPrice && (
-                        <span className="block text-[10px]" style={{ color: 'rgba(255,255,255,0.56)' }}>
-                          {tradingViewState.currentPrice}
-                          {tradingViewState.priceChange ? ` · ${tradingViewState.priceChange}` : ''}
-                        </span>
-                      )}
-                      {(tradingViewState.recentHigh || tradingViewState.recentLow) && (
-                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          H {tradingViewState.recentHigh ?? '?'} · L {tradingViewState.recentLow ?? '?'}
-                        </span>
-                      )}
-                      {tradingViewState.ohlc.close && (
-                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          {tradingViewState.crosshairActive ? 'vela sob o mouse' : 'última vela'}
-                          {tradingViewState.hoveredCandleTime ? ` · ${tradingViewState.hoveredCandleTime}` : ''}
-                        </span>
-                      )}
-                      {tradingViewState.candleStructure && (
-                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          {tradingViewState.candleStructure}
-                        </span>
-                      )}
-                      {tradingViewState.rangeState !== 'unknown' && (
-                        <span className="block text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                          range {tradingViewState.rangeState}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-
-            {/* Ticker tile */}
-            {(() => {
-              const sym = settings?.tickerSymbol?.trim()
-              return (
-                <div className="flex flex-col items-center gap-2" style={{ width: 92 }}>
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                    <polyline points="2 12 6 8 10 14 14 9 18 13 22 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                  </svg>
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.6)', letterSpacing: '-0.01em' }}>Cotação</span>
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => {
-                      setTickerDraft(sym ?? '')
-                      setTickerCard(true)
-                    }}
-                    className="transition-opacity duration-150 hover:opacity-80 active:opacity-50"
-                    style={{ fontSize: 11, padding: '3px 10px', borderRadius: 6, border: 'none', background: sym ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.92)', color: sym ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.85)', letterSpacing: '-0.01em', fontWeight: 500 }}
-                  >
-                    {sym ? sym : 'Configurar'}
-                  </button>
-                  {tickerQuote && (
-                    <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
-                      {tickerQuote.price} <span style={{ color: tickerQuote.positive ? 'rgba(45,213,80,0.8)' : 'rgba(255,95,95,0.8)' }}>{tickerQuote.change}</span>
-                    </span>
-                  )}
-                </div>
-              )
-            })()}
-
-          </div>
-
-          {/* Spotify Client ID floating card */}
-          {spotifyClientIdCard && (
-            <div
-              className="mt-3 rounded-[10px] p-4"
-              style={{ background: 'rgba(30,30,30,0.98)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <p className="text-[12px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                Spotify Client ID
-              </p>
-              <p className="text-[10px] mb-3" style={{ color: 'rgba(255,255,255,0.36)', lineHeight: 1.5 }}>
-                developer.spotify.com → crie um app → Redirect URI: <span style={{ color: 'rgba(255,255,255,0.54)' }}>http://127.0.0.1:42002/callback</span>
-              </p>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Cole o Client ID aqui"
-                value={spotifyClientIdDraft}
-                onChange={e => setSpotifyClientIdDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') setSpotifyClientIdCard(false)
-                  if (e.key === 'Enter' && spotifyClientIdDraft.trim()) {
-                    void window.settingsAPI.update({ spotifyClientId: spotifyClientIdDraft.trim() })
-                      .then(() => {
-                        setSpotifyClientIdCard(false)
-                        setSpotifyAuthing(true)
-                        return window.spotifyAPI.startAuth()
-                      })
-                      .catch(() => {})
-                      .finally(() => setSpotifyAuthing(false))
-                  }
-                }}
-                className="w-full bg-transparent outline-none text-[11px] mb-3"
-                style={{ color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, padding: '5px 8px', caretColor: 'white' }}
-              />
-              <div className="flex gap-2">
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  disabled={!spotifyClientIdDraft.trim()}
-                  onClick={() => {
-                    void window.settingsAPI.update({ spotifyClientId: spotifyClientIdDraft.trim() })
-                      .then(() => {
-                        setSpotifyClientIdCard(false)
-                        setSpotifyAuthing(true)
-                        return window.spotifyAPI.startAuth()
-                      })
-                      .catch(() => {})
-                      .finally(() => setSpotifyAuthing(false))
-                  }}
-                  className="transition-opacity hover:opacity-80 active:opacity-50 disabled:opacity-40 disabled:cursor-default"
-                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.92)', color: 'rgba(0,0,0,0.85)', fontWeight: 500 }}
-                >
-                  Conectar
-                </button>
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => setSpotifyClientIdCard(false)}
-                  className="transition-opacity hover:opacity-80 active:opacity-50"
-                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.44)', border: '1px solid rgba(255,255,255,0.1)' }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Ticker symbol floating card */}
-          {tickerCard && (
-            <div
-              className="mt-3 rounded-[10px] p-4"
-              style={{ background: 'rgba(30,30,30,0.98)', border: '1px solid rgba(255,255,255,0.1)' }}
-            >
-              <p className="text-[12px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                Símbolo do ativo
-              </p>
-              <p className="text-[10px] mb-3" style={{ color: 'rgba(255,255,255,0.36)', lineHeight: 1.5 }}>
-                Ações: <span style={{ color: 'rgba(255,255,255,0.54)' }}>AAPL · PETR4.SA</span>
-                {' · '}Cripto: <span style={{ color: 'rgba(255,255,255,0.54)' }}>BTC-USD · ETH-USD</span>
-                {' · '}Commodities: <span style={{ color: 'rgba(255,255,255,0.54)' }}>GC=F (ouro) · CL=F (petróleo) · SI=F (prata) · NG=F (gás)</span>
-                {' · '}Índices: <span style={{ color: 'rgba(255,255,255,0.54)' }}>^GSPC · ^BVSP</span>
-              </p>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Cole o símbolo aqui"
-                value={tickerDraft}
-                onChange={e => setTickerDraft(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') setTickerCard(false)
-                  if (e.key === 'Enter' && tickerDraft.trim()) {
-                    void window.tickerAPI.setSymbol(tickerDraft.trim())
-                      .then(q => { setTickerQuote(q); setTickerCard(false) })
-                  }
-                }}
-                className="w-full bg-transparent outline-none text-[11px] mb-3"
-                style={{ color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.14)', borderRadius: 6, padding: '5px 8px', caretColor: 'white' }}
-              />
-              <div className="flex gap-2">
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  disabled={!tickerDraft.trim()}
-                  onClick={() => {
-                    void window.tickerAPI.setSymbol(tickerDraft.trim())
-                      .then(q => { setTickerQuote(q); setTickerCard(false) })
-                  }}
-                  className="transition-opacity hover:opacity-80 active:opacity-50 disabled:opacity-40 disabled:cursor-default"
-                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'rgba(255,255,255,0.92)', color: 'rgba(0,0,0,0.85)', fontWeight: 500 }}
-                >
-                  Salvar
-                </button>
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => setTickerCard(false)}
-                  className="transition-opacity hover:opacity-80 active:opacity-50"
-                  style={{ fontSize: 11, padding: '4px 12px', borderRadius: 6, background: 'transparent', color: 'rgba(255,255,255,0.44)', border: '1px solid rgba(255,255,255,0.1)' }}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Spotify Now Playing banner */}
-          {spotifyState && (
-            <SpotifyBanner
-              state={spotifyState}
-              onTogglePlay={() => void window.spotifyAPI.togglePlay()}
-              onNext={() => void window.spotifyAPI.next()}
-              onPrev={() => void window.spotifyAPI.prev()}
-              onShuffle={() => void window.spotifyAPI.setShuffle(!spotifyState.shuffle)}
-              onRepeat={() => {
-                const next = spotifyState.repeat === 'off' ? 'context' : spotifyState.repeat === 'context' ? 'track' : 'off'
-                void window.spotifyAPI.setRepeat(next)
-              }}
-            />
-          )}
-
-          {vscodeInstallMsg && (
-            <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
-              {vscodeInstallMsg}
-            </p>
-          )}
-        </>
+        <GeneralSettingsPanel
+          settings={settings}
+          userProfile={userProfile}
+          sessionMemory={sessionMemory}
+          connectorStatuses={connectorStatuses}
+          installingVSCode={installingVSCode}
+          vscodePendingReload={vscodePendingReload}
+          vscodeInstallMsg={vscodeInstallMsg}
+          spotifyAuthing={spotifyAuthing}
+          spotifyClientIdCard={spotifyClientIdCard}
+          spotifyClientIdDraft={spotifyClientIdDraft}
+          tickerCard={tickerCard}
+          tickerDraft={tickerDraft}
+          tickerQuote={tickerQuote}
+          tradingViewState={tradingViewState}
+          spotifyState={spotifyState}
+          onToggleMinimalMode={onToggleMinimalMode}
+          onVSCodeAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'vscode')?.connected ?? false
+            if (connected) { window.bridgeAPI.disconnect('vscode'); return }
+            setVscodeInstallMsg(null)
+            setInstallingVSCode(true)
+            window.bridgeAPI.installVSCodeConnector().then(res => {
+              setInstallingVSCode(false)
+              if (res.ok) { setVscodePendingReload(true); setVscodeInstallMsg(res.message) }
+              else { setVscodeInstallMsg(res.message); setTimeout(() => setVscodeInstallMsg(null), 6000) }
+            })
+          }}
+          onSpotifyAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'spotify')?.connected ?? false
+            if (connected) { void window.spotifyAPI.disconnect(); return }
+            if (!settings?.spotifyClientId?.trim()) {
+              setSpotifyClientIdDraft(settings?.spotifyClientId ?? '')
+              setSpotifyClientIdCard(true)
+              return
+            }
+            setSpotifyAuthing(true)
+            window.spotifyAPI.startAuth()
+              .catch(() => {})
+              .finally(() => setSpotifyAuthing(false))
+          }}
+          onTradingViewAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'tradingview')?.connected ?? false
+            if (connected) {
+              void window.tradingViewAPI.close()
+              return
+            }
+            void window.tradingViewAPI.open()
+          }}
+          onOpenSpotifyClientIdCard={() => setSpotifyClientIdCard(true)}
+          onCloseSpotifyClientIdCard={() => setSpotifyClientIdCard(false)}
+          onSpotifyClientIdDraftChange={setSpotifyClientIdDraft}
+          onSubmitSpotifyClientId={() => {
+            void window.settingsAPI.update({ spotifyClientId: spotifyClientIdDraft.trim() })
+              .then(() => {
+                setSpotifyClientIdCard(false)
+                setSpotifyAuthing(true)
+                return window.spotifyAPI.startAuth()
+              })
+              .catch(() => {})
+              .finally(() => setSpotifyAuthing(false))
+          }}
+          onOpenTickerCard={() => {
+            setTickerDraft(settings?.tickerSymbol?.trim() ?? '')
+            setTickerCard(true)
+          }}
+          onCloseTickerCard={() => setTickerCard(false)}
+          onTickerDraftChange={setTickerDraft}
+          onSubmitTicker={() => {
+            void window.tickerAPI.setSymbol(tickerDraft.trim())
+              .then(q => { setTickerQuote(q); setTickerCard(false) })
+          }}
+          onTogglePlay={() => void window.spotifyAPI.togglePlay()}
+          onNext={() => void window.spotifyAPI.next()}
+          onPrev={() => void window.spotifyAPI.prev()}
+          onShuffle={() => {
+            if (!spotifyState) return
+            void window.spotifyAPI.setShuffle(!spotifyState.shuffle)
+          }}
+          onRepeat={() => {
+            if (!spotifyState) return
+            const next = spotifyState.repeat === 'off' ? 'context' : spotifyState.repeat === 'context' ? 'track' : 'off'
+            void window.spotifyAPI.setRepeat(next)
+          }}
+        />
       )
     }
 
     if (activeSettingsTab === 'notifications') {
       return (
-        <>
-          <p
-            className="text-[18px] font-medium mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Notificações
-          </p>
-          <div className="mt-4">
-            <SettingsRow
-              label="Sugestões passivas"
-              value={settings.passiveSuggestions ? 'Ativado' : 'Desativado'}
-              toggle={settings.passiveSuggestions}
-              onClick={onTogglePassiveSuggestions}
-            />
-            <SettingsRow
-              label="Sempre visível"
-              value={settings.alwaysVisible ? 'Ativado' : 'Desativado'}
-              toggle={settings.alwaysVisible}
-              onClick={onToggleAlwaysVisible}
-            />
-            <SettingsRow
-              label="Voice mode"
-              value={settings.featureFlags.voiceMode ? 'Ativado' : 'Desligado'}
-              toggle={settings.featureFlags.voiceMode}
-              muted={!settings.featureFlags.voiceMode}
-              onClick={onToggleVoiceMode}
-            />
-            {/* Voice status + test button */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              <div style={{ minHeight: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <span
-                  className="text-[14px]"
-                  style={{ color: voiceKeyReady === false ? 'rgba(255,120,80,0.85)' : 'rgba(255,255,255,0.42)' }}
-                >
-                  {voiceKeyReady === null
-                    ? 'Voz: verificando…'
-                    : voiceKeyReady
-                      ? 'Voz: chave configurada'
-                      : 'Voz: ELEVENLABS_API_KEY não encontrada no .env'}
-                </span>
-                {settings.featureFlags.voiceMode && voiceKeyReady && (
-                  <button
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={async () => {
-                      setVoiceTestState('testing')
-                      setVoiceTestError(null)
-                      try {
-                        await onTestVoice()
-                        setVoiceTestState('ok')
-                      } catch (err) {
-                        const msg = err instanceof Error ? err.message : String(err)
-                        setVoiceTestError(msg)
-                        setVoiceTestState('error')
-                        console.error('[Voice test]', msg)
-                      }
-                      setTimeout(() => setVoiceTestState('idle'), 3000)
-                    }}
-                    disabled={voiceTestState === 'testing'}
-                    className="text-[13px] px-3 py-1 rounded transition-opacity hover:opacity-80 active:opacity-60 disabled:opacity-40"
-                    style={{
-                      background: 'rgba(255,255,255,0.08)',
-                      color: voiceTestState === 'ok'
-                        ? 'rgba(100,220,120,0.9)'
-                        : voiceTestState === 'error'
-                          ? 'rgba(255,100,80,0.9)'
-                          : 'rgba(255,255,255,0.7)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      whiteSpace: 'nowrap'
-                    }}
-                  >
-                    {voiceTestState === 'testing' ? '…'
-                      : voiceTestState === 'ok'    ? '✓ ok'
-                      : voiceTestState === 'error' ? '✗ falhou'
-                      : 'Testar'}
-                  </button>
-                )}
-              </div>
-              {voiceTestError && (
-                <p className="text-[12px] pb-2" style={{ color: 'rgba(255,100,80,0.85)' }}>
-                  {voiceTestError}
-                </p>
-              )}
-            </div>
-          </div>
-        </>
+        <NotificationsSettingsPanel
+          settings={settings}
+          voiceKeyReady={voiceKeyReady}
+          voiceTestState={voiceTestState}
+          voiceTestError={voiceTestError}
+          onTogglePassiveSuggestions={onTogglePassiveSuggestions}
+          onToggleAlwaysVisible={onToggleAlwaysVisible}
+          onToggleVoiceMode={onToggleVoiceMode}
+          onTestVoice={onTestVoice}
+          setVoiceTestState={setVoiceTestState}
+          setVoiceTestError={setVoiceTestError}
+        />
       )
     }
 
     if (activeSettingsTab === 'data') {
       return (
-        <>
-          <p
-            className="text-[18px] font-medium mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Controle de dados
-          </p>
-          <div className="mt-4">
-            <SettingsRow
-              label="Telemetria"
-              value={settings.telemetryOptIn ? 'Ativada' : 'Desativada'}
-              toggle={settings.telemetryOptIn}
-              onClick={onToggleTelemetry}
-            />
-            <SettingsRow
-              label="Modo privado"
-              value={isPrivate ? 'Ativado' : 'Desativado'}
-              toggle={isPrivate}
-              onClick={onTogglePrivate}
-            />
-            <SettingsRow
-              label="Escopo de captura"
-              value={
-                settings.captureScope.mode === 'selected-source'
-                  ? settings.captureScope.selectedSourceName || 'janela selecionada'
-                  : 'qualquer janela'
-              }
-              muted={settings.captureScope.mode !== 'selected-source'}
-            />
-            <SettingsRow
-              label="Apagar dados locais"
-              value=""
-              onClick={onDeleteLocalData}
-              muted
-              last
-            />
-          </div>
-
-          {/* Screenshot mode */}
-          <div
-            className="mt-4 rounded-[16px] overflow-hidden"
-            style={{
-              background: screenshotMode
-                ? 'rgba(255,159,10,0.06)'
-                : 'rgba(255,255,255,0.025)',
-              border: `1px solid ${screenshotMode
-                ? 'rgba(255,159,10,0.15)'
-                : 'rgba(255,255,255,0.06)'}`,
-              transition: 'background 0.3s, border-color 0.3s'
-            }}
-          >
-            <button
-              onMouseDown={e => { e.preventDefault(); onToggleScreenshotMode() }}
-              className="w-full flex items-center justify-between gap-4 px-4 transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-              style={{ minHeight: 52 }}
-            >
-              <div className="flex items-center gap-3">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                  <rect x="3" y="5" width="18" height="14" rx="2.5" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
-                  <circle cx="12" cy="12" r="3" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
-                  <path d="M15 5V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v1" stroke={screenshotMode ? 'rgba(255,179,64,0.85)' : 'rgba(255,255,255,0.5)'} strokeWidth="1.5" />
-                </svg>
-                <div>
-                  <span
-                    className="text-[13px] font-medium"
-                    style={{ color: screenshotMode ? 'rgba(255,179,64,0.95)' : 'rgba(255,255,255,0.82)' }}
-                  >
-                    Modo screenshot
-                  </span>
-                  <p className="text-[10px] mt-0.5" style={{ color: 'rgba(255,255,255,0.38)' }}>
-                    {screenshotMode ? 'Captura pausada · restaura em 30s' : 'Torna o HUD visivel em prints'}
-                  </p>
-                </div>
-              </div>
-              <Toggle on={screenshotMode} />
-            </button>
-          </div>
-
-          <div
-            className="mt-5 rounded-[20px] overflow-hidden"
-            style={{
-              background: 'rgba(255,255,255,0.04)',
-              backdropFilter: 'blur(40px)',
-              WebkitBackdropFilter: 'blur(40px)',
-              border: '1px solid rgba(255,255,255,0.08)'
-            }}
-          >
-            {/* Header */}
-            <div
-              className="px-5 pt-5 pb-4"
-              style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="flex items-center justify-center rounded-[12px]"
-                    style={{
-                      width: 36,
-                      height: 36,
-                      background: 'linear-gradient(135deg, rgba(90,130,240,0.22), rgba(90,130,240,0.08))',
-                      border: '1px solid rgba(90,130,240,0.18)'
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                      <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="rgba(120,160,255,0.85)" strokeWidth="1.5" strokeLinejoin="round" />
-                      <path d="M12 22V12" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
-                      <path d="M21 7l-9 5-9-5" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-[15px] font-medium" style={{ color: 'rgba(255,255,255,0.95)', letterSpacing: '-0.01em' }}>
-                      Memory Card
-                    </p>
-                    <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.42)' }}>
-                      Perfil + memória persistida
-                    </p>
-                  </div>
-                </div>
-                {memorySummary && (
-                  <span
-                    className="px-2.5 py-1 rounded-full text-[10px] font-medium"
-                    style={{
-                      background: 'rgba(90,130,240,0.12)',
-                      color: 'rgba(130,170,255,0.9)',
-                      border: '1px solid rgba(90,130,240,0.15)'
-                    }}
-                  >
-                    {memorySummary.item_count} memórias
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Summary rows */}
-            {memorySummary && (
-              <div className="px-5">
-                <SettingsRow label="Dono" value={memorySummary.owner_name || 'sem nome'} />
-                <SettingsRow label="Perfil" value={memorySummary.profile_summary} />
-                <SettingsRow label="Impacto" value={memorySummary.impact_summary} last />
-              </div>
-            )}
-
-            {/* Embeddings sub-card */}
-            {memoryEmbeddingStatus && (
-              <div
-                className="mx-4 mt-3 rounded-[14px] p-4"
-                style={{
-                  background: 'rgba(255,255,255,0.025)',
-                  border: '1px solid rgba(255,255,255,0.06)'
-                }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[12px] font-medium" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                      Embeddings
-                    </p>
-                    <p className="mt-0.5 text-[10px]" style={{ color: 'rgba(255,255,255,0.40)' }}>
-                      {memoryEmbeddingStatus.embedding_model}
-                    </p>
-                  </div>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[9px] font-medium"
-                    style={{
-                      background: memoryEmbeddingStatus.state === 'ready'
-                        ? 'rgba(52,199,89,0.12)'
-                        : 'rgba(255,204,0,0.12)',
-                      color: memoryEmbeddingStatus.state === 'ready'
-                        ? 'rgba(52,199,89,0.9)'
-                        : 'rgba(255,214,51,0.9)',
-                      border: `1px solid ${memoryEmbeddingStatus.state === 'ready'
-                        ? 'rgba(52,199,89,0.18)'
-                        : 'rgba(255,204,0,0.18)'}`
-                    }}
-                  >
-                    {labelEmbeddingState(memoryEmbeddingStatus.state)}
-                  </span>
-                </div>
-
-                <div className="mt-2.5">
-                  <SettingsRow
-                    label="Itens indexados"
-                    value={String(memoryEmbeddingStatus.indexed_count)}
-                  />
-                  <SettingsRow
-                    label="Ultimo sync"
-                    value={
-                      memoryEmbeddingStatus.last_synced_at
-                        ? new Date(memoryEmbeddingStatus.last_synced_at).toLocaleString('pt-BR')
-                        : 'ainda nao sincronizado'
-                    }
-                    last={!memoryEmbeddingStatus.error}
-                  />
-                  {memoryEmbeddingStatus.error ? (
-                    <p className="mt-2 text-[11px]" style={{ color: 'rgba(255,100,100,0.7)', lineHeight: 1.45 }}>
-                      {memoryEmbeddingStatus.error}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onMouseDown={e => { e.preventDefault(); onSyncEmbeddings() }}
-                    className="px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                    style={{
-                      background: 'rgba(90,130,240,0.14)',
-                      color: 'rgba(130,170,255,0.92)',
-                      border: '1px solid rgba(90,130,240,0.2)'
-                    }}
-                  >
-                    sincronizar
-                  </button>
-                  <button
-                    onMouseDown={e => { e.preventDefault(); onRebuildEmbeddings() }}
-                    className="px-3.5 py-1.5 rounded-full text-[10px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'rgba(255,255,255,0.52)',
-                      border: '1px solid rgba(255,255,255,0.07)'
-                    }}
-                  >
-                    reindexar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Highlights */}
-            {memorySummary?.highlight_texts?.length ? (
-              <div className="mx-5 mt-4 flex flex-col gap-1.5">
-                {memorySummary.highlight_texts.map(text => (
-                  <p
-                    key={text}
-                    className="text-[11px]"
-                    style={{ color: 'rgba(255,255,255,0.44)', lineHeight: 1.5 }}
-                  >
-                    {text}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-
-            {/* Action buttons */}
-            <div
-              className="px-5 py-4 mt-3 flex gap-2.5 flex-wrap"
-              style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <button
-                onMouseDown={e => { e.preventDefault(); onExportMemory() }}
-                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(90,130,240,0.2), rgba(90,130,240,0.1))',
-                  color: 'rgba(140,175,255,0.95)',
-                  border: '1px solid rgba(90,130,240,0.22)'
-                }}
-              >
-                Exportar
-              </button>
-              <button
-                onMouseDown={e => { e.preventDefault(); onSelectImportCard() }}
-                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  color: 'rgba(255,255,255,0.72)',
-                  border: '1px solid rgba(255,255,255,0.1)'
-                }}
-              >
-                Importar
-              </button>
-              <button
-                onMouseDown={e => { e.preventDefault(); onClearPersistedMemory() }}
-                className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                style={{
-                  background: 'rgba(255,69,58,0.08)',
-                  color: 'rgba(255,105,97,0.82)',
-                  border: '1px solid rgba(255,69,58,0.14)'
-                }}
-              >
-                Limpar
-              </button>
-            </div>
-
-            {/* Import preview */}
-            {memoryImportPreview && (
-              <div
-                className="mx-4 mb-4 rounded-[14px] p-4"
-                style={{
-                  background: 'rgba(255,255,255,0.025)',
-                  border: '1px solid rgba(255,255,255,0.06)'
-                }}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.92)' }}>
-                      {memoryImportPreview.file_name}
-                    </p>
-                    <p className="mt-1 text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
-                      {memoryImportPreview.summary.profile_summary}
-                    </p>
-                  </div>
-                  <span
-                    className="px-2 py-0.5 rounded-full text-[9px] font-medium"
-                    style={{
-                      background: memoryImportPreview.conflicts > 0
-                        ? 'rgba(255,159,10,0.12)'
-                        : 'rgba(52,199,89,0.12)',
-                      color: memoryImportPreview.conflicts > 0
-                        ? 'rgba(255,179,64,0.9)'
-                        : 'rgba(52,199,89,0.9)',
-                      border: `1px solid ${memoryImportPreview.conflicts > 0
-                        ? 'rgba(255,159,10,0.18)'
-                        : 'rgba(52,199,89,0.18)'}`
-                    }}
-                  >
-                    {memoryImportPreview.conflicts} conflitos
-                  </span>
-                </div>
-
-                <p className="mt-3 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)', lineHeight: 1.5 }}>
-                  {memoryImportPreview.summary.impact_summary}
-                </p>
-
-                <button
-                  onMouseDown={e => { e.preventDefault(); onToggleMemoryImportProfile() }}
-                  className="mt-3 w-full flex items-center justify-between gap-4"
-                  style={{ minHeight: 40 }}
-                >
-                  <span className="text-[12px]" style={{ color: 'rgba(255,255,255,0.82)' }}>
-                    Aplicar perfil do cartão
-                  </span>
-                  <Toggle on={memoryIncludeProfile} />
-                </button>
-
-                <div className="mt-3 flex gap-2.5">
-                  <button
-                    onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('merge') }}
-                    className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(52,199,89,0.18), rgba(52,199,89,0.08))',
-                      color: 'rgba(80,220,110,0.92)',
-                      border: '1px solid rgba(52,199,89,0.2)'
-                    }}
-                  >
-                    Mesclar
-                  </button>
-                  <button
-                    onMouseDown={e => { e.preventDefault(); onApplyMemoryImport('replace') }}
-                    className="px-4 py-2 rounded-full text-[11px] font-medium transition-opacity duration-150 hover:opacity-80 active:opacity-60"
-                    style={{
-                      background: 'rgba(255,159,10,0.1)',
-                      color: 'rgba(255,179,64,0.88)',
-                      border: '1px solid rgba(255,159,10,0.16)'
-                    }}
-                  >
-                    Substituir
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Feedback */}
-            {memoryFeedback && (
-              <p className="mx-5 mb-4 text-[11px]" style={{ color: 'rgba(255,255,255,0.48)' }}>
-                {memoryFeedback}
-              </p>
-            )}
-          </div>
-
-          {semanticState?.capture_policy === 'blocked-sensitive' && (
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.52)' }}>
-                Captura pausada: {semanticState.sensitivity_reason || 'superficie sensivel'}
-              </p>
-              <button
-                onMouseDown={e => {
-                  e.preventDefault()
-                  onResumeSensitiveBlock()
-                }}
-                className="text-[11px] px-2.5 py-1 rounded-full"
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  color: 'rgba(255,255,255,0.72)',
-                  border: '1px solid rgba(255,255,255,0.1)'
-                }}
-              >
-                retomar
-              </button>
-            </div>
-          )}
-
-          {sources.length > 0 && (
-            <>
-              <p className="mt-5 mb-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-                Janelas disponíveis
-              </p>
-              <div className="flex gap-2 flex-wrap">
-                {sources.slice(0, 5).map(source => (
-                  <button
-                    key={source.id}
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      onSelectCaptureSource(source)
-                    }}
-                    disabled={source.blocked}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
-                    style={{
-                      background: source.selected ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)',
-                      color: source.blocked ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.62)',
-                      border: `1px solid ${
-                        source.selected ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'
-                      }`
-                    }}
-                  >
-                    {source.name.slice(0, 22)}
-                  </button>
-                ))}
-                {settings.captureScope.mode === 'selected-source' && (
-                  <button
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      onSelectCaptureSource(null)
-                    }}
-                    className="px-3 py-1.5 rounded-full text-[10px]"
-                    style={{
-                      background: 'rgba(255,255,255,0.04)',
-                      color: 'rgba(255,255,255,0.44)',
-                      border: '1px solid rgba(255,255,255,0.06)'
-                    }}
-                  >
-                    liberar escopo
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-        </>
+        <DataSettingsPanel
+          settings={settings}
+          isPrivate={isPrivate}
+          screenshotMode={screenshotMode}
+          semanticState={semanticState}
+          sources={sources}
+          memorySummary={memorySummary}
+          memoryEmbeddingStatus={memoryEmbeddingStatus}
+          memoryImportPreview={memoryImportPreview}
+          memoryIncludeProfile={memoryIncludeProfile}
+          memoryFeedback={memoryFeedback}
+          onToggleTelemetry={onToggleTelemetry}
+          onTogglePrivate={onTogglePrivate}
+          onDeleteLocalData={onDeleteLocalData}
+          onToggleScreenshotMode={onToggleScreenshotMode}
+          onSyncEmbeddings={onSyncEmbeddings}
+          onRebuildEmbeddings={onRebuildEmbeddings}
+          onExportMemory={onExportMemory}
+          onSelectImportCard={onSelectImportCard}
+          onClearPersistedMemory={onClearPersistedMemory}
+          onToggleMemoryImportProfile={onToggleMemoryImportProfile}
+          onApplyMemoryImport={onApplyMemoryImport}
+          onResumeSensitiveBlock={onResumeSensitiveBlock}
+          onSelectCaptureSource={onSelectCaptureSource}
+          labelEmbeddingState={labelEmbeddingState}
+        />
       )
     }
 
     if (activeSettingsTab === 'typography') {
-      const typography = settings.typography
-
       return (
-        <>
-          <p
-            className="text-[18px] font-medium mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Tipografia
-          </p>
-
-          <div className="mt-4">
-            <SettingsRow
-              label="Tamanho base"
-              value={`${typography.fontSize}px`}
-            />
-            <SettingsRow
-              label="Família ativa"
-              value={TYPOGRAPHY_FAMILY_OPTIONS.find(option => option.id === typography.fontFamily)?.label || 'System Sans'}
-            />
-            <SettingsRow
-              label="Peso ativo"
-              value={TYPOGRAPHY_WEIGHT_OPTIONS.find(option => option.id === typography.fontWeight)?.label || 'Regular'}
-              last
-            />
-          </div>
-
-          <div className="mt-5">
-            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-              Família de fonte
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {TYPOGRAPHY_FAMILY_OPTIONS.map(option => (
-                <TypographyChoice
-                  key={option.id}
-                  label={option.label}
-                  secondaryLabel={option.sample}
-                  active={typography.fontFamily === option.id}
-                  onClick={() => onUpdateTypography({ fontFamily: option.id })}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-              Tamanho da fonte
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {TYPOGRAPHY_SIZE_OPTIONS.map(size => (
-                <TypographyChoice
-                  key={size}
-                  label={`${size}px`}
-                  active={typography.fontSize === size}
-                  onClick={() => onUpdateTypography({ fontSize: size })}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <p className="text-[11px]" style={{ color: 'rgba(255,255,255,0.38)' }}>
-              Peso
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {TYPOGRAPHY_WEIGHT_OPTIONS.map(option => (
-                <TypographyChoice
-                  key={option.id}
-                  label={option.label}
-                  active={typography.fontWeight === option.id}
-                  onClick={() => onUpdateTypography({ fontWeight: option.id })}
-                />
-              ))}
-            </div>
-          </div>
-        </>
+        <TypographySettingsPanel
+          settings={settings}
+          onUpdateTypography={onUpdateTypography}
+        />
       )
     }
 
     if (activeSettingsTab === 'account') {
-      const currentName = userProfile?.display_name?.trim() || ''
-
-      const commitName = () => {
-        const trimmed = nameDraft.trim()
-        if (trimmed) {
-          onUpdateUserProfile({ display_name: trimmed })
-        }
-        setEditingName(false)
-      }
-
       return (
-        <>
-          <p
-            className="text-[18px] font-medium mb-1"
-            style={{ color: 'rgba(255,255,255,0.96)', letterSpacing: '-0.02em' }}
-          >
-            Conta
-          </p>
-          <div className="mt-4">
-            {/* nome editável inline */}
-            <div
-              className="flex items-center justify-between gap-4"
-              style={{ minHeight: 52, borderBottom: '1px solid rgba(255,255,255,0.06)' }}
-            >
-              <span className="text-[14px]" style={{ color: 'rgba(255,255,255,0.88)' }}>
-                Nome exibido
-              </span>
-              {editingName ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    autoFocus
-                    value={nameDraft}
-                    onChange={e => setNameDraft(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.preventDefault(); commitName() }
-                      if (e.key === 'Escape') { setEditingName(false) }
-                    }}
-                    placeholder={currentName || 'seu nome'}
-                    className="bg-transparent outline-none text-[14px]"
-                    style={{
-                      color: 'rgba(255,255,255,0.88)',
-                      borderBottom: '1px solid rgba(255,255,255,0.3)',
-                      minWidth: 0,
-                      width: 140,
-                      direction: 'ltr'
-                    }}
-                    maxLength={40}
-                  />
-                  <button
-                    onMouseDown={e => { e.preventDefault(); commitName() }}
-                    className="text-[11px] px-2.5 py-1 rounded-full flex-shrink-0"
-                    style={{
-                      background: 'rgba(255,255,255,0.1)',
-                      color: 'rgba(255,255,255,0.82)',
-                      border: '1px solid rgba(255,255,255,0.14)'
-                    }}
-                  >
-                    salvar
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => { setNameDraft(''); setEditingName(true) }}
-                  className="inline-flex items-center gap-1.5 text-[14px] transition-opacity hover:opacity-70"
-                  style={{ color: currentName ? 'rgba(255,255,255,0.52)' : 'rgba(255,255,255,0.28)' }}
-                >
-                  {currentName || 'definir nome'}
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                    <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              )}
-            </div>
-
-            <SettingsRow label="Nivel" value={userProfile?.user_level || 'intermediate'} onClick={onCycleLevel} />
-            <SettingsRow
-              label="Estilo de explicação"
-              value={userProfile?.preferred_explanation_style || 'direct'}
-              onClick={onCycleStyle}
-            />
-            <SettingsRow
-              label="Limpar contexto da sessão"
-              value=""
-              onClick={onClearContext}
-              muted
-              last
-            />
-          </div>
-        </>
+        <AccountSettingsPanel
+          userProfile={userProfile}
+          nameDraft={nameDraft}
+          editingName={editingName}
+          setNameDraft={setNameDraft}
+          setEditingName={setEditingName}
+          onUpdateUserProfile={onUpdateUserProfile}
+          onCycleLevel={onCycleLevel}
+          onCycleStyle={onCycleStyle}
+          onClearContext={onClearContext}
+        />
       )
     }
 
@@ -2559,13 +1383,13 @@ export const HudExpanded = memo(function HudExpanded({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.38)' }}
+                style={{ color: active ? 'var(--john-text-strong)' : 'var(--john-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={
-                  stage === 1 ? 'w-[18px] h-auto' :
-                  stage === 2 ? 'w-[20px] h-auto' :
-                  'w-[14px] h-auto'
+                  stage === 1 ? 'w-[var(--john-icon-md)] h-auto' :
+                  stage === 2 ? 'w-[var(--john-icon-lg)] h-auto' :
+                  'w-[var(--john-icon-sm)] h-auto'
                 } />
               </button>
             )
@@ -2590,18 +1414,18 @@ export const HudExpanded = memo(function HudExpanded({
           >
             <span style={{
               width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-              background: tickerQuote.positive ? 'rgba(45,213,80,0.9)' : 'rgba(255,95,95,0.9)'
+              background: tickerQuote.positive ? 'var(--john-success)' : 'var(--john-danger)'
             }} />
             <span style={{
               fontSize: 11.5, fontWeight: 500,
-              color: 'rgba(255,255,255,0.60)',
+              color: 'var(--john-text-secondary)',
               letterSpacing: '0.03em'
             }}>
               {tickerQuote.symbol}
             </span>
             <span style={{
               fontSize: 11.5, fontWeight: 500,
-              color: 'rgba(255,255,255,0.88)',
+              color: 'var(--john-text-primary)',
               letterSpacing: '-0.01em'
             }}>
               {tickerQuote.price}
@@ -2609,7 +1433,7 @@ export const HudExpanded = memo(function HudExpanded({
             <span style={{
               fontSize: 10.5, fontWeight: 500,
               letterSpacing: '0.005em',
-              color: tickerQuote.positive ? 'rgba(45,213,80,0.92)' : 'rgba(255,95,95,0.92)'
+              color: tickerQuote.positive ? 'var(--john-success)' : 'var(--john-danger)'
             }}>
               {tickerQuote.change}
             </span>
@@ -2632,7 +1456,7 @@ export const HudExpanded = memo(function HudExpanded({
             })
           }}
           className="w-7 h-7 flex items-center justify-center transition-opacity duration-150"
-          style={{ color: settingsOpen ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.76)' }}
+          style={{ color: settingsOpen ? 'var(--john-text-strong)' : 'var(--john-text-secondary)' }}
           aria-label="Configurações"
         >
           <motion.span
@@ -2651,7 +1475,7 @@ export const HudExpanded = memo(function HudExpanded({
             <p
               className="text-[13px]"
               style={{
-                color: 'rgba(255,255,255,0.28)',
+                color: 'var(--john-text-muted)',
                 letterSpacing: '-0.01em',
                 fontSize: 'calc(var(--hud-font-size, 15px) - 2px)'
               }}
@@ -2661,7 +1485,7 @@ export const HudExpanded = memo(function HudExpanded({
             <p
               className="text-[20px] font-medium mt-1"
               style={{
-                color: 'rgba(255,255,255,0.94)',
+                color: 'var(--john-text-strong)',
                 letterSpacing: '-0.02em',
                 fontSize: 'calc(var(--hud-font-size, 15px) + 5px)'
               }}
@@ -2672,7 +1496,7 @@ export const HudExpanded = memo(function HudExpanded({
               <p
                 className="text-[12px] mt-2"
                 style={{
-                  color: 'rgba(255,255,255,0.36)',
+                  color: 'var(--john-text-tertiary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 3px)'
                 }}
               >
@@ -2688,21 +1512,21 @@ export const HudExpanded = memo(function HudExpanded({
                 onMouseDown={e => { e.preventDefault(); onQuickPrompt(text) }}
                 className="flex items-center gap-2 px-3.5 py-2 rounded-full transition-all duration-150"
                 style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.13)',
-                  color: 'rgba(255,255,255,0.78)',
+                  background: 'color-mix(in srgb, var(--john-surface-1) 76%, transparent)',
+                  border: '1px solid var(--john-border-strong)',
+                  color: 'var(--john-text-secondary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 2px)',
                   letterSpacing: '0.003em'
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.10)'
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.22)'
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.95)'
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
+                  e.currentTarget.style.borderColor = 'var(--john-border-strong)'
+                  e.currentTarget.style.color = 'var(--john-text-strong)'
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.13)'
-                  e.currentTarget.style.color = 'rgba(255,255,255,0.78)'
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--john-surface-1) 76%, transparent)'
+                  e.currentTarget.style.borderColor = 'var(--john-border-strong)'
+                  e.currentTarget.style.color = 'var(--john-text-secondary)'
                 }}
               >
                 <Icon size={12} strokeWidth={1.8} style={{ flexShrink: 0, opacity: 0.7 }} aria-hidden="true" />
@@ -2717,7 +1541,7 @@ export const HudExpanded = memo(function HudExpanded({
             <div className="h-full flex">
               <aside
                 className="w-[200px] flex-shrink-0 px-3 pt-5 pb-6"
-                style={{ borderRight: '1px solid rgba(255,255,255,0.07)' }}
+                        style={{ borderRight: '1px solid var(--john-border-soft)' }}
               >
                 <button
                   onMouseDown={e => {
@@ -2725,7 +1549,7 @@ export const HudExpanded = memo(function HudExpanded({
                     setSettingsOpen(false)
                   }}
                   className="w-8 h-8 flex items-center justify-center mb-5 rounded-lg transition-colors duration-150"
-                  style={{ color: 'rgba(255,255,255,0.82)' }}
+                  style={{ color: 'var(--john-text-primary)' }}
                   aria-label="Voltar"
                 >
                   <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2800,9 +1624,9 @@ export const HudExpanded = memo(function HudExpanded({
                       <span
                         className="inline-flex leading-relaxed px-4 py-2 selectable"
                         style={{
-                          background: 'rgba(255,255,255,0.03)',
-                          color: 'rgba(255,255,255,0.94)',
-                          border: '1px solid rgba(255,255,255,0.12)',
+                          background: 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
+                          color: 'var(--john-text-strong)',
+                          border: '1px solid var(--john-border-strong)',
                           borderRadius: '14px',
                           boxShadow: '0 0 0 1px rgba(0,0,0,0.08) inset',
                           width: 'fit-content',
@@ -2837,10 +1661,10 @@ export const HudExpanded = memo(function HudExpanded({
 
               {isStreaming && streamingContent && (
                 <div style={{ maxWidth: 860, width: '100%', margin: '0 auto' }}>
-                  <MessageBody content={streamingContent} />
+                  <MessageBody content={streamingContent} streaming />
                   <motion.span
                     className="inline-block w-0.5 h-3.5 ml-0.5 align-middle"
-                    style={{ background: '#ffffff' }}
+                    style={{ background: 'var(--john-text-primary)' }}
                     animate={{ opacity: [1, 0] }}
                     transition={{ duration: 0.55, repeat: Infinity }}
                   />
@@ -2857,7 +1681,7 @@ export const HudExpanded = memo(function HudExpanded({
             <button
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setChatSidebarOpen(prev => !prev) }}
               className="flex items-center justify-center w-6 h-6 transition-opacity duration-150 hover:opacity-100"
-              style={{ color: chatSidebarOpen ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.32)' }}
+              style={{ color: chatSidebarOpen ? 'var(--john-text-secondary)' : 'var(--john-text-muted)' }}
               aria-label="Histórico de chats"
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -2868,15 +1692,19 @@ export const HudExpanded = memo(function HudExpanded({
               </svg>
             </button>
           </div>
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.28)', paddingTop: 14, paddingLeft: 10, paddingRight: 6 }}>
+          <div
+            className={isStreaming ? 'john-stream-pulse' : undefined}
+            style={{ borderTop: '1px solid var(--john-border-strong)', paddingTop: 14, paddingLeft: 10, paddingRight: 6, transition: 'border-color 0.3s ease' }}
+          >
             <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
                 style={{
-                  color: 'rgba(255,255,255,0.72)',
+                  color: 'var(--john-text-secondary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
-                  lineHeight: 1.35,
+                  lineHeight: 'var(--hud-body-leading, 1.66)',
+                  letterSpacing: 'var(--hud-input-tracking, -0.015em)',
                   minHeight: INPUT_MIN_HEIGHT,
                   maxHeight: INPUT_MAX_HEIGHT
                 }}
@@ -2898,13 +1726,13 @@ export const HudExpanded = memo(function HudExpanded({
                   onMouseDown={e => { e.preventDefault(); toggleMic() }}
                   disabled={isStreaming}
                   className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
-                  style={{ color: isListening ? 'rgba(255,95,95,0.90)' : 'rgba(255,255,255,0.38)' }}
+                  style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
                   aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
                 >
                   {isListening && (
                     <span
                       className="absolute inset-0 rounded-full"
-                      style={{ background: 'rgba(255,95,95,0.12)', animation: 'capture-pulse 1.2s ease-out infinite' }}
+                      style={{ background: 'var(--john-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }}
                     />
                   )}
                   <MicIcon className="w-[18px] h-auto relative" />
@@ -2921,12 +1749,12 @@ export const HudExpanded = memo(function HudExpanded({
                 style={{
                   color:
                     inputValue.trim() && !isStreaming
-                      ? 'rgba(255,255,255,0.72)'
-                      : 'rgba(255,255,255,0.22)'
+                      ? 'var(--john-text-secondary)'
+                      : 'var(--john-text-muted)'
                 }}
                 aria-label="Enviar"
               >
-                <SendIcon className="w-[20px] h-auto" />
+                <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
               </button>
             </div>
           </div>
@@ -2941,7 +1769,7 @@ export const HudExpanded = memo(function HudExpanded({
                     onQuickPrompt(action)
                   }}
                   className="text-[11px] transition-colors duration-150"
-                  style={{ color: 'rgba(255,255,255,0.22)' }}
+                  style={{ color: 'var(--john-text-muted)' }}
                 >
                   {action}
                 </button>

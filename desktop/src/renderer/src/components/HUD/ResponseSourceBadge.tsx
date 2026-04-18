@@ -53,13 +53,13 @@ export function ResponseSourceBadge({
         alignItems: 'center',
         gap: 4,
         padding: compact ? '2px 6px' : '3px 8px',
-        borderRadius: 999,
-        border: '1px solid rgba(255,255,255,0.1)',
-        background: 'rgba(255,255,255,0.04)',
-        color: 'rgba(255,255,255,0.5)',
+        borderRadius: 'var(--john-radius-pill)',
+        border: '1px solid var(--john-border-soft)',
+        background: 'color-mix(in srgb, var(--john-surface-1) 70%, transparent)',
+        color: 'var(--john-text-tertiary)',
         fontSize: compact ? 9 : 10,
         lineHeight: 1.1,
-        letterSpacing: '0.04em',
+        letterSpacing: 'var(--hud-label-tracking, 0.075em)',
         textTransform: 'uppercase',
         userSelect: 'none'
       }}

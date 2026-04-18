@@ -12,7 +12,8 @@ import type {
   VSCodeCommandResult,
   TutorAction,
   TutorMessage,
-  TutorResponse
+  TutorResponse,
+  TutorStep
 } from '@shared/perception.types'
 import type { AIProviderId, AISettingsSnapshot, SaveAIProviderInput } from '@shared/ai-provider.types'
 import type { AICostSnapshot } from '@shared/ai-provider.types'
@@ -28,6 +29,7 @@ import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
 import { HudSidebar } from './HudSidebar'
+import { StreamingTimeline } from './StreamingTimeline'
 
 // ─── Conversation context window ─────────────────────────────────
 const CONVO_WINDOW       = 10   // active messages kept in memory
@@ -48,8 +50,8 @@ function buildConversationSummary(existing: string | null, toCompress: Message[]
 }
 
 const FONT_FAMILY_MAP = {
-  'system-sans': '"SF Pro Text", "SF Pro Display", system-ui, "Segoe UI Variable", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
-  'system-serif': '"New York", "Georgia Pro", Georgia, "Times New Roman", serif',
+  'system-sans': '"Segoe UI Variable Text", "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif',
+  'system-serif': '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Georgia Pro", Georgia, "Times New Roman", serif',
   mono: '"SF Mono", "Cascadia Code", "Cascadia Mono", Consolas, monospace'
 } as const
 
@@ -59,6 +61,33 @@ const FONT_WEIGHT_MAP = {
   regular: 400,
   medium: 500,
   bold: 700
+} as const
+
+const FONT_PROFILE_MAP = {
+  'system-sans': {
+    bodyLeading: 1.66,
+    bodyTracking: '-0.014em',
+    headingTracking: '-0.03em',
+    labelTracking: '0.075em',
+    mutedTracking: '-0.01em',
+    inputTracking: '-0.016em'
+  },
+  'system-serif': {
+    bodyLeading: 1.72,
+    bodyTracking: '-0.008em',
+    headingTracking: '-0.024em',
+    labelTracking: '0.09em',
+    mutedTracking: '-0.004em',
+    inputTracking: '-0.012em'
+  },
+  mono: {
+    bodyLeading: 1.62,
+    bodyTracking: '-0.006em',
+    headingTracking: '-0.012em',
+    labelTracking: '0.06em',
+    mutedTracking: '-0.002em',
+    inputTracking: '-0.008em'
+  }
 } as const
 
 interface Message {
@@ -75,31 +104,12 @@ interface ChatMeta {
   messageCount: number
 }
 
-function streamText(
-  text: string,
-  onChunk: (chunk: string) => void,
-  onDone: () => void
-): void {
-  let i = 0
-  const interval = setInterval(() => {
-    if (i >= text.length) {
-      clearInterval(interval)
-      onChunk(text)
-      onDone()
-      return
-    }
-
-    // Advance by larger chunks at a slower rate to reduce re-renders
-    i = Math.min(i + Math.floor(Math.random() * 8) + 3, text.length)
-    onChunk(text.slice(0, i))
-  }, 55)
-}
-
 export function HUD() {
   const [inputValue, setInputValue] = useState('')
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationSummary, setConversationSummary] = useState<string | null>(null)
   const [streamingContent, setChunk] = useState('')
+  const [streamingSteps, setStreamingSteps] = useState<TutorStep[]>([])
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
   const [chatMetas, setChatMetas] = useState<ChatMeta[]>([])
   const activeChatIdRef = useRef<string | null>(null)
@@ -278,6 +288,7 @@ export function HUD() {
     setChatMetas(metas)
     setInputValue('')
     setChunk('')
+    setStreamingSteps([])
   }, [conversationSummary, messages])
 
   const handleSelectChat = useCallback(async (id: string) => {
@@ -292,6 +303,7 @@ export function HUD() {
     setConversationSummary(chat.summary)
     setInputValue('')
     setChunk('')
+    setStreamingSteps([])
   }, [conversationSummary, messages])
 
   const handleDeleteChat = useCallback(async (id: string) => {
@@ -349,6 +361,7 @@ export function HUD() {
     setMessages([])
     setInputValue('')
     setChunk('')
+    setStreamingSteps([])
     setPrivateModeState(false)
     setMemoryImportPreview(null)
     setMemoryFeedback(null)
@@ -526,6 +539,7 @@ export function HUD() {
 
     setInputValue('')
     setChunk('')
+    setStreamingSteps([])
     window.proactiveAPI.markActivity('submit')
     window.proactiveAPI.dismissHint('consumed')
 
@@ -536,14 +550,35 @@ export function HUD() {
 
     setStreaming(true)
 
+    // Wire up streaming event listeners before invoking so no events are missed
+    let accumulated = ''
+    const unsubStep  = window.tutorAPI.onStep(step => {
+      setStreamingSteps(prev => {
+        const idx = prev.findIndex(s => s.id === step.id)
+        if (idx >= 0) {
+          const next = [...prev]
+          next[idx] = step
+          return next
+        }
+        return [...prev, step]
+      })
+    })
+    const unsubChunk = window.tutorAPI.onChunk(chunk => {
+      accumulated += chunk
+      setChunk(accumulated)
+    })
+
     try {
-      const tutorResponse = await window.tutorAPI.respond({
+      const tutorResponse = await window.tutorAPI.respondStream({
         prompt: userMsg,
         conversation,
         context: contextSnapshot
       })
 
-      // Kick off TTS in parallel with text streaming so audio is ready when text finishes
+      unsubStep()
+      unsubChunk()
+
+      // Kick off TTS in parallel — audio buffers while we finalize UI
       const voiceEnabled = settings?.featureFlags.voiceMode
       const audioPromise: Promise<string | null> = voiceEnabled
         ? window.elevenLabsAPI.speak(tutorResponse.content).catch(err => {
@@ -552,44 +587,37 @@ export function HUD() {
           })
         : Promise.resolve(null)
 
-      let accumulated = ''
-      streamText(
-        tutorResponse.content,
-        chunk => {
-          accumulated = chunk
-          setChunk(chunk)
-        },
-        () => {
-          setMessages(prev => {
-            const next = [
-              ...prev,
-              { role: 'assistant' as const, content: accumulated, meta: tutorResponse }
-            ]
-            if (next.length > CONVO_SUMMARIZE_AT) {
-              const toCompress = next.slice(0, next.length - CONVO_WINDOW)
-              setConversationSummary(s => buildConversationSummary(s, toCompress))
-              const trimmed = next.slice(-CONVO_WINDOW)
-              maybeGenerateChatTitle(trimmed)
-              return trimmed
-            }
-            maybeGenerateChatTitle(next)
-            return next
-          })
-          setChunk('')
-          setStreaming(false)
-          void refreshPrivacyState()
-
-          // Play voice once text is displayed (audio likely already buffered)
-          void audioPromise.then(base64 => {
-            if (!base64) return
-            currentAudioRef.current?.pause()
-            const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
-            currentAudioRef.current = audio
-            void audio.play().catch(err => console.warn('[TTS] play failed:', err))
-          })
+      const finalContent = accumulated || tutorResponse.content
+      setMessages(prev => {
+        const next = [
+          ...prev,
+          { role: 'assistant' as const, content: finalContent, meta: tutorResponse }
+        ]
+        if (next.length > CONVO_SUMMARIZE_AT) {
+          const toCompress = next.slice(0, next.length - CONVO_WINDOW)
+          setConversationSummary(s => buildConversationSummary(s, toCompress))
+          const trimmed = next.slice(-CONVO_WINDOW)
+          maybeGenerateChatTitle(trimmed)
+          return trimmed
         }
-      )
+        maybeGenerateChatTitle(next)
+        return next
+      })
+      setChunk('')
+      setStreamingSteps([])
+      setStreaming(false)
+      void refreshPrivacyState()
+
+      void audioPromise.then(base64 => {
+        if (!base64) return
+        currentAudioRef.current?.pause()
+        const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
+        currentAudioRef.current = audio
+        void audio.play().catch(err => console.warn('[TTS] play failed:', err))
+      })
     } catch (error) {
+      unsubStep()
+      unsubChunk()
       console.error('[tutor] respond error:', error)
       setMessages(prev => [
         ...prev,
@@ -627,6 +655,7 @@ export function HUD() {
         }
       ])
       setChunk('')
+      setStreamingSteps([])
       setStreaming(false)
     }
   }, [contextSnapshot, conversationSummary, expandFull, inputValue, isStreaming, maybeGenerateChatTitle, messages, refreshPrivacyState, setStreaming, visual])
@@ -715,11 +744,20 @@ export function HUD() {
         : null
 
   const typography = settings?.typography
+  const typographyProfile = typography ? FONT_PROFILE_MAP[typography.fontFamily] : null
   const hudTypographyStyle = typography
     ? {
+        ['--hud-font-family' as string]: FONT_FAMILY_MAP[typography.fontFamily],
         ['--hud-font-size' as string]: `${typography.fontSize}px`,
-        fontFamily: FONT_FAMILY_MAP[typography.fontFamily],
-        fontWeight: FONT_WEIGHT_MAP[typography.fontWeight] as number
+        ['--hud-font-weight' as string]: FONT_WEIGHT_MAP[typography.fontWeight],
+        ['--hud-body-leading' as string]: typographyProfile?.bodyLeading,
+        ['--hud-body-tracking' as string]: typographyProfile?.bodyTracking,
+        ['--hud-heading-tracking' as string]: typographyProfile?.headingTracking,
+        ['--hud-label-tracking' as string]: typographyProfile?.labelTracking,
+        ['--hud-muted-tracking' as string]: typographyProfile?.mutedTracking,
+        ['--hud-input-tracking' as string]: typographyProfile?.inputTracking,
+        fontFamily: `var(--hud-font-family)`,
+        fontWeight: `var(--hud-font-weight)` as unknown as number
       }
     : undefined
 
@@ -771,6 +809,7 @@ export function HUD() {
               messages={messages}
               isStreaming={isStreaming}
               streamingContent={streamingContent}
+              streamingSteps={streamingSteps}
               inputValue={inputValue}
               onInputChange={handleActivityTyping}
               onSubmit={handleSubmit}
@@ -801,6 +840,7 @@ export function HUD() {
               messages={messages}
               isStreaming={isStreaming}
               streamingContent={streamingContent}
+              streamingSteps={streamingSteps}
               latestResponseMeta={latestResponseMeta}
               semanticState={semanticState}
               sessionMemory={sessionMemory}

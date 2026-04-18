@@ -1,7 +1,7 @@
 import { getContextSnapshot } from './perception'
 import { runDomainTutor } from './tutor-domains'
 import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
-import { generateRemoteText } from './ai-provider'
+import { generateRemoteText, streamRemoteText } from './ai-provider'
 import { buildTutorCacheKey, getTutorCached, setTutorCache } from './tutor-cache'
 import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { retrieveRelevantMemories } from './memory-embeddings'
@@ -36,6 +36,7 @@ import type {
   TutorRequest,
   TutorResponse,
   TutorSourceConfidence,
+  TutorStep,
   UserProfile
 } from '../../shared/perception.types'
 
@@ -431,6 +432,273 @@ function buildFollowUps(mode: TutorMode, context: PerceptionContextSnapshot): st
 }
 
 export { buildRemoteSystemPrompt, buildRemoteUserPrompt, composeResponse }
+
+// ─── Streaming tutor response — same pipeline with step + chunk callbacks ─────
+
+export async function generateTutorResponseStream(
+  request: TutorRequest,
+  onStep: (step: TutorStep) => void,
+  onChunk: (text: string) => void
+): Promise<TutorResponse> {
+  const startedAt = Date.now()
+
+  // Step 1 — context + domain routing + calibration
+  onStep({ id: 'context', label: 'Analisando tela', status: 'running' })
+
+  const context = request.context ?? await getContextSnapshot()
+  const behaviorPattern = await getBehaviorPattern()
+  const behaviorSummaryLines = await getBehaviorPatternSummary()
+  const mode = inferMode(request, context.userProfile)
+  const uncertainty = context.semanticState.uncertainty
+  const baseWarning = inferWarning(context)
+  const offScreen = isOffScreenQuestion(request.prompt, context)
+  const needsVisualConfirmation = !offScreen && (uncertainty >= 0.68 || context.semanticState.surface_type === 'unknown')
+  const shouldAskConfirmation = needsVisualConfirmation || /\bisso\b|\besta tela\b|\baqui\b/i.test(request.prompt)
+  const domainOutput = runDomainTutor({ request, context: { ...context, userProfile: context.userProfile }, mode })
+  const calibration = calibrateDepth({
+    prompt: request.prompt,
+    conversationLength: request.conversation.length,
+    profile: context.userProfile,
+    behaviorPattern,
+    domain: domainOutput?.domain ?? 'general',
+    modeUsed: mode
+  })
+  const effectiveProfile: UserProfile = {
+    ...context.userProfile,
+    user_level: calibration.effective_level,
+    preferred_explanation_style: calibration.effective_style,
+    response_tone: calibration.effective_tone
+  }
+  const effectiveContext: PerceptionContextSnapshot = { ...context, userProfile: effectiveProfile }
+
+  onStep({ id: 'context', label: 'Analisando tela', status: 'done' })
+
+  // Step 2 — memory retrieval
+  onStep({ id: 'memory', label: 'Buscando memória', status: 'running' })
+
+  const relevantPersistentMemory = await retrieveRelevantMemories({
+    query: buildPersistentMemoryQuery(request.prompt, context),
+    limit: 4
+  })
+
+  onStep({ id: 'memory', label: 'Buscando memória', status: 'done' })
+
+  // Step 3 — LLM generation
+  onStep({ id: 'generate', label: 'Gerando resposta', status: 'running' })
+
+  const localContent = composeResponse({
+    mode,
+    context: effectiveContext,
+    shouldAskConfirmation,
+    warning: domainOutput?.warning ?? baseWarning,
+    domainBody: domainOutput?.content ?? null
+  })
+  const vsCodeRaw      = bridgeServer.getContext('vscode')
+  const spotifyRaw     = bridgeServer.getContext('spotify')
+  const tradingViewRaw = bridgeServer.getContext('tradingview')
+  const vsCodeBlock    = vsCodeRaw      ? formatVSCodeConnectorContext(vsCodeRaw.data)      : undefined
+  const spotifyBlock   = spotifyRaw     ? formatSpotifyConnectorContext(spotifyRaw.data)    : undefined
+  const tradingViewBlock = tradingViewRaw ? formatTradingViewConnectorContext(tradingViewRaw.data) : undefined
+  const connectorsUsed = ([
+    vsCodeRaw ? 'vscode' : null,
+    spotifyRaw ? 'spotify' : null,
+    tradingViewRaw ? 'tradingview' : null
+  ].filter(Boolean) as ConnectorID[])
+
+  const sensitive = Boolean(domainOutput?.warning ?? baseWarning)
+  const screenAgeMs = context.screenshotDataUrl
+    ? Math.max(0, Date.now() - context.semanticState.capturedAt)
+    : null
+  const staleContextGuarded =
+    Boolean(context.screenshotDataUrl)
+    && (context.semanticState.change_summary === 'major' || (screenAgeMs !== null && screenAgeMs > 45_000))
+  const systemLines = [
+    buildRemoteSystemPrompt(mode, effectiveContext, domainOutput?.warning ?? baseWarning, offScreen),
+    staleContextGuarded
+      ? ['[FreshScreenGuard]', 'The screen likely changed or the current capture is no longer fresh.',
+         'Prioritize the latest screenshot and current semantic state over older conversation assumptions.',
+         'If earlier turns conflict with the current screen, discard the older screen reading.'].join('\n')
+      : ''
+  ].filter(Boolean)
+  const system = systemLines.join('\n\n')
+  const prompt = buildRemoteUserPrompt(
+    request, effectiveContext, domainOutput?.content ?? null,
+    [...relevantPersistentMemory, ...behaviorSummaryLines],
+    offScreen, vsCodeBlock, spotifyBlock, tradingViewBlock
+  )
+  const baseHistory = request.conversation.slice(0, -1)
+  const history = staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+  const imageDataUrl = context.screenshotDataUrl ?? null
+  const sourceConfidence = buildSourceConfidence({ context, connectorsUsed })
+  const dominantContextSource = determineDominantContextSource({
+    domain: domainOutput?.domain ?? 'general',
+    prompt: request.prompt,
+    connectorsUsed,
+    sourceConfidence
+  })
+
+  // Cache check (skip streaming if cached — return immediately)
+  const connectorKey = buildConnectorKey(connectorsUsed)
+  const cacheKey = buildTutorCacheKey({
+    prompt: request.prompt,
+    domain: domainOutput?.domain ?? 'general',
+    imageDataUrlPrefix: imageDataUrl ? imageDataUrl.slice(0, 80) : null,
+    connectorKey
+  })
+  const cached = !sensitive && context.semanticState.change_summary !== 'major'
+    ? getTutorCached(cacheKey)
+    : null
+
+  let remoteResult: import('./ai-provider').ProviderExecutionResult | null = null
+
+  if (cached) {
+    // Emit cached content as a single chunk so the UI still "streams"
+    onChunk(cached.content)
+    onStep({ id: 'generate', label: 'Gerando resposta', status: 'done' })
+    void recordDiagnosticEvent({
+      type: 'trace', source: 'tutor', action: 'cache_hit',
+      sessionId: context.sessionMemory.session_id,
+      details: { domain: domainOutput?.domain ?? 'general', cacheKey: cacheKey.slice(0, 60) }
+    })
+    return cached
+  }
+
+  // Try streaming via Codex first (no streaming API — emit as single chunk when done)
+  if (!sensitive && codexAuth.getStatus().authenticated) {
+    try {
+      const shouldTrimHistoryForFreshScreen = Boolean(imageDataUrl) && context.semanticState.change_summary === 'major'
+      const codexHistory = shouldTrimHistoryForFreshScreen ? history.slice(-2) : history
+      const codexSystem = [
+        system,
+        `Current screen capture timestamp: ${context.semanticState.capturedAt}.`,
+        `Current screen summary: ${context.semanticState.visual_summary}.`,
+        'Visual grounding policy:',
+        '- the latest screenshot and current screen summary are authoritative',
+        '- if the current screen differs from earlier conversation context, discard the older screen assumptions',
+        '- do not keep describing a previous screen after a screen change',
+        'House style override:',
+        '- match the same John voice used in the standard API provider path',
+        '- do not answer in an overly compressed or timid way',
+        '- when the answer is explanatory, prefer 2 to 4 well-developed paragraphs instead of a single short block',
+        '- use the available width naturally; do not sound clipped or minimal by default',
+        '- stay direct, observant, grounded in the current screen and with the same personality tone as the non-Codex path'
+      ].join('\n')
+      const messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }> = [
+        { role: 'system', content: codexSystem },
+        ...codexHistory,
+        { role: 'user', content: prompt }
+      ]
+      try {
+        const text = await withRetry(
+          () => codexClient.chat({ model: 'gpt-4.1', messages, imageDataUrl }),
+          2, 400
+        )
+        onChunk(text)
+        remoteResult = { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'gpt-4.1', text }
+      } catch {
+        const text = await withRetry(
+          () => codexClient.chat({ messages, imageDataUrl }),
+          1, 600
+        )
+        onChunk(text)
+        remoteResult = { providerId: 'codex' as import('../../shared/ai-provider.types').AIProviderId, model: 'codex-account-default', text }
+      }
+    } catch (e) {
+      console.error('[Codex] streaming fallback failed:', e instanceof Error ? e.message : e)
+    }
+  }
+
+  // If Codex didn't handle it, use streaming provider
+  if (!remoteResult) {
+    let firstChunk = true
+    remoteResult = await streamRemoteText(
+      { sensitive, system, prompt, messages: history, imageDataUrl, feature: 'tutor' },
+      (chunk) => {
+        if (firstChunk) {
+          firstChunk = false
+          onStep({ id: 'generate', label: 'Gerando resposta', status: 'done' })
+        }
+        onChunk(chunk)
+      }
+    )
+  }
+
+  onStep({ id: 'generate', label: 'Gerando resposta', status: 'done' })
+
+  const content = remoteResult?.text?.trim() || localContent
+  const latencyMs = Date.now() - startedAt
+
+  // Post-response signals (same as non-streaming path)
+  recordInteractionSignal({
+    domain: domainOutput?.domain ?? 'general',
+    mode,
+    surface: context.semanticState.surface_type,
+    askedForSimplification: detectSimplificationSignal(request.prompt),
+    askedForDepth: detectDepthSignal(request.prompt),
+    askedForSteps: /\bpasso\b|\betapas\b/i.test(request.prompt),
+    askedForDirect: /\bdireto\b|\bresposta direta\b|\bcurto\b/i.test(request.prompt),
+    followUpCount: request.conversation.filter(m => m.role === 'user').length,
+    topics: context.semanticState.pedagogical_topics,
+    sessionId: context.sessionMemory.session_id
+  })
+  void applyDepthCalibration(calibration)
+  responseCountSinceFlush++
+  if (responseCountSinceFlush >= FLUSH_EVERY_N_RESPONSES) {
+    responseCountSinceFlush = 0
+    void flushBehaviorToMemory()
+  }
+
+  const responseActions =
+    connectorsUsed.includes('vscode') && (domainOutput?.domain === 'code' || dominantContextSource === 'vscode')
+      ? buildVSCodeActionsFromContext(getVSCodeConnectorData())
+      : undefined
+
+  const tutorResponse: TutorResponse = {
+    domain: domainOutput?.domain ?? 'general',
+    mode,
+    content,
+    actions: responseActions,
+    provider: remoteResult?.providerId ?? 'local',
+    model: remoteResult?.model ?? 'local',
+    uncertainty,
+    should_ask_confirmation: shouldAskConfirmation,
+    needs_visual_confirmation: needsVisualConfirmation,
+    suggested_follow_ups: domainOutput?.suggested_follow_ups ?? buildFollowUps(mode, effectiveContext),
+    warning: domainOutput?.warning ?? baseWarning,
+    debug: {
+      provider: remoteResult?.providerId ?? 'local',
+      model: remoteResult?.model ?? 'local',
+      latencyMs,
+      screenshotIncluded: Boolean(imageDataUrl),
+      screenCapturedAt: context.screenshotDataUrl ? context.semanticState.capturedAt : null,
+      screenAgeMs,
+      changeSummary: context.semanticState.change_summary,
+      connectorsUsed,
+      dominantContextSource,
+      sourceConfidence,
+      staleContextGuarded
+    }
+  }
+
+  if (!sensitive && context.semanticState.change_summary !== 'major' && remoteResult?.text) {
+    setTutorCache(cacheKey, tutorResponse)
+  }
+
+  void recordDiagnosticEvent({
+    type: 'trace', source: 'tutor', action: 'generate_response',
+    sessionId: context.sessionMemory.session_id,
+    details: {
+      domain: domainOutput?.domain ?? 'general',
+      mode,
+      provider: remoteResult?.providerId ?? 'local',
+      model: remoteResult?.model ?? 'local',
+      latencyMs
+    }
+  })
+  void recordPerformanceTrace({ operation: 'tutor.respond.stream', durationMs: latencyMs, status: 'ok' })
+
+  return tutorResponse
+}
 
 /**
  * Returns true when the user's prompt is topically unrelated to what's on screen.

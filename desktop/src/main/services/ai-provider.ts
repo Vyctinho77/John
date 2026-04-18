@@ -262,6 +262,330 @@ export async function testAIProvider(providerId: AIProviderId): Promise<TestAIPr
   }
 }
 
+// ─── SSE line generator ───────────────────────────────────────────────────────
+
+async function* parseSSELines(
+  body: ReadableStream<Uint8Array>
+): AsyncGenerator<string> {
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (line.startsWith('data: ')) yield line.slice(6).trim()
+      }
+    }
+    if (buffer.startsWith('data: ')) yield buffer.slice(6).trim()
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+// ─── Streaming variant of generateRemoteText ─────────────────────────────────
+
+export async function streamRemoteText(
+  input: {
+    sensitive: boolean
+    system: string
+    prompt: string
+    imageDataUrl?: string | null
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>
+    feature?: AIFeatureTask
+  },
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult | null> {
+  const settings = await getStoredSettings()
+  const featureRouting = settings.routing.featureRouting ?? DEFAULT_FEATURE_ROUTING
+  const tier: AIFeatureTier = input.feature
+    ? (featureRouting[input.feature] ?? DEFAULT_FEATURE_ROUTING[input.feature])
+    : 'strong'
+
+  if (tier === 'heuristic') return null
+
+  const providerOrder = buildProviderOrder(settings.routing)
+  const chatRequest: RemoteChatRequest = {
+    system: input.system,
+    prompt: input.prompt,
+    imageDataUrl: input.imageDataUrl,
+    messages: input.messages,
+    feature: input.feature
+  }
+
+  if (settings.routing.preferLocalForSensitive && input.sensitive) {
+    const ollama = settings.providers.ollama
+    if (canUseProvider(ollama)) {
+      return streamProviderChat(ollama, { ...chatRequest, imageDataUrl: null }, onChunk)
+    }
+  }
+
+  for (const providerId of providerOrder) {
+    const provider = settings.providers[providerId]
+    if (!canUseProvider(provider)) continue
+    const effectiveProvider = tier === 'cheap' && CHEAP_MODELS[provider.id]
+      ? { ...provider, selectedModel: CHEAP_MODELS[provider.id]! }
+      : provider
+    try {
+      return await streamProviderChat(effectiveProvider, chatRequest, onChunk)
+    } catch {
+      continue
+    }
+  }
+  return null
+}
+
+async function streamProviderChat(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult> {
+  switch (provider.id) {
+    case 'openai':    return streamOpenAIChat(provider, request, onChunk)
+    case 'anthropic': return streamAnthropicChat(provider, request, onChunk)
+    case 'gemini':    return streamGeminiChat(provider, request, onChunk)
+    case 'ollama':    return streamOllamaChat(provider, request, onChunk)
+  }
+}
+
+async function streamOpenAIChat(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult> {
+  await assertOpenAIBudgetAvailable()
+  const apiKey = requireSecret(provider)
+  const userContent = request.imageDataUrl
+    ? [
+        { type: 'text', text: request.prompt },
+        { type: 'image_url', image_url: { url: request.imageDataUrl!, detail: 'auto' } }
+      ]
+    : request.prompt
+
+  const response = await fetch(joinUrl(provider.baseUrl, '/chat/completions'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel,
+      temperature: 0.35,
+      stream: true,
+      stream_options: { include_usage: true },
+      messages: [
+        { role: 'system', content: request.system },
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: userContent }
+      ]
+    })
+  })
+  if (!response.ok) throw new Error(`OpenAI respondeu ${response.status}.`)
+  if (!response.body) throw new Error('OpenAI: resposta sem body.')
+
+  let fullText = ''
+  let usageData: {
+    prompt_tokens?: number
+    completion_tokens?: number
+    prompt_tokens_details?: { cached_tokens?: number }
+  } | null = null
+
+  for await (const data of parseSSELines(response.body)) {
+    if (data === '[DONE]') break
+    try {
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{ delta?: { content?: string } }>
+        usage?: typeof usageData
+      }
+      const delta = parsed.choices?.[0]?.delta?.content
+      if (delta) { fullText += delta; onChunk(delta) }
+      if (parsed.usage) usageData = parsed.usage
+    } catch { /* skip malformed lines */ }
+  }
+
+  if (!fullText) throw new Error('OpenAI nao retornou texto.')
+  const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
+  if (usageData) {
+    const promptTokens = usageData.prompt_tokens ?? 0
+    const completionTokens = usageData.completion_tokens ?? 0
+    const cachedInputTokens = usageData.prompt_tokens_details?.cached_tokens ?? 0
+    await recordAICost({
+      providerId: 'openai', model, operation: 'chat', feature: request.feature,
+      costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
+      inputTokens: promptTokens, cachedInputTokens, outputTokens: completionTokens, at: Date.now()
+    })
+  }
+  return { providerId: 'openai', model, text: fullText }
+}
+
+async function streamAnthropicChat(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult> {
+  const apiKey = requireSecret(provider)
+  const imageB64 = request.imageDataUrl ? extractBase64(request.imageDataUrl) : null
+  const userContent = imageB64
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: imageB64.mediaType, data: imageB64.data } },
+        { type: 'text', text: request.prompt }
+      ]
+    : request.prompt
+
+  const response = await fetch(joinUrl(provider.baseUrl, '/v1/messages'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: provider.selectedModel ?? 'claude-sonnet-4-6',
+      max_tokens: 900,
+      stream: true,
+      system: request.system,
+      messages: [
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: userContent }
+      ]
+    })
+  })
+  if (!response.ok) throw new Error(`Anthropic respondeu ${response.status}.`)
+  if (!response.body) throw new Error('Anthropic: resposta sem body.')
+
+  let fullText = ''
+  let modelFromEvent = ''
+
+  for await (const data of parseSSELines(response.body)) {
+    try {
+      const event = JSON.parse(data) as {
+        type?: string
+        delta?: { type?: string; text?: string }
+        message?: { model?: string }
+      }
+      if (event.type === 'message_start' && event.message?.model) {
+        modelFromEvent = event.message.model
+      }
+      if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
+        fullText += event.delta.text
+        onChunk(event.delta.text)
+      }
+    } catch { /* skip malformed lines */ }
+  }
+
+  if (!fullText) throw new Error('Anthropic nao retornou texto.')
+  return {
+    providerId: 'anthropic',
+    model: modelFromEvent || provider.selectedModel || 'anthropic',
+    text: fullText
+  }
+}
+
+async function streamGeminiChat(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult> {
+  const apiKey = requireSecret(provider)
+  const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.gemini.defaultModel ?? 'gemini-2.5-flash'
+  const url = `${trimTrailingSlash(provider.baseUrl)}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: request.system }] },
+      contents: [
+        ...(request.messages ?? []).map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        })),
+        {
+          role: 'user',
+          parts: [
+            ...(request.imageDataUrl ? (() => {
+              const b64 = extractBase64(request.imageDataUrl)
+              return b64 ? [{ inlineData: { mimeType: b64.mediaType, data: b64.data } }] : []
+            })() : []),
+            { text: request.prompt }
+          ]
+        }
+      ],
+      generationConfig: { temperature: 0.35 }
+    })
+  })
+  if (!response.ok) throw new Error(`Gemini respondeu ${response.status}.`)
+  if (!response.body) throw new Error('Gemini: resposta sem body.')
+
+  let fullText = ''
+
+  for await (const data of parseSSELines(response.body)) {
+    try {
+      const parsed = JSON.parse(data) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      }
+      const chunk = parsed.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('')
+      if (chunk) { fullText += chunk; onChunk(chunk) }
+    } catch { /* skip malformed lines */ }
+  }
+
+  if (!fullText) throw new Error('Gemini nao retornou texto.')
+  return { providerId: 'gemini', model, text: fullText }
+}
+
+async function streamOllamaChat(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void
+): Promise<ProviderExecutionResult> {
+  const model = provider.selectedModel
+  if (!model) throw new Error('Selecione um modelo do Ollama antes de usar este provedor.')
+
+  const response = await fetch(joinUrl(provider.baseUrl, '/api/chat'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model, stream: true,
+      messages: [
+        { role: 'system', content: request.system },
+        ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: request.prompt }
+      ]
+    })
+  })
+  if (!response.ok) throw new Error(`Ollama respondeu ${response.status}.`)
+  if (!response.body) throw new Error('Ollama: resposta sem body.')
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let fullText = ''
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.trim()) continue
+        try {
+          const parsed = JSON.parse(line) as { message?: { content?: string } }
+          const delta = parsed.message?.content
+          if (delta) { fullText += delta; onChunk(delta) }
+        } catch { /* skip */ }
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  if (!fullText) throw new Error('Ollama nao retornou texto.')
+  return { providerId: 'ollama', model, text: fullText }
+}
+
 export async function generateRemoteText(input: {
   sensitive: boolean
   system: string

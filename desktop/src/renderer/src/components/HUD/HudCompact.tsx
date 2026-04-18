@@ -54,7 +54,7 @@ export const HudCompact = memo(function HudCompact({
             className="flex items-center gap-1.5 truncate"
             style={{
               color: 'rgba(255,255,255,0.58)',
-              letterSpacing: '-0.02em',
+              letterSpacing: 'var(--hud-muted-tracking, -0.01em)',
               fontSize: 'var(--hud-font-size, 15px)'
             }}
           >
@@ -80,16 +80,16 @@ export const HudCompact = memo(function HudCompact({
           if (!wasDragged()) onExpandFull()
         }}
         className="w-10 h-full flex-shrink-0 flex items-center justify-center relative"
-        style={{ color: 'rgba(255,255,255,0.78)' }}
+        style={{ color: 'var(--john-text-secondary)' }}
         aria-label="Abrir painel completo"
       >
         {isCapturing && (
           <span
             className="absolute right-1 top-2 w-1.5 h-1.5 rounded-full"
-            style={{ background: '#4ad582', boxShadow: '0 0 8px rgba(74,213,130,0.55)' }}
+            style={{ background: 'var(--john-success)', boxShadow: '0 0 8px var(--john-success-soft)' }}
           />
         )}
-        <SendIcon className="w-[20px] h-auto" />
+        <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
       </button>
     </div>
   )

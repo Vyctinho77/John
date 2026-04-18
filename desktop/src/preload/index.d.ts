@@ -18,6 +18,7 @@ import type {
   SessionMemory,
   TutorRequest,
   TutorResponse,
+  TutorStep,
   UserProfile
 } from '../shared/perception.types'
 import type {
@@ -76,6 +77,9 @@ declare global {
     }
     tutorAPI: {
       respond: (request: TutorRequest) => Promise<TutorResponse>
+      respondStream: (request: TutorRequest) => Promise<TutorResponse>
+      onStep: (cb: (step: TutorStep) => void) => () => void
+      onChunk: (cb: (chunk: string) => void) => () => void
     }
     settingsAPI: {
       get: () => Promise<AppSettings>

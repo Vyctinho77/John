@@ -13,6 +13,7 @@ type Block =
 interface MessageBodyProps {
   content: string
   compact?: boolean
+  streaming?: boolean
 }
 
 interface CodeToken {
@@ -25,6 +26,10 @@ const READING_MEASURE = '100%'
 const COMPACT_READING_MEASURE = '60ch'
 const TECHNICAL_MEASURE = '100%'
 const CODE_FONT = '"SF Mono", "Cascadia Code", Consolas, monospace'
+const BODY_LEADING = 'var(--hud-body-leading, 1.66)'
+const BODY_TRACKING = 'var(--hud-body-tracking, -0.014em)'
+const HEADING_TRACKING = 'var(--hud-heading-tracking, -0.028em)'
+const LABEL_TRACKING = 'var(--hud-label-tracking, 0.075em)'
 
 const LANGUAGE_ALIASES: Record<string, string> = {
   ts: 'TypeScript',
@@ -47,7 +52,27 @@ const LANGUAGE_ALIASES: Record<string, string> = {
   yml: 'YAML'
 }
 
-export function MessageBody({ content, compact = false }: MessageBodyProps) {
+export function MessageBody({ content, compact = false, streaming = false }: MessageBodyProps) {
+  // Progressive mode — plain text while streaming to avoid partial markdown artifacts
+  if (streaming) {
+    return (
+      <p
+        className="selectable"
+        style={{
+          color: 'rgba(255,255,255,0.84)',
+          fontSize: BODY_SIZE,
+          lineHeight: BODY_LEADING,
+          letterSpacing: BODY_TRACKING,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          width: '100%'
+        }}
+      >
+        {content}
+      </p>
+    )
+  }
+
   const blocks = parseMessageBlocks(content)
 
   return (
@@ -56,8 +81,8 @@ export function MessageBody({ content, compact = false }: MessageBodyProps) {
       style={{
         color: 'rgba(255,255,255,0.84)',
         fontSize: BODY_SIZE,
-        lineHeight: compact ? 1.62 : 1.7,
-        letterSpacing: '0.002em',
+        lineHeight: BODY_LEADING,
+        letterSpacing: BODY_TRACKING,
         width: '100%',
         maxWidth: '100%'
       }}
@@ -84,10 +109,10 @@ function renderBlock(block: Block, compact: boolean) {
         <p
           style={{
             fontSize: sizeMap[block.level],
-            lineHeight: block.level === 1 ? 1.18 : block.level === 2 ? 1.24 : 1.32,
-            fontWeight: block.level === 1 ? 600 : 550,
+            lineHeight: block.level === 1 ? 1.12 : block.level === 2 ? 1.18 : 1.28,
+            fontWeight: block.level === 1 ? 620 : 560,
             color: 'rgba(255,255,255,0.95)',
-            letterSpacing: block.level === 1 ? '-0.022em' : '-0.014em',
+            letterSpacing: block.level === 3 ? BODY_TRACKING : HEADING_TRACKING,
             maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
@@ -101,6 +126,7 @@ function renderBlock(block: Block, compact: boolean) {
           style={{
             color: 'rgba(255,255,255,0.86)',
             whiteSpace: 'pre-wrap',
+            lineHeight: BODY_LEADING,
             maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
@@ -115,6 +141,7 @@ function renderBlock(block: Block, compact: boolean) {
             display: 'grid',
             gap: compact ? 9 : 11,
             color: 'rgba(255,255,255,0.82)',
+            lineHeight: BODY_LEADING,
             maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
@@ -133,6 +160,7 @@ function renderBlock(block: Block, compact: boolean) {
             display: 'grid',
             gap: compact ? 9 : 11,
             color: 'rgba(255,255,255,0.82)',
+            lineHeight: BODY_LEADING,
             maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
@@ -151,6 +179,7 @@ function renderBlock(block: Block, compact: boolean) {
             borderLeft: '1px solid rgba(255,255,255,0.18)',
             color: 'rgba(255,255,255,0.68)',
             whiteSpace: 'pre-wrap',
+            lineHeight: BODY_LEADING,
             maxWidth: compact ? COMPACT_READING_MEASURE : READING_MEASURE
           }}
         >
@@ -218,7 +247,7 @@ function CodeBlock({ block, compact }: { block: Extract<Block, { type: 'code' }>
               fontSize: 12,
               fontWeight: 600,
               lineHeight: 1,
-              letterSpacing: '0.015em'
+              letterSpacing: LABEL_TRACKING
             }}
           >
             {detectedLanguage}
@@ -329,6 +358,7 @@ function cellStyle(isHeader: boolean, isLastRow = false): CSSProperties {
     textAlign: 'left',
     fontSize: isHeader ? '12.5px' : BODY_SIZE,
     fontWeight: isHeader ? 600 : 400,
+    letterSpacing: isHeader ? 'var(--hud-muted-tracking, -0.01em)' : BODY_TRACKING,
     color: isHeader ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.8)',
     borderBottom: isLastRow ? 'none' : '1px solid rgba(255,255,255,0.06)',
     verticalAlign: 'top'

@@ -10,6 +10,7 @@ import type {
   TradingViewCommandResult,
   TradingViewConnectorState,
   TutorRequest,
+  TutorStep,
   UserProfile
 } from '../shared/perception.types'
 import type {
@@ -99,7 +100,18 @@ const perceptionAPI = {
 }
 
 const tutorAPI = {
-  respond: (request: TutorRequest) => ipcRenderer.invoke('tutor:respond', request)
+  respond: (request: TutorRequest) => ipcRenderer.invoke('tutor:respond', request),
+  respondStream: (request: TutorRequest) => ipcRenderer.invoke('tutor:respond-stream', request),
+  onStep: (cb: (step: TutorStep) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, step: TutorStep) => cb(step)
+    ipcRenderer.on('tutor:step', handler)
+    return () => ipcRenderer.removeListener('tutor:step', handler)
+  },
+  onChunk: (cb: (chunk: string) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, chunk: string) => cb(chunk)
+    ipcRenderer.on('tutor:chunk', handler)
+    return () => ipcRenderer.removeListener('tutor:chunk', handler)
+  }
 }
 
 const settingsAPI = {

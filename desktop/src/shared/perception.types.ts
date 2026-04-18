@@ -212,6 +212,12 @@ export interface TutorResponse {
   debug?: TutorDebugEnvelope
 }
 
+export interface TutorStep {
+  id: string
+  label: string
+  status: 'running' | 'done' | 'error'
+}
+
 export type SpotifyEntityType = 'track' | 'artist' | 'album' | 'playlist'
 
 export type SpotifyActionPayload = {

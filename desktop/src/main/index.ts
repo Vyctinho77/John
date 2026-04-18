@@ -11,7 +11,7 @@ import {
   getContextSnapshot, updateUserProfile, clearSessionMemory, resumeAfterSensitiveBlock
 } from './services/perception'
 import { checkScreenPermission, requestScreenPermission } from './services/permission'
-import { generateTutorResponse } from './services/tutor'
+import { generateTutorResponse, generateTutorResponseStream } from './services/tutor'
 import { getAppSettings, resetAppSettings, updateAppSettings } from './services/settings'
 import {
   getAICosts,
@@ -345,6 +345,33 @@ ipcMain.handle('tutor:respond', async (_e, request) => {
   const vscodeResponse = await maybeHandleVSCodeTutorRequest(request.prompt)
   if (vscodeResponse) return vscodeResponse
   return generateTutorResponse(request)
+})
+
+ipcMain.handle('tutor:respond-stream', async (event, request) => {
+  const wc = event.sender
+
+  // Connector fast-paths don't need streaming (they're instant)
+  const spotifyResponse = await maybeHandleSpotifyTutorRequest(request.prompt)
+  if (spotifyResponse) {
+    wc.send('tutor:chunk', spotifyResponse.content)
+    return spotifyResponse
+  }
+  const tradingViewResponse = await maybeHandleTradingViewTutorRequest(request.prompt)
+  if (tradingViewResponse) {
+    wc.send('tutor:chunk', tradingViewResponse.content)
+    return tradingViewResponse
+  }
+  const vscodeResponse = await maybeHandleVSCodeTutorRequest(request.prompt)
+  if (vscodeResponse) {
+    wc.send('tutor:chunk', vscodeResponse.content)
+    return vscodeResponse
+  }
+
+  return generateTutorResponseStream(
+    request,
+    (step) => wc.send('tutor:step', step),
+    (chunk) => wc.send('tutor:chunk', chunk)
+  )
 })
 
 ipcMain.handle('ai:get-settings', async () => {

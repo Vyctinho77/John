@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
-import type { TutorAction, TutorResponse } from '@shared/perception.types'
+import type { TutorAction, TutorResponse, TutorStep } from '@shared/perception.types'
+import { StreamingTimeline } from './StreamingTimeline'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
 import { MessageBody } from './MessageBody'
@@ -18,6 +19,7 @@ interface HudSidebarProps {
   messages: Message[]
   isStreaming: boolean
   streamingContent: string
+  streamingSteps?: TutorStep[]
   inputValue: string
   onInputChange: (value: string) => void
   onSubmit: () => void
@@ -37,6 +39,7 @@ export function HudSidebar({
   messages,
   isStreaming,
   streamingContent,
+  streamingSteps = [],
   inputValue,
   onInputChange,
   onSubmit,
@@ -185,8 +188,8 @@ export function HudSidebar({
                 style={{
                   fontSize: 11,
                   fontWeight: 500,
-                  color: 'rgba(255,255,255,0.32)',
-                  letterSpacing: '0.1em',
+                  color: 'var(--john-text-muted)',
+                  letterSpacing: 'var(--hud-label-tracking, 0.075em)',
                   userSelect: 'none'
                 }}
               >
@@ -234,11 +237,12 @@ export function HudSidebar({
             {messages.length === 0 && (
               <div
                 style={{
-                  color: 'rgba(255,255,255,0.18)',
+                  color: 'var(--john-text-muted)',
                   fontSize: 13,
                   textAlign: 'center',
                   marginTop: 48,
-                  lineHeight: 1.6
+                  lineHeight: 'var(--hud-body-leading, 1.66)',
+                  letterSpacing: 'var(--hud-muted-tracking, -0.01em)'
                 }}
               >
                 John está aqui.
@@ -259,14 +263,14 @@ export function HudSidebar({
             {isStreaming && streamingContent && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <Label>JOHN</Label>
-                <div style={{ color: 'rgba(255,255,255,0.82)', maxWidth: '100%' }}>
-                  <MessageBody content={streamingContent} compact />
+                <div style={{ color: 'var(--john-text-primary)', maxWidth: '100%' }}>
+                  <MessageBody content={streamingContent} compact streaming />
                   <span
                     style={{
                       display: 'inline-block',
                       width: 5,
                       height: 13,
-                      background: 'rgba(255,255,255,0.45)',
+                      background: 'var(--john-text-secondary)',
                       marginLeft: 2,
                       borderRadius: 1,
                       verticalAlign: 'text-bottom',
@@ -299,9 +303,10 @@ export function HudSidebar({
                   ref={inputRef}
                   className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
                   style={{
-                    color: 'rgba(255,255,255,0.88)',
-                    fontSize: 15,
-                    lineHeight: 1.5,
+                    color: 'var(--john-text-primary)',
+                    fontSize: 'var(--hud-font-size, 15px)',
+                    lineHeight: 'var(--hud-body-leading, 1.66)',
+                    letterSpacing: 'var(--hud-input-tracking, -0.015em)',
                     minHeight: 24,
                     maxHeight: 96,
                     opacity: isStreaming ? 0.45 : 1
@@ -328,12 +333,12 @@ export function HudSidebar({
                   className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150"
                   style={{
                     color: inputValue.trim() && !isStreaming
-                      ? 'rgba(255,255,255,0.82)'
-                      : 'rgba(255,255,255,0.28)'
+                      ? 'var(--john-text-primary)'
+                      : 'var(--john-text-muted)'
                   }}
                   aria-label="Enviar"
                 >
-                  <SendIcon className="w-[20px] h-auto" />
+                  <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
                 </button>
               </div>
             </div>
@@ -353,9 +358,9 @@ export function HudSidebar({
 function sidebarIconButtonStyle(): CSSProperties {
   return {
     background: 'transparent',
-    border: '1px solid rgba(255,255,255,0.1)',
+    border: '1px solid var(--john-border-soft)',
     borderRadius: 7,
-    color: 'rgba(255,255,255,0.38)',
+    color: 'var(--john-text-muted)',
     cursor: 'pointer',
     fontSize: 14,
     lineHeight: 1,
@@ -366,16 +371,16 @@ function sidebarIconButtonStyle(): CSSProperties {
 
 function handleSidebarIconHover(e: ReactMouseEvent<HTMLButtonElement>) {
   const b = e.currentTarget
-  b.style.background = 'rgba(255,255,255,0.08)'
-  b.style.color = 'rgba(255,255,255,0.75)'
-  b.style.borderColor = 'rgba(255,255,255,0.22)'
+  b.style.background = 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
+  b.style.color = 'var(--john-text-secondary)'
+  b.style.borderColor = 'var(--john-border-strong)'
 }
 
 function handleSidebarIconLeave(e: ReactMouseEvent<HTMLButtonElement>) {
   const b = e.currentTarget
   b.style.background = 'transparent'
-  b.style.color = 'rgba(255,255,255,0.38)'
-  b.style.borderColor = 'rgba(255,255,255,0.1)'
+  b.style.color = 'var(--john-text-muted)'
+  b.style.borderColor = 'var(--john-border-soft)'
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -384,8 +389,8 @@ function Label({ children }: { children: React.ReactNode }) {
       style={{
         fontSize: 9,
         fontWeight: 600,
-        letterSpacing: '0.08em',
-        color: 'rgba(255,255,255,0.22)'
+        letterSpacing: 'var(--hud-label-tracking, 0.075em)',
+        color: 'var(--john-text-muted)'
       }}
     >
       {children}
@@ -418,10 +423,10 @@ function MessageBubble({
       </div>
       <div
         style={{
-          background: isUser ? 'rgba(255,255,255,0.07)' : 'transparent',
+          background: isUser ? 'color-mix(in srgb, var(--john-surface-2) 76%, transparent)' : 'transparent',
           borderRadius: isUser ? '10px 10px 3px 10px' : '10px 10px 10px 3px',
           padding: isUser ? '7px 11px' : '0',
-          color: isUser ? 'rgba(255,255,255,0.72)' : 'rgba(255,255,255,0.82)',
+          color: isUser ? 'var(--john-text-secondary)' : 'var(--john-text-primary)',
           maxWidth: '100%'
         }}
       >

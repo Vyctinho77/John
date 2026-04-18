@@ -21,18 +21,18 @@ export function SpotifyBanner({
     ? Math.min(100, (state.progressMs / state.durationMs) * 100)
     : 0
 
-  const green = 'rgba(45,213,80,0.95)'
-  const dim   = 'rgba(255,255,255,0.30)'
+  const green = 'var(--john-success)'
+  const dim   = 'var(--john-text-muted)'
 
   return (
     <div
       style={{
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: 14,
+        borderRadius: 'var(--john-radius-md)',
         width: '100%',
         marginTop: 16,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.45)'
+        boxShadow: 'var(--john-shadow-floating)'
       }}
     >
       {/* ── Blurred album art background ───────────────────────── */}
@@ -41,7 +41,7 @@ export function SpotifyBanner({
           position: 'absolute',
           inset: -10,
           backgroundImage: state.albumArtUrl ? `url(${state.albumArtUrl})` : undefined,
-          backgroundColor: state.albumArtUrl ? undefined : '#0e0e12',
+          backgroundColor: state.albumArtUrl ? undefined : 'var(--john-surface-0)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           filter: 'blur(22px) brightness(0.36) saturate(1.4)',
@@ -89,7 +89,7 @@ export function SpotifyBanner({
         ) : (
           <div style={{
             width: 50, height: 50, borderRadius: 8, flexShrink: 0,
-            background: 'rgba(255,255,255,0.06)',
+            background: 'color-mix(in srgb, var(--john-surface-2) 72%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center'
           }}>
             <SpotifyLogo />
@@ -100,13 +100,13 @@ export function SpotifyBanner({
         <div style={{ flex: 1, minWidth: 0 }}>
           <p
             className="truncate"
-            style={{ fontSize: 13, fontWeight: 500, color: 'rgba(255,255,255,0.96)', lineHeight: 1.3 }}
+            style={{ fontSize: 13, fontWeight: 500, color: 'var(--john-text-strong)', lineHeight: 1.3, letterSpacing: 'var(--hud-muted-tracking, -0.01em)' }}
           >
             {state.trackName ?? '—'}
           </p>
           <p
             className="truncate"
-            style={{ fontSize: 11, color: 'rgba(255,255,255,0.50)', marginTop: 2, lineHeight: 1.3 }}
+            style={{ fontSize: 11, color: 'var(--john-text-tertiary)', marginTop: 2, lineHeight: 1.3 }}
           >
             {state.artistName ?? ''}
           </p>
@@ -123,7 +123,7 @@ export function SpotifyBanner({
             </CtrlBtn>
 
             {/* Prev */}
-            <CtrlBtn onClick={onPrev} label="Anterior" style={{ color: 'rgba(255,255,255,0.72)' }}>
+            <CtrlBtn onClick={onPrev} label="Anterior" style={{ color: 'var(--john-text-secondary)' }}>
               <PrevIcon />
             </CtrlBtn>
 
@@ -131,7 +131,7 @@ export function SpotifyBanner({
             <CtrlBtn
               onClick={onTogglePlay}
               label={state.isPlaying ? 'Pausar' : 'Reproduzir'}
-              style={{ color: 'rgba(255,255,255,0.97)' }}
+              style={{ color: 'var(--john-text-strong)' }}
             >
               {state.isPlaying ? <PauseIcon /> : <PlayIcon />}
             </CtrlBtn>
@@ -161,12 +161,12 @@ export function SpotifyBanner({
       </div>
 
       {/* ── Progress bar ─────────────────────────────────────────── */}
-      <div style={{ height: 3, background: 'rgba(255,255,255,0.08)' }}>
+        <div style={{ height: 3, background: 'var(--john-border-soft)' }}>
         <div
           style={{
             height: '100%',
             width: `${progress}%`,
-            background: 'rgba(255,255,255,0.55)',
+            background: 'var(--john-text-secondary)',
             borderRadius: '0 2px 2px 0',
             transition: 'width 1s linear'
           }}

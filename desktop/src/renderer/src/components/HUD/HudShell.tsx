@@ -44,9 +44,9 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
   if (isSidebar) {
     const attachedLeft = sidebarSide === 'left'
     const border = attachedLeft
-      ? { borderRight: '1px solid rgba(255,255,255,0.10)' }
-      : { borderLeft:  '1px solid rgba(255,255,255,0.10)' }
-    const borderRadius = attachedLeft ? '0 14px 14px 0' : '14px 0 0 14px'
+      ? { borderRight: '1px solid var(--john-border-strong)' }
+      : { borderLeft:  '1px solid var(--john-border-strong)' }
+    const borderRadius = attachedLeft ? '0 var(--john-radius-md) var(--john-radius-md) 0' : 'var(--john-radius-md) 0 0 var(--john-radius-md)'
 
     return (
       <div
@@ -54,7 +54,7 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
         style={{
           width:                '100vw',
           height:               '100vh',
-          background:           'linear-gradient(180deg, rgba(8,8,12,0.88) 0%, rgba(4,4,6,0.88) 100%)',
+          background:           'linear-gradient(180deg, var(--john-bg-panel-top) 0%, var(--john-bg-panel-bottom) 100%)',
           backdropFilter:       'blur(24px) saturate(160%)',
           WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           borderRadius,
@@ -79,11 +79,11 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
     <motion.div
       className="relative overflow-hidden"
       style={{
-        background:           'linear-gradient(180deg, rgba(8,8,12,0.88) 0%, rgba(4,4,6,0.88) 100%)',
+        background:           'linear-gradient(180deg, var(--john-bg-panel-top) 0%, var(--john-bg-panel-bottom) 100%)',
         backdropFilter:       'blur(24px) saturate(160%)',
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-        border: '1px solid rgba(255,255,255,0.10)',
-        boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+        border: '1px solid var(--john-border-strong)',
+        boxShadow: 'var(--john-shadow-panel)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'
       }}
