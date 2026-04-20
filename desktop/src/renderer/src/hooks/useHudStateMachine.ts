@@ -9,8 +9,9 @@ export type HudState =
   | 'soft-idle'
   | 'closing'
   | 'sidebar'
+  | 'operator'
 
-export type HudVisual = 'compact' | 'intermediate' | 'expanded' | 'sidebar'
+export type HudVisual = 'compact' | 'intermediate' | 'expanded' | 'sidebar' | 'operator'
 
 const ANIM_TO_MID = 200
 const ANIM_TO_FULL = 260
@@ -35,6 +36,8 @@ export interface HudStateMachineResult {
   setInputFocused: (v: boolean) => void
   dockSidebar: (side: 'left' | 'right') => void
   undockSidebar: () => void
+  enterOperator: () => void
+  exitOperator: () => void
 }
 
 export function useHudStateMachine(): HudStateMachineResult {
@@ -215,14 +218,27 @@ export function useHudStateMachine(): HudStateMachineResult {
     setState('compact')
   }, [])
 
+  const enterOperator = useCallback(() => {
+    clearIdle()
+    setState('operator')
+    window.hudAPI?.resize(1100, 680)
+  }, [clearIdle])
+
+  const exitOperator = useCallback(() => {
+    setState('expanded')
+    window.hudAPI?.resize(840, 560)
+  }, [])
+
   const visual: HudVisual =
     state === 'sidebar'
       ? 'sidebar'
-      : state === 'compact' || state === 'closing'
-        ? 'compact'
-        : state === 'opening-full' || state === 'expanded'
-          ? 'expanded'
-          : 'intermediate'
+      : state === 'operator'
+        ? 'operator'
+        : state === 'compact' || state === 'closing'
+          ? 'compact'
+          : state === 'opening-full' || state === 'expanded'
+            ? 'expanded'
+            : 'intermediate'
 
   useEffect(() => {
     return () => {
@@ -245,6 +261,8 @@ export function useHudStateMachine(): HudStateMachineResult {
     setStreaming,
     setInputFocused,
     dockSidebar,
-    undockSidebar
+    undockSidebar,
+    enterOperator,
+    exitOperator
   }
 }

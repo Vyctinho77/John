@@ -5,7 +5,8 @@ import { HudVisual } from '@renderer/hooks/useHudStateMachine'
 const DIMS: Record<Exclude<HudVisual, 'sidebar'>, { width: number; height: number; radius: number }> = {
   compact:      { width: 488,  height: 55,  radius: 22 },
   intermediate: { width: 640,  height: 220, radius: 28 },
-  expanded:     { width: 840,  height: 560, radius: 30 }
+  expanded:     { width: 840,  height: 560, radius: 30 },
+  operator:     { width: 1100, height: 680, radius: 20 }
 }
 
 const EASE = [0.32, 0.72, 0, 1] as const
@@ -43,9 +44,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
   // ── Sidebar mode ──────────────────────────────────────────────────
   if (isSidebar) {
     const attachedLeft = sidebarSide === 'left'
-    const border = attachedLeft
-      ? { borderRight: '1px solid var(--john-border-strong)' }
-      : { borderLeft:  '1px solid var(--john-border-strong)' }
     const borderRadius = attachedLeft ? '0 var(--john-radius-md) var(--john-radius-md) 0' : 'var(--john-radius-md) 0 0 var(--john-radius-md)'
 
     return (
@@ -58,7 +56,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
           backdropFilter:       'blur(24px) saturate(160%)',
           WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           borderRadius,
-          ...border,
           boxShadow: attachedLeft
             ? '4px 0 32px rgba(0,0,0,0.6)'
             : '-4px 0 32px rgba(0,0,0,0.6)'
@@ -82,7 +79,6 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
         background:           'linear-gradient(180deg, var(--john-bg-panel-top) 0%, var(--john-bg-panel-bottom) 100%)',
         backdropFilter:       'blur(24px) saturate(160%)',
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-        border: '1px solid var(--john-border-strong)',
         boxShadow: 'var(--john-shadow-panel)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'

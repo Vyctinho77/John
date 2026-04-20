@@ -26,15 +26,12 @@ import { ChatSidebar } from './ChatSidebar'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
 import { StreamingTimeline } from './StreamingTimeline'
 import {
-  PillButton,
-  SectionTitle,
-  SettingsCard,
   SettingsNavItem,
-  SettingsRow,
-  StatusBadge
+  SettingsRow
 } from './HudSettingsPrimitives'
 import {
   AccountSettingsPanel,
+  APISettingsPanel,
   DataSettingsPanel,
   GeneralSettingsPanel,
   NotificationsSettingsPanel,
@@ -167,6 +164,7 @@ interface HudExpandedProps {
   onShowStage2: () => void
   onShowStage3: () => void
   onSettingsOpenChange: (open: boolean) => void
+  onEnterOperator?: () => void
 }
 
 type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography'
@@ -182,32 +180,6 @@ type ProviderDraftMap = Record<
 
 const INPUT_MIN_HEIGHT = 24
 const INPUT_MAX_HEIGHT = 132
-
-function ProviderPill({
-  provider,
-  active,
-  onClick
-}: {
-  provider: AIProviderSnapshot
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="px-3 py-1.5 rounded-full text-[11px] transition-colors duration-150"
-      style={{
-        background: active
-          ? 'color-mix(in srgb, var(--john-surface-2) 80%, transparent)'
-          : 'color-mix(in srgb, var(--john-surface-1) 70%, transparent)',
-        color: active ? 'var(--john-text-strong)' : 'var(--john-text-tertiary)',
-        border: `1px solid ${active ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`
-      }}
-    >
-      {provider.label}
-    </button>
-  )
-}
 
 function createEmptyProviderDrafts(): ProviderDraftMap {
   return {
@@ -381,7 +353,8 @@ export const HudExpanded = memo(function HudExpanded({
   onShowStage1,
   onShowStage2,
   onShowStage3,
-  onSettingsOpenChange
+  onSettingsOpenChange,
+  onEnterOperator
 }: HudExpandedProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -754,417 +727,54 @@ export const HudExpanded = memo(function HudExpanded({
       )
     }
 
-    if (!aiSettings || !selectedProvider) {
-      return (
-        <p className="mt-4 text-[13px]" style={{ color: 'var(--john-text-secondary)' }}>
-          Carregando provedores...
-        </p>
-      )
-    }
-
     return (
-      <>
-        <SectionTitle>Minha API Key</SectionTitle>
-
-        <div className="mt-4 flex gap-2 flex-wrap">
-          {aiSettings.providers.map(provider => (
-            <ProviderPill
-              key={provider.id}
-              provider={provider}
-              active={provider.id === activeProviderId}
-              onClick={() => {
-                setActiveProviderId(provider.id)
-                setAPIFeedback(null)
-              }}
-            />
-          ))}
-        </div>
-
-        <SettingsCard className="mt-5 rounded-[22px] p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[15px]" style={{ color: 'var(--john-text-strong)' }}>
-                {selectedProvider.label}
-              </p>
-              <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-                {selectedProvider.capabilities.localOnly
-                  ? 'projeto local e fallback privado'
-                  : 'sua chave fica salva apenas neste dispositivo'}
-              </p>
-            </div>
-            <StatusBadge tone={selectedProvider.status === 'valid' ? 'success' : 'neutral'}>
-              {selectedProvider.status}
-            </StatusBadge>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3">
-            {!selectedProvider.capabilities.localOnly && (
-              <label className="flex flex-col gap-2">
-                <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-                  API key
-                </span>
-                <input
-                  value={providerDraft.apiKey}
-                  onChange={e => updateProviderDraft({ apiKey: e.target.value })}
-                  placeholder={selectedProvider.hasKey ? '••••••••••••••••' : 'cole sua chave aqui'}
-                  className="bg-transparent outline-none rounded-xl px-3 h-10"
-                  style={{
-                    color: 'var(--john-text-primary)',
-                    border: '1px solid var(--john-border-strong)'
-                  }}
-                />
-              </label>
-            )}
-
-            <label className="flex flex-col gap-2">
-              <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-                Base URL
-              </span>
-              <input
-                value={providerDraft.baseUrl}
-                onChange={e => updateProviderDraft({ baseUrl: e.target.value })}
-                className="bg-transparent outline-none rounded-xl px-3 h-10"
-                style={{
-                  color: 'var(--john-text-primary)',
-                  border: '1px solid var(--john-border-strong)'
-                }}
-              />
-            </label>
-
-            <div className="flex flex-col gap-2">
-              <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.44)' }}>
-                Modelo
-              </span>
-              <div className="flex gap-2 flex-wrap">
-                {selectedProvider.modelOptions.map(model => (
-                  <PillButton
-                    key={model.id}
-                    onMouseDown={e => {
-                      e.preventDefault()
-                      updateProviderDraft({ selectedModel: model.id })
-                      onSaveProvider({
-                        id: selectedProvider.id,
-                        selectedModel: model.id
-                      })
-                      setAPIFeedback(`Modelo ${model.label} selecionado.`)
-                    }}
-                    active={providerDraft.selectedModel === model.id}
-                  >
-                    {model.label}
-                  </PillButton>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex gap-2 flex-wrap">
-            <PillButton
-              onMouseDown={e => {
-                e.preventDefault()
-                handleSaveActiveProvider()
-              }}
-              tone="strong"
-            >
-              salvar
-            </PillButton>
-            <PillButton
-              onMouseDown={e => {
-                e.preventDefault()
-                void handleTestActiveProvider()
-              }}
-            >
-              {isTestingProvider === selectedProvider.id ? 'testando...' : 'testar conexão'}
-            </PillButton>
-            <PillButton
-              onMouseDown={e => {
-                e.preventDefault()
-                handleRemoveActiveProvider()
-              }}
-              tone="danger"
-            >
-              remover
-            </PillButton>
-          </div>
-
-          {apiFeedback && (
-            <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
-              {apiFeedback}
-            </p>
-          )}
-        </SettingsCard>
-
-        <SettingsCard className="mt-4 rounded-[22px] p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <SectionTitle className="text-[15px]">Custo diário</SectionTitle>
-              <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-                Defina um teto diário em dólar para uso de API.
-              </p>
-            </div>
-            <StatusBadge tone="neutral">
-              {settings.dailyCostLimitUsd === null ? 'sem limite' : `$${settings.dailyCostLimitUsd.toFixed(2)}/dia`}
-            </StatusBadge>
-          </div>
-
-          {costAlert.level !== 'none' && (
-            <div
-              className="mt-3 rounded-[16px] px-3 py-2.5"
-              style={{
-                background:
-                  costAlert.level === 'blocked'
-                    ? 'color-mix(in srgb, var(--john-danger-soft) 60%, var(--john-surface-1))'
-                    : costAlert.level === 'danger'
-                      ? 'color-mix(in srgb, var(--john-danger-soft) 40%, var(--john-surface-1))'
-                      : 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
-                border:
-                  costAlert.level === 'blocked'
-                    ? '1px solid var(--john-danger)'
-                    : costAlert.level === 'danger'
-                      ? '1px solid color-mix(in srgb, var(--john-danger) 60%, transparent)'
-                      : '1px solid var(--john-border-soft)'
-              }}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)' }}>
-                  Atenção de custo
-                </p>
-                <StatusBadge className="px-2 py-1 rounded-full text-[10px]" tone="neutral">
-                  {costAlert.label}
-                </StatusBadge>
-              </div>
-              <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.45 }}>
-                {costAlert.message}
-              </p>
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-col gap-2">
-            <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-              Teto diário em USD
-            </span>
-            <div className="flex items-center gap-2">
-              <div
-                className="flex items-center rounded-xl px-3 h-10 flex-1"
-                style={{ border: '1px solid var(--john-border-strong)' }}
-              >
-                <span className="text-[12px] mr-2" style={{ color: 'var(--john-text-tertiary)' }}>
-                  $
-                </span>
-                <input
-                  value={dailyCostDraft}
-                  onChange={e => setDailyCostDraft(e.target.value)}
-                  onBlur={commitDailyCostLimit}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      commitDailyCostLimit()
-                    }
-                    if (e.key === 'Escape') {
-                      setDailyCostDraft(
-                        settings.dailyCostLimitUsd === null
-                          ? ''
-                          : settings.dailyCostLimitUsd.toFixed(2)
-                      )
-                    }
-                  }}
-                  inputMode="decimal"
-                  placeholder="ex: 2.50"
-                  className="bg-transparent outline-none w-full text-[13px]"
-                  style={{ color: 'var(--john-text-primary)' }}
-                />
-              </div>
-              <PillButton
-                onMouseDown={e => {
-                  e.preventDefault()
-                  setDailyCostDraft('')
-                  onUpdateDailyCostLimit(null)
-                }}
-                className="flex-shrink-0"
-              >
-                sem limite
-              </PillButton>
-            </div>
-            <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.45 }}>
-              Esse valor fica salvo na configuração do app e pode ser usado como teto operacional para chamadas remotas.
-            </p>
-            {aiCosts && (
-              <div className="mt-2">
-                <SettingsRow
-                  label="Gasto hoje"
-                  value={`$${aiCosts.spentUsd.toFixed(4)}`}
-                />
-                <SettingsRow
-                  label="Restante"
-                  value={aiCosts.remainingUsd === null ? 'sem limite' : `$${aiCosts.remainingUsd.toFixed(4)}`}
-                />
-                {aiCosts.byFeature && (Object.entries(aiCosts.byFeature) as [AIFeatureTask, number][])
-                  .filter(([, cost]) => cost > 0)
-                  .map(([task, cost], idx, arr) => (
-                    <SettingsRow
-                      key={task}
-                      label={FEATURE_TASK_LABELS[task]}
-                      value={`$${cost.toFixed(5)}`}
-                      last={idx === arr.length - 1}
-                    />
-                  ))
-                }
-                {aiCosts.byFeature && (Object.values(aiCosts.byFeature) as number[]).every(c => c === 0) && (
-                  <SettingsRow label="por feature" value="sem dados hoje" last />
-                )}
-              </div>
-            )}
-          </div>
-        </SettingsCard>
-
-        <SettingsCard className="mt-4 rounded-[22px] p-4">
-          <SectionTitle className="text-[15px]">ChatGPT (Codex OAuth)</SectionTitle>
-          <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
-            Use sua assinatura ChatGPT Plus/Pro sem API key. John vai priorizar esse provider quando estiver conectado.
-          </p>
-
-          <div className="mt-4">
-            {codexStatus.authenticated ? (
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-[13px]" style={{ color: 'var(--john-text-primary)' }}>
-                    {codexStatus.email}
-                  </p>
-                  <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-                    plano: {codexStatus.planType}
-                  </p>
-                </div>
-                <PillButton
-                  onMouseDown={e => { e.preventDefault(); void handleCodexLogout() }}
-                  className="flex-shrink-0"
-                >
-                  desconectar
-                </PillButton>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <PillButton
-                  onMouseDown={e => { e.preventDefault(); void handleCodexLogin() }}
-                  disabled={codexLoading}
-                  className="self-start"
-                  tone="strong"
-                >
-                  {codexLoading ? 'abrindo browser...' : 'conectar com ChatGPT'}
-                </PillButton>
-                {codexError && (
-                  <p className="text-[11px]" style={{ color: 'var(--john-danger)' }}>
-                    {codexError}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </SettingsCard>
-
-        <SettingsCard className="mt-4 rounded-[22px] p-4">
-          <SectionTitle className="text-[15px]">Roteamento</SectionTitle>
-
-          <div className="mt-4">
-            <SettingsRow label="Primario de texto" value={aiSettings.routing.textPrimary || 'local'} />
-            <SettingsRow label="Fallback" value={aiSettings.routing.textFallback || 'sem fallback'} />
-            <SettingsRow
-              label="Preferir local em conteúdo sensível"
-              value={aiSettings.routing.preferLocalForSensitive ? 'Ativado' : 'Desativado'}
-              toggle={aiSettings.routing.preferLocalForSensitive}
-              onClick={() =>
-                onUpdateAIRouting({
-                  preferLocalForSensitive: !aiSettings.routing.preferLocalForSensitive
-                })
-              }
-              last
-            />
-          </div>
-
-          <div className="mt-4 flex gap-2 flex-wrap">
-            {(['openai', 'anthropic', 'gemini', 'ollama'] as AIProviderId[]).map(providerId => (
-              <PillButton
-                key={`primary-${providerId}`}
-                onMouseDown={e => {
-                  e.preventDefault()
-                  onUpdateAIRouting({
-                    textPrimary: aiSettings.routing.textPrimary === providerId ? null : providerId
-                  })
-                }}
-                active={aiSettings.routing.textPrimary === providerId}
-                tone={aiSettings.routing.textPrimary === providerId ? 'strong' : 'neutral'}
-              >
-                primario: {providerId}
-              </PillButton>
-            ))}
-          </div>
-
-          <div className="mt-2 flex gap-2 flex-wrap">
-            {(['openai', 'anthropic', 'gemini', 'ollama'] as AIProviderId[]).map(providerId => (
-              <PillButton
-                key={`fallback-${providerId}`}
-                onMouseDown={e => {
-                  e.preventDefault()
-                  onUpdateAIRouting({
-                    textFallback: aiSettings.routing.textFallback === providerId ? null : providerId
-                  })
-                }}
-                active={aiSettings.routing.textFallback === providerId}
-                tone={aiSettings.routing.textFallback === providerId ? 'strong' : 'neutral'}
-              >
-                fallback: {providerId}
-              </PillButton>
-            ))}
-          </div>
-
-          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-            Trilha por feature
-          </p>
-          <div className="mt-2">
-            {(Object.entries(aiSettings.routing.featureRouting ?? {}) as [AIFeatureTask, AIFeatureTier][])
-              .map(([task, tier], idx, arr) => (
-                <SettingsRow
-                  key={task}
-                  label={FEATURE_TASK_LABELS[task]}
-                  value={FEATURE_TIER_LABELS[tier]}
-                  last={idx === arr.length - 1}
-                />
-              ))
-            }
-          </div>
-        </SettingsCard>
-
-        <div className="mt-4">
-          <SettingsRow
-            label="Crash reporting"
-            value={settings.featureFlags.crashReporting ? 'Ativado' : 'Desativado'}
-            toggle={settings.featureFlags.crashReporting}
-            onClick={onToggleCrashReporting}
-          />
-          <SettingsRow
-            label="Advanced perception"
-            value={settings.featureFlags.advancedPerception ? 'Ativado' : 'Desativado'}
-            toggle={settings.featureFlags.advancedPerception}
-            onClick={onToggleAdvancedPerception}
-            last
-          />
-        </div>
-
-        {diagnostics && privacy && (
-          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
-            storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo básico'} | traces:{' '}
-            {diagnostics.performance.traceCount} | consentimentos: {privacy.consentTrail.length}
-            {lastDeletion ? ' | limpeza registrada' : ''}
-          </p>
-        )}
-
-        {diagnostics?.latestTutorDebug && (
-          <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-muted)' }}>
-            ultima resposta: {diagnostics.latestTutorDebug.dominantContextSource} via {diagnostics.latestTutorDebug.model}
-            {diagnostics.latestTutorDebug.latencyMs !== null ? ` | ${diagnostics.latestTutorDebug.latencyMs} ms` : ''}
-            {diagnostics.latestTutorDebug.screenAgeMs !== null ? ` | frame ${diagnostics.latestTutorDebug.screenAgeMs} ms` : ''}
-            {diagnostics.latestTutorDebug.staleContextGuarded ? ' | fresh-screen guard' : ''}
-          </p>
-        )}
-      </>
+      <APISettingsPanel
+        settings={settings}
+        aiSettings={aiSettings}
+        selectedProvider={selectedProvider}
+        activeProviderId={activeProviderId}
+        providerDraft={providerDraft}
+        apiFeedback={apiFeedback}
+        isTestingProvider={isTestingProvider}
+        codexStatus={codexStatus}
+        codexLoading={codexLoading}
+        codexError={codexError}
+        diagnostics={diagnostics}
+        privacy={privacy}
+        lastDeletion={lastDeletion}
+        aiCosts={aiCosts}
+        dailyCostDraft={dailyCostDraft}
+        costAlert={costAlert}
+        featureTaskLabels={FEATURE_TASK_LABELS}
+        featureTierLabels={FEATURE_TIER_LABELS}
+        onSelectProvider={providerId => {
+          setActiveProviderId(providerId)
+          setAPIFeedback(null)
+        }}
+        onUpdateProviderDraft={updateProviderDraft}
+        onSelectProviderModel={(providerId, modelId, modelLabel) => {
+          updateProviderDraft({ selectedModel: modelId })
+          onSaveProvider({
+            id: providerId,
+            selectedModel: modelId
+          })
+          setAPIFeedback(`Modelo ${modelLabel} selecionado.`)
+        }}
+        onSaveProvider={handleSaveActiveProvider}
+        onTestProvider={() => { void handleTestActiveProvider() }}
+        onRemoveProvider={handleRemoveActiveProvider}
+        onDailyCostDraftChange={setDailyCostDraft}
+        onCommitDailyCostLimit={commitDailyCostLimit}
+        onResetDailyCostLimit={() => {
+          setDailyCostDraft('')
+          onUpdateDailyCostLimit(null)
+        }}
+        onUpdateAIRouting={onUpdateAIRouting}
+        onCodexLogin={() => { void handleCodexLogin() }}
+        onCodexLogout={() => { void handleCodexLogout() }}
+        onToggleCrashReporting={onToggleCrashReporting}
+        onToggleAdvancedPerception={onToggleAdvancedPerception}
+      />
     )
   }
 
@@ -1444,6 +1054,23 @@ export const HudExpanded = memo(function HudExpanded({
           <div className="flex items-center">
             <GlasswingThinkingIndicator size={34} emphasis="strong" />
           </div>
+        )}
+
+        {onEnterOperator && (
+          <button
+            onMouseDown={e => { e.preventDefault(); onEnterOperator() }}
+            className="w-7 h-7 flex items-center justify-center transition-opacity duration-150 hover:opacity-80"
+            style={{ color: 'var(--john-text-secondary)' }}
+            aria-label="Modo autônomo"
+            title="Modo autônomo"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M14 17.5h7M17.5 14v7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
         )}
 
         <button

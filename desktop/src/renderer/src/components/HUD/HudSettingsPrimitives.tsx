@@ -46,9 +46,9 @@ export function SettingsRow({
     ? {
         onClick,
         onMouseDown: (e: MouseEvent) => e.preventDefault(),
-        className: 'w-full text-left hover:opacity-80 transition-opacity duration-150'
+        className: 'w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity duration-150'
       }
-    : {}
+    : { className: 'w-full flex items-center justify-between' }
 
   return (
     <Wrapper

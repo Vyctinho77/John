@@ -29,6 +29,7 @@ import { HudCompact } from './HudCompact'
 import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
 import { HudSidebar } from './HudSidebar'
+import { HudOperator } from './HudOperator'
 import { StreamingTimeline } from './StreamingTimeline'
 
 // ─── Conversation context window ─────────────────────────────────
@@ -130,6 +131,7 @@ export function HUD() {
   const [pendingActionIds, setPendingActionIds] = useState<string[]>([])
   const [spotifyState, setSpotifyState] = useState<import('../../../../preload/index.d').SpotifyPlaybackState | null>(null)
   const [tickerQuote, setTickerQuote] = useState<import('../../../../preload/index.d').TickerQuote | null>(null)
+  const [tradingViewState, setTradingViewState] = useState<import('@shared/perception.types').TradingViewConnectorState | null>(null)
   const prevVisual = useRef<HudVisual>('compact')
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -162,7 +164,8 @@ export function HUD() {
   const {
     visual, isStreaming, sidebarSide,
     expand, expandFull, showIntermediate, showExpanded, collapse, ping,
-    setStreaming, setInputFocused, dockSidebar, undockSidebar
+    setStreaming, setInputFocused, dockSidebar, undockSidebar,
+    enterOperator, exitOperator
   } = useHudStateMachine()
 
   const sessionActive = visual !== 'compact'
@@ -252,6 +255,11 @@ export function HUD() {
   useEffect(() => {
     window.tickerAPI.getQuote().then(setTickerQuote).catch(() => {})
     return window.tickerAPI.onUpdate(setTickerQuote)
+  }, [])
+
+  useEffect(() => {
+    window.tradingViewAPI.getStatus().then(setTradingViewState).catch(() => {})
+    return window.tradingViewAPI.onStatusUpdate(setTradingViewState)
   }, [])
 
   useEffect(() => {
@@ -822,6 +830,23 @@ export function HUD() {
             />
           )}
 
+          {visual === 'operator' && (
+            <HudOperator
+              messages={messages}
+              isStreaming={isStreaming}
+              streamingContent={streamingContent}
+              streamingSteps={streamingSteps}
+              inputValue={inputValue}
+              onInputChange={handleActivityTyping}
+              onSubmit={handleSubmit}
+              onInputFocus={handleInputFocus}
+              onInputBlur={handleInputBlur}
+              onActivity={handleActivityEngage}
+              onExitOperator={exitOperator}
+              tradingViewState={tradingViewState}
+            />
+          )}
+
           {visual === 'expanded' && (
             <HudExpanded
               activeChatId={activeChatId}
@@ -973,6 +998,7 @@ export function HUD() {
               onShowStage2={showIntermediate}
               onShowStage3={showExpanded}
               onSettingsOpenChange={open => setInputFocused(open)}
+              onEnterOperator={enterOperator}
             />
           )}
         </HudContent>
