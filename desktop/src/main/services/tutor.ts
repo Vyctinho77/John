@@ -5,6 +5,9 @@ import { generateRemoteText, streamRemoteText } from './ai-provider'
 import { buildTutorCacheKey, getTutorCached, setTutorCache } from './tutor-cache'
 import { codexAuth, codexClient } from '../auth/codex-singleton'
 import { retrieveRelevantMemories } from './memory-embeddings'
+import { newsService } from './news-service'
+import { calendarService } from './calendar-service'
+import { analysisStore } from './analysis-store'
 import {
   buildRemoteSystemPrompt,
   buildRemoteUserPrompt,
@@ -106,6 +109,14 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
     const vsCodeBlock  = vsCodeRaw  ? formatVSCodeConnectorContext(vsCodeRaw.data)   : undefined
     const spotifyBlock = spotifyRaw ? formatSpotifyConnectorContext(spotifyRaw.data) : undefined
     const tradingViewBlock = tradingViewRaw ? formatTradingViewConnectorContext(tradingViewRaw.data) : undefined
+    const newsBlock = tradingViewRaw
+      ? newsService.formatForPrompt((tradingViewRaw.data as { symbol?: string })?.symbol ?? '')
+      : undefined
+    const calendarBlock = calendarService.formatForPrompt() || undefined
+    const tvSymbol = (tradingViewRaw?.data as { symbol?: string })?.symbol ?? ''
+    const analysisBlock = tvSymbol
+      ? (await analysisStore.formatForPrompt(tvSymbol)) || undefined
+      : undefined
     const connectorsUsed = ([
       vsCodeRaw ? 'vscode' : null,
       spotifyRaw ? 'spotify' : null,
@@ -139,7 +150,10 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       offScreen,
       vsCodeBlock,
       spotifyBlock,
-      tradingViewBlock
+      tradingViewBlock,
+      newsBlock || undefined,
+      calendarBlock,
+      analysisBlock
     )
     const baseHistory = request.conversation.slice(0, -1)
     const history   = staleContextGuarded ? baseHistory.slice(-2) : baseHistory
@@ -499,6 +513,14 @@ export async function generateTutorResponseStream(
   const vsCodeBlock    = vsCodeRaw      ? formatVSCodeConnectorContext(vsCodeRaw.data)      : undefined
   const spotifyBlock   = spotifyRaw     ? formatSpotifyConnectorContext(spotifyRaw.data)    : undefined
   const tradingViewBlock = tradingViewRaw ? formatTradingViewConnectorContext(tradingViewRaw.data) : undefined
+  const newsBlock = tradingViewRaw
+    ? newsService.formatForPrompt((tradingViewRaw.data as { symbol?: string })?.symbol ?? '')
+    : undefined
+  const calendarBlock = calendarService.formatForPrompt() || undefined
+  const tvSymbolStream = (tradingViewRaw?.data as { symbol?: string })?.symbol ?? ''
+  const analysisBlock = tvSymbolStream
+    ? (await analysisStore.formatForPrompt(tvSymbolStream)) || undefined
+    : undefined
   const connectorsUsed = ([
     vsCodeRaw ? 'vscode' : null,
     spotifyRaw ? 'spotify' : null,
@@ -524,7 +546,7 @@ export async function generateTutorResponseStream(
   const prompt = buildRemoteUserPrompt(
     request, effectiveContext, domainOutput?.content ?? null,
     [...relevantPersistentMemory, ...behaviorSummaryLines],
-    offScreen, vsCodeBlock, spotifyBlock, tradingViewBlock
+    offScreen, vsCodeBlock, spotifyBlock, tradingViewBlock, newsBlock || undefined, calendarBlock, analysisBlock
   )
   const baseHistory = request.conversation.slice(0, -1)
   const history = staleContextGuarded ? baseHistory.slice(-2) : baseHistory

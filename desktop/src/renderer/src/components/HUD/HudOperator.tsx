@@ -1,16 +1,18 @@
-import { useRef, useEffect, useState, KeyboardEvent } from 'react'
+import { useRef, useEffect, useState, useCallback, KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { TutorResponse, TutorStep, TradingViewConnectorState } from '@shared/perception.types'
+import type { MacroEvent, MarketNewsSnapshot, TutorResponse, TutorStep, TradingViewConnectorState } from '@shared/perception.types'
 import { LogoMark } from './LogoMark'
 import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { StreamingTimeline } from './StreamingTimeline'
 import { useDragWindow } from '@renderer/hooks/useDragWindow'
+import { useSpeechInput } from '@renderer/hooks/useSpeechInput'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
   meta?: TutorResponse
+  proactive?: boolean
 }
 
 export interface HudOperatorProps {
@@ -27,6 +29,9 @@ export interface HudOperatorProps {
   onExitOperator: () => void
   tradingViewState: TradingViewConnectorState | null
   symbol?: string
+  newsSnapshot?: MarketNewsSnapshot | null
+  approachingEvent?: MacroEvent | null
+  voiceEnabled?: boolean
 }
 
 const DRAWER_WIDTH = 260
@@ -53,6 +58,114 @@ const TF: Record<string, string> = {
   '60': '1h', '120': '2h', '240': '4h', 'D': '1D', 'W': '1S'
 }
 
+function NewsPill({ snapshot }: { snapshot: MarketNewsSnapshot }) {
+  const [expanded, setExpanded] = useState(false)
+  const isHot = snapshot.hotItems.length > 0
+  const displayItems = expanded ? snapshot.items.slice(0, 5) : snapshot.items.slice(0, 1)
+  if (!displayItems.length) return null
+
+  const hotColor = 'var(--john-warning, #f59e0b)'
+  const borderColor = isHot ? hotColor : 'var(--john-border-soft)'
+  const iconColor = isHot ? hotColor : 'var(--john-text-muted)'
+
+  return (
+    <div
+      className="absolute bottom-0 left-0 mb-8 ml-3"
+      style={{ maxWidth: 280, zIndex: 10 }}
+    >
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="news-list"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.16 }}
+            className="mb-1.5 flex flex-col gap-1 px-3 py-2 rounded-xl"
+            style={{
+              background: 'color-mix(in srgb, var(--john-bg-panel-top) 92%, transparent)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: `1px solid ${borderColor}`
+            }}
+          >
+            {snapshot.items.slice(1, 5).map((item, i) => {
+              const itemHot = snapshot.hotItems.some(h => h.link === item.link)
+              return (
+                <a
+                  key={i}
+                  href={item.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={e => { e.preventDefault(); window.open(item.link, '_blank') }}
+                  className="text-[10.5px] leading-snug transition-opacity duration-150 hover:opacity-70 block"
+                  style={{ color: itemHot ? hotColor : 'var(--john-text-secondary)' }}
+                >
+                  {itemHot && '⚡ '}
+                  {item.title.length > 80 ? item.title.slice(0, 79) + '…' : item.title}
+                </a>
+              )
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-opacity duration-150 hover:opacity-80"
+        style={{
+          background: isHot
+            ? 'color-mix(in srgb, var(--john-bg-panel-top) 88%, transparent)'
+            : 'color-mix(in srgb, var(--john-bg-panel-top) 88%, transparent)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          border: `1px solid ${borderColor}`,
+          color: iconColor
+        }}
+      >
+        {isHot ? (
+          <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
+            <span
+              className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+              style={{ background: hotColor }}
+            />
+            <span
+              className="relative inline-flex rounded-full h-1.5 w-1.5"
+              style={{ background: hotColor }}
+            />
+          </span>
+        ) : (
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M19 3H5a2 2 0 0 0-2 2v14l4-4h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+        )}
+        <span
+          className="text-[10.5px] max-w-[200px] truncate"
+          style={{ color: isHot ? hotColor : 'var(--john-text-secondary)' }}
+        >
+          {displayItems[0].title.length > 48 ? displayItems[0].title.slice(0, 47) + '…' : displayItems[0].title}
+        </span>
+        <svg
+          width="9" height="9" viewBox="0 0 10 10" fill="none" aria-hidden="true"
+          style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: iconColor }}
+        >
+          <path d="M2 3.5 5 6.5 8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+function MicIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <rect x="6" y="1" width="6" height="9" rx="3" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M3 9a6 6 0 0 0 12 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <line x1="9" y1="15" x2="9" y2="17" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  )
+}
+
 export function HudOperator({
   messages,
   isStreaming,
@@ -67,11 +180,38 @@ export function HudOperator({
   onExitOperator,
   tradingViewState,
   symbol,
+  newsSnapshot,
+  approachingEvent,
+  voiceEnabled = false,
 }: HudOperatorProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [drawerOpen, setDrawerOpen] = useState(true)
   const { handleMouseDown } = useDragWindow()
+
+  const [countdown, setCountdown] = useState<string | null>(null)
+  useEffect(() => {
+    if (!approachingEvent) { setCountdown(null); return }
+    const update = () => {
+      const min = Math.round((approachingEvent.timestamp - Date.now()) / 60000)
+      setCountdown(min > 0 ? `${min}min` : 'agora')
+    }
+    update()
+    const t = setInterval(update, 15_000)
+    return () => clearInterval(t)
+  }, [approachingEvent])
+
+  const handleTranscript = useCallback((text: string) => {
+    const next = inputValue.trim() ? `${inputValue} ${text}` : text
+    onInputChange(next)
+    onActivity()
+    // auto-submit no modo operador após 400ms (permite editar se quiser)
+    setTimeout(() => {
+      if (next.trim()) onSubmit()
+    }, 400)
+  }, [inputValue, onInputChange, onActivity, onSubmit])
+
+  const { isListening, isSupported, toggle: toggleMic } = useSpeechInput(handleTranscript)
 
   const activeSymbol = symbol ?? tradingViewState?.symbol ?? 'XAUUSD'
   const chartUrl = buildChartUrl(activeSymbol)
@@ -145,6 +285,35 @@ export function HudOperator({
           </span>
         )}
 
+        {approachingEvent && countdown && (
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-md"
+            style={{
+              background: 'color-mix(in srgb, var(--john-warning, #f59e0b) 12%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--john-warning, #f59e0b) 30%, transparent)'
+            }}
+          >
+            <span
+              className="relative flex h-1.5 w-1.5 flex-shrink-0"
+            >
+              <span
+                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
+                style={{ background: 'var(--john-warning, #f59e0b)' }}
+              />
+              <span
+                className="relative inline-flex rounded-full h-1.5 w-1.5"
+                style={{ background: 'var(--john-warning, #f59e0b)' }}
+              />
+            </span>
+            <span
+              className="text-[10.5px] font-medium"
+              style={{ color: 'var(--john-warning, #f59e0b)' }}
+            >
+              {approachingEvent.title} · {countdown}
+            </span>
+          </div>
+        )}
+
         <div className="flex-1" />
 
         {/* Chat toggle */}
@@ -181,11 +350,9 @@ export function HudOperator({
         {/* Autonomous label — bottom left of chart */}
         <div
           className="absolute bottom-0 left-0 flex items-center gap-2 px-4"
-          style={{ height: 34, pointerEvents: 'none' }}
+          style={{ height: 34, pointerEvents: 'none', zIndex: 5 }}
         >
-          <span
-            className="relative flex h-1.5 w-1.5"
-          >
+          <span className="relative flex h-1.5 w-1.5">
             <span
               className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
               style={{ background: 'var(--john-text-muted)' }}
@@ -202,6 +369,11 @@ export function HudOperator({
             Modo autônomo ativado
           </span>
         </div>
+
+        {/* News pill — bottom left, above autonomous label */}
+        {newsSnapshot && newsSnapshot.items.length > 0 && (
+          <NewsPill snapshot={newsSnapshot} />
+        )}
 
         {/* ── Chat drawer (slides in from right, overlays chart) ── */}
         <AnimatePresence>
@@ -256,6 +428,33 @@ export function HudOperator({
                       </div>
                     ) : (
                       <div className="max-w-full">
+                        {msg.proactive && (
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span
+                                className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
+                                style={{ background: 'var(--john-success)' }}
+                              />
+                              <span
+                                className="relative inline-flex rounded-full h-1.5 w-1.5"
+                                style={{ background: 'var(--john-success)' }}
+                              />
+                            </span>
+                            <span
+                              className="text-[9.5px] uppercase tracking-widest"
+                              style={{ color: 'var(--john-success)', opacity: 0.7 }}
+                            >
+                              auto
+                            </span>
+                            <span
+                              className="text-[9px]"
+                              style={{ color: 'var(--john-text-muted)', opacity: 0.5 }}
+                              title="Análise salva no diário"
+                            >
+                              ✦ salvo
+                            </span>
+                          </div>
+                        )}
                         <MessageBody content={msg.content} compact streaming={false} />
                       </div>
                     )}
@@ -288,7 +487,7 @@ export function HudOperator({
                 )}
               </div>
 
-              {/* Input — mesmo padrão do HudExpanded */}
+              {/* Input */}
               <div
                 className="flex-shrink-0"
                 style={{
@@ -321,6 +520,24 @@ export function HudOperator({
                       caretColor: 'white'
                     }}
                   />
+                  {voiceEnabled && isSupported && (
+                    <button
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={toggleMic}
+                      disabled={isStreaming}
+                      className="flex-shrink-0 transition-opacity duration-150 disabled:opacity-30 hover:opacity-70 mb-0.5 relative w-[22px] h-[22px] flex items-center justify-center"
+                      style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
+                      aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
+                    >
+                      {isListening && (
+                        <span
+                          className="absolute inset-0 rounded-full animate-ping opacity-30"
+                          style={{ background: 'var(--john-danger)' }}
+                        />
+                      )}
+                      <MicIcon className="w-[16px] h-[16px] relative" />
+                    </button>
+                  )}
                   <button
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => { if (!isStreaming && inputValue.trim()) onSubmit() }}

@@ -95,6 +95,7 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   meta?: TutorResponse
+  proactive?: boolean
 }
 
 interface ChatMeta {
@@ -132,6 +133,8 @@ export function HUD() {
   const [spotifyState, setSpotifyState] = useState<import('../../../../preload/index.d').SpotifyPlaybackState | null>(null)
   const [tickerQuote, setTickerQuote] = useState<import('../../../../preload/index.d').TickerQuote | null>(null)
   const [tradingViewState, setTradingViewState] = useState<import('@shared/perception.types').TradingViewConnectorState | null>(null)
+  const [newsSnapshot, setNewsSnapshot] = useState<import('@shared/perception.types').MarketNewsSnapshot | null>(null)
+  const [approachingEvent, setApproachingEvent] = useState<import('@shared/perception.types').MacroEvent | null>(null)
   const prevVisual = useRef<HudVisual>('compact')
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -261,6 +264,47 @@ export function HUD() {
     window.tradingViewAPI.getStatus().then(setTradingViewState).catch(() => {})
     return window.tradingViewAPI.onStatusUpdate(setTradingViewState)
   }, [])
+
+  useEffect(() => {
+    window.newsAPI.getSnapshot().then(s => { if (s?.items?.length) setNewsSnapshot(s) }).catch(() => {})
+    return window.newsAPI.onUpdate(setNewsSnapshot)
+  }, [])
+
+  useEffect(() => {
+    window.calendarAPI.getSnapshot().then(s => {
+      const now = Date.now()
+      const next = s.events.find(e => e.timestamp > now && e.timestamp - now < 30 * 60 * 1000)
+      if (next) setApproachingEvent(next)
+    }).catch(() => {})
+    return window.calendarAPI.onApproaching(e => setApproachingEvent(e))
+  }, [])
+
+  useEffect(() => {
+    if (visual !== 'operator') {
+      window.operatorAPI.stop()
+      return
+    }
+    window.operatorAPI.start()
+    const unsub = window.operatorAPI.onAlert(alert => {
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant' as const, content: alert.content, proactive: true }
+      ])
+      if (settings?.featureFlags.voiceMode) {
+        window.elevenLabsAPI.speak(alert.content).then(b64 => {
+          if (!b64) return
+          currentAudioRef.current?.pause()
+          const audio = new Audio(`data:audio/mpeg;base64,${b64}`)
+          currentAudioRef.current = audio
+          audio.play().catch(() => {})
+        }).catch(() => {})
+      }
+    })
+    return () => {
+      unsub()
+      window.operatorAPI.stop()
+    }
+  }, [visual])
 
   useEffect(() => {
     window.proactiveAPI.setStreaming(isStreaming)
@@ -844,6 +888,9 @@ export function HUD() {
               onActivity={handleActivityEngage}
               onExitOperator={exitOperator}
               tradingViewState={tradingViewState}
+              newsSnapshot={newsSnapshot}
+              approachingEvent={approachingEvent}
+              voiceEnabled={settings?.featureFlags.voiceMode ?? false}
             />
           )}
 

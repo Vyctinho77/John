@@ -500,6 +500,52 @@ export interface CaptureSource {
   selected: boolean
 }
 
+// ─── Operator Analysis Memory ────────────────────────────────────────────────
+
+export interface OperatorAnalysis {
+  id: string
+  symbol: string
+  timestamp: number
+  summary: string
+  triggeredBy: string[]
+  price: string | null
+  timeframe: string | null
+}
+
+// ─── Macro Calendar ──────────────────────────────────────────────────────────
+
+export type MacroImpact = 'High' | 'Medium' | 'Low'
+
+export interface MacroEvent {
+  title: string
+  country: string
+  impact: MacroImpact
+  forecast: string | null
+  previous: string | null
+  timestamp: number
+}
+
+export interface MacroCalendarSnapshot {
+  events: MacroEvent[]
+  fetchedAt: number | null
+}
+
+// ─── Market News ─────────────────────────────────────────────────────────────
+
+export interface MarketNewsItem {
+  title: string
+  link: string
+  pubDate: string
+}
+
+export interface MarketNewsSnapshot {
+  symbol: string
+  query: string
+  items: MarketNewsItem[]
+  hotItems: MarketNewsItem[]
+  fetchedAt: number | null
+}
+
 // ─── Biblioteca / Connector types ────────────────────────────────────────────
 
 export type ConnectorID = 'vscode' | 'spotify' | 'tradingview'

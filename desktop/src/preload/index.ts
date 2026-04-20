@@ -248,6 +248,50 @@ const spotifyAPI = {
   }
 }
 
+const analysisAPI = {
+  list: (symbol?: string): Promise<import('../shared/perception.types').OperatorAnalysis[]> =>
+    ipcRenderer.invoke('analysis:list', symbol),
+  clear: (): Promise<void> =>
+    ipcRenderer.invoke('analysis:clear')
+}
+
+const calendarAPI = {
+  getSnapshot: (): Promise<import('../shared/perception.types').MacroCalendarSnapshot> =>
+    ipcRenderer.invoke('calendar:get-snapshot'),
+  onUpdate: (cb: (s: import('../shared/perception.types').MacroCalendarSnapshot) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: import('../shared/perception.types').MacroCalendarSnapshot) => cb(s)
+    ipcRenderer.on('calendar:update', handler)
+    return () => ipcRenderer.removeListener('calendar:update', handler)
+  },
+  onApproaching: (cb: (e: import('../shared/perception.types').MacroEvent) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, ev: import('../shared/perception.types').MacroEvent) => cb(ev)
+    ipcRenderer.on('calendar:approaching', handler)
+    return () => ipcRenderer.removeListener('calendar:approaching', handler)
+  }
+}
+
+const operatorAPI = {
+  start: () => ipcRenderer.send('operator:start'),
+  stop:  () => ipcRenderer.send('operator:stop'),
+  onAlert: (cb: (alert: import('../main/services/operator-analyst').OperatorAlert) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, alert: import('../main/services/operator-analyst').OperatorAlert) => cb(alert)
+    ipcRenderer.on('operator:alert', handler)
+    return () => ipcRenderer.removeListener('operator:alert', handler)
+  }
+}
+
+const newsAPI = {
+  getSnapshot: (): Promise<import('../shared/perception.types').MarketNewsSnapshot> =>
+    ipcRenderer.invoke('news:get-snapshot'),
+  forceRefresh: (): Promise<import('../shared/perception.types').MarketNewsSnapshot> =>
+    ipcRenderer.invoke('news:force-refresh'),
+  onUpdate: (cb: (s: import('../shared/perception.types').MarketNewsSnapshot) => void): (() => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, s: import('../shared/perception.types').MarketNewsSnapshot) => cb(s)
+    ipcRenderer.on('news:update', handler)
+    return () => ipcRenderer.removeListener('news:update', handler)
+  }
+}
+
 const tickerAPI = {
   getQuote: (): Promise<import('./index.d').TickerQuote | null> =>
     ipcRenderer.invoke('ticker:get-quote'),
@@ -299,6 +343,10 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('tickerAPI', tickerAPI)
     contextBridge.exposeInMainWorld('codexAuthAPI', codexAuthAPI)
     contextBridge.exposeInMainWorld('elevenLabsAPI', elevenLabsAPI)
+    contextBridge.exposeInMainWorld('newsAPI', newsAPI)
+    contextBridge.exposeInMainWorld('analysisAPI', analysisAPI)
+    contextBridge.exposeInMainWorld('calendarAPI', calendarAPI)
+    contextBridge.exposeInMainWorld('operatorAPI', operatorAPI)
   } catch (e) {
     console.error(e)
   }
@@ -336,4 +384,12 @@ if (process.contextIsolated) {
   window.codexAuthAPI = codexAuthAPI
   // @ts-ignore
   window.elevenLabsAPI = elevenLabsAPI
+  // @ts-ignore
+  window.newsAPI = newsAPI
+  // @ts-ignore
+  window.analysisAPI = analysisAPI
+  // @ts-ignore
+  window.calendarAPI = calendarAPI
+  // @ts-ignore
+  window.operatorAPI = operatorAPI
 }

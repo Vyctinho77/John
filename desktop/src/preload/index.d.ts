@@ -6,6 +6,10 @@ import type {
   ConnectorStatus,
   DataDeletionSummary,
   DiagnosticsSnapshot,
+  MacroCalendarSnapshot,
+  MacroEvent,
+  MarketNewsSnapshot,
+  OperatorAnalysis,
   PerceptionContextSnapshot,
   PrivacySnapshot,
   SpotifyActionPayload,
@@ -174,6 +178,25 @@ declare global {
     elevenLabsAPI: {
       hasKey: () => Promise<boolean>
       speak:  (text: string) => Promise<string>
+    }
+    analysisAPI: {
+      list: (symbol?: string) => Promise<OperatorAnalysis[]>
+      clear: () => Promise<void>
+    }
+    calendarAPI: {
+      getSnapshot: () => Promise<MacroCalendarSnapshot>
+      onUpdate: (cb: (s: MacroCalendarSnapshot) => void) => () => void
+      onApproaching: (cb: (e: MacroEvent) => void) => () => void
+    }
+    newsAPI: {
+      getSnapshot: () => Promise<MarketNewsSnapshot>
+      forceRefresh: () => Promise<MarketNewsSnapshot>
+      onUpdate: (cb: (s: MarketNewsSnapshot) => void) => () => void
+    }
+    operatorAPI: {
+      start: () => void
+      stop: () => void
+      onAlert: (cb: (alert: import('../main/services/operator-analyst').OperatorAlert) => void) => () => void
     }
   }
 }

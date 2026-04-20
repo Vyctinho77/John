@@ -35,7 +35,10 @@ export function buildRemoteUserPrompt(
   offScreen = false,
   vsCodeContext?: string,
   spotifyContext?: string,
-  tradingViewContext?: string
+  tradingViewContext?: string,
+  newsContext?: string,
+  calendarContext?: string,
+  analysisContext?: string
 ): string {
   const { semanticState, sessionMemory } = context
   const keyValuesLine = formatKeyValues(semanticState.key_values)
@@ -80,6 +83,9 @@ export function buildRemoteUserPrompt(
     vsCodeContext ?? '',
     spotifyContext ?? '',
     tradingViewContext ?? '',
+    newsContext ?? '',
+    calendarContext ?? '',
+    analysisContext ?? '',
     domainBody ? `Domain guidance: ${domainBody}` : '',
     'Open with the main reading or recommendation first.',
     'Prioritize the next useful step before extra detail.',

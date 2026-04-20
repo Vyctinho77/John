@@ -68,6 +68,10 @@ import { maybeHandleTradingViewTutorRequest } from './services/tradingview-comma
 import { executeVSCodeAction, maybeHandleVSCodeTutorRequest } from './services/vscode-command-router'
 import { speakWithElevenLabs } from './services/elevenlabs'
 import { tickerService } from './services/ticker-service'
+import { newsService } from './services/news-service'
+import { operatorAnalyst } from './services/operator-analyst'
+import { calendarService } from './services/calendar-service'
+import { analysisStore } from './services/analysis-store'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 
 let hudWindow: BrowserWindow | null = null
@@ -796,9 +800,32 @@ ipcMain.handle('tradingview:execute-action', (_e, payload) => tradingViewService
 ipcMain.handle('ticker:get-quote', () => tickerService.getQuote())
 ipcMain.handle('ticker:set-symbol', async (_e, sym: string) => {
   tickerService.setSymbol(sym)
+  newsService.setSymbol(sym)
   await updateAppSettings({ tickerSymbol: sym.trim().toUpperCase() })
   return tickerService.getQuote()
 })
+
+// ─── News IPC ─────────────────────────────────────────────────────────────────
+
+ipcMain.handle('news:get-snapshot', () => newsService.getSnapshot())
+ipcMain.handle('news:force-refresh', async () => {
+  await newsService.forceRefresh()
+  return newsService.getSnapshot()
+})
+
+// ─── Operator analyst IPC ─────────────────────────────────────────────────────
+
+ipcMain.on('operator:start', () => operatorAnalyst.start(tradingViewService))
+ipcMain.on('operator:stop',  () => operatorAnalyst.stop())
+
+// ─── Calendar IPC ─────────────────────────────────────────────────────────────
+
+ipcMain.handle('calendar:get-snapshot', () => calendarService.getSnapshot())
+
+// ─── Analysis store IPC ───────────────────────────────────────────────────────
+
+ipcMain.handle('analysis:list',  (_e, symbol?: string) => analysisStore.list(symbol))
+ipcMain.handle('analysis:clear', () => analysisStore.clear())
 
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 
@@ -933,6 +960,7 @@ app.whenReady().then(() => {
   bridgeServer.setInternalStatus('spotify', spotifyService.isAuthenticated())
 
   tradingViewService.onStatusChange(state => {
+    if (state.symbol) newsService.setSymbol(state.symbol)
     bridgeServer.injectContext('tradingview', {
       app: 'tradingview',
       priority: 'high',
@@ -948,14 +976,33 @@ app.whenReady().then(() => {
   })
   bridgeServer.setInternalStatus('tradingview', tradingViewService.getState().connected)
 
-  // Start standalone ticker with saved symbol
+  // Start standalone ticker + news with saved symbol
   getAppSettings().then(s => {
     if (s.tickerSymbol?.trim()) {
       tickerService.setSymbol(s.tickerSymbol.trim())
+      newsService.setSymbol(s.tickerSymbol.trim())
     }
   })
   tickerService.onQuoteUpdate(quote => {
     hudWindow?.webContents.send('ticker:update', quote)
+  })
+  newsService.onUpdate(snapshot => {
+    hudWindow?.webContents.send('news:update', snapshot)
+  })
+  operatorAnalyst.onAlert(alert => {
+    hudWindow?.webContents.send('operator:alert', alert)
+  })
+
+  calendarService.start()
+  calendarService.onUpdate(snapshot => {
+    hudWindow?.webContents.send('calendar:update', snapshot)
+  })
+  calendarService.onApproaching(event => {
+    hudWindow?.webContents.send('calendar:approaching', event)
+    // dispara briefing no operator analyst se modo operador ativo
+    if (calendarService.needsBriefing(event)) {
+      operatorAnalyst.briefMacroEvent(event, tradingViewService.getState())
+    }
   })
 
   globalShortcut.register('CommandOrControl+Shift+Space', toggleHud)
@@ -973,6 +1020,9 @@ app.on('will-quit', async (event) => {
   globalShortcut.unregisterAll()
   bridgeServer.stop()
   tickerService.stop()
+  newsService.stop()
+  operatorAnalyst.stop()
+  calendarService.stop()
   await shutdown()
   app.exit(0)
 })
