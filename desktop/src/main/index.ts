@@ -250,6 +250,19 @@ ipcMain.on('window:sidebar-resize', (_e, { width }: { width: number }) => {
 
 // ─── HUD resize ───────────────────────────────────────────────────────────────
 
+ipcMain.handle('hud:operator-news-panel', (_e, { open, panelWidth }: { open: boolean; panelWidth: number }) => {
+  if (!hudWindow) return
+  const { x, y, width, height } = hudWindow.getBounds()
+  const display = screen.getDisplayMatching(hudWindow.getBounds())
+  const { x: wx } = display.workArea
+  if (open) {
+    const newX = Math.max(wx, x - panelWidth)
+    hudWindow.setBounds({ x: newX, y, width: width + panelWidth, height }, false)
+  } else {
+    hudWindow.setBounds({ x: x + panelWidth, y, width: width - panelWidth, height }, false)
+  }
+})
+
 ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number }) => {
   if (!hudWindow || sidebarDocked) return   // sidebar manages its own bounds
   const display = screen.getDisplayMatching(hudWindow.getBounds())
@@ -817,6 +830,7 @@ ipcMain.handle('news:force-refresh', async () => {
 
 ipcMain.on('operator:start', () => operatorAnalyst.start(tradingViewService))
 ipcMain.on('operator:stop',  () => operatorAnalyst.stop())
+ipcMain.handle('operator:analyze-now', () => operatorAnalyst.analyzeNow())
 
 // ─── Calendar IPC ─────────────────────────────────────────────────────────────
 

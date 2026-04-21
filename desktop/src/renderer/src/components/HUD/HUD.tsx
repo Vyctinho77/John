@@ -887,6 +887,7 @@ export function HUD() {
               onInputBlur={handleInputBlur}
               onActivity={handleActivityEngage}
               onExitOperator={exitOperator}
+              onAnalyzeNow={() => { void window.operatorAPI.analyzeNow() }}
               tradingViewState={tradingViewState}
               newsSnapshot={newsSnapshot}
               approachingEvent={approachingEvent}

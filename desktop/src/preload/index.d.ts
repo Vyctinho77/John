@@ -60,6 +60,7 @@ declare global {
       onToggle: (cb: () => void) => () => void
       setScreenshotMode: (enabled: boolean) => Promise<boolean>
       onScreenshotModeChange: (cb: (active: boolean) => void) => () => void
+      operatorNewsPanel: (open: boolean, panelWidth: number) => Promise<void>
       sidebarResize:   (width: number) => void
       undockSidebar:   () => Promise<void>
       onSidebarDocked: (cb: (side: 'left' | 'right') => void) => () => void
@@ -196,6 +197,7 @@ declare global {
     operatorAPI: {
       start: () => void
       stop: () => void
+      analyzeNow: () => Promise<void>
       onAlert: (cb: (alert: import('../main/services/operator-analyst').OperatorAlert) => void) => () => void
     }
   }

@@ -123,6 +123,15 @@ function makeSnapshot(overrides: SnapshotOverrides = {}): PerceptionContextSnaps
         }
       ]
     },
+    globalIntent: {
+      mode: 'technical_focus',
+      confidence: 0.85,
+      reason: 'fluxo tecnico ativo',
+      evidence: ['codigo em foco'],
+      candidateMode: 'technical_focus',
+      updatedAt: now,
+      stabilityState: 'stable'
+    },
     userProfile: {
       display_name: 'Victor',
       user_level: 'beginner',
@@ -152,6 +161,10 @@ function makeSnapshot(overrides: SnapshotOverrides = {}): PerceptionContextSnaps
     sessionMemory: {
       ...base.sessionMemory,
       ...(overrides.sessionMemory ?? {})
+    },
+    globalIntent: {
+      ...base.globalIntent,
+      ...(overrides.globalIntent ?? {})
     },
     userProfile: {
       ...base.userProfile,
@@ -310,4 +323,81 @@ test('decideOpportunity allows new topic after cooldown window', () => {
   )
 
   assert.equal(decision.emitted, true)
+})
+
+test('light global intent reduces proactive emission aggressiveness', () => {
+  const technicalDecision = decideOpportunity(
+    makeSnapshot(),
+    makeState({ lastUserActivityAt: 0 }),
+    baseSettings,
+    100_000
+  )
+  const lightDecision = decideOpportunity(
+    makeSnapshot({
+      globalIntent: {
+        mode: 'light',
+        confidence: 0.8,
+        reason: 'spotify com baixa atividade',
+        evidence: ['spotify'],
+        candidateMode: 'light',
+        updatedAt: 100_000,
+        stabilityState: 'stable'
+      }
+    }),
+    makeState({ lastUserActivityAt: 0 }),
+    baseSettings,
+    100_000
+  )
+
+  assert.equal(technicalDecision.emitted, true)
+  assert.equal(lightDecision.emitted, false)
+  assert.ok(lightDecision.reasonCodes.includes('low-score'))
+})
+
+test('decision global intent prioritizes market-like new content more than uncertain mode', () => {
+  const decisionScore = buildOpportunityCandidates(
+    makeSnapshot({
+      semanticState: {
+        surface_type: 'graphic',
+        detected_text: 'RSI volume suporte resistencia',
+        probable_user_focus: 'grafico com range curto perto da resistencia'
+      },
+      globalIntent: {
+        mode: 'decision',
+        confidence: 0.88,
+        reason: 'leitura de mercado',
+        evidence: ['tradingview'],
+        candidateMode: 'decision',
+        updatedAt: 100_000,
+        stabilityState: 'stable'
+      }
+    }),
+    makeState({ lastUserActivityAt: 0 }),
+    100_000
+  ).find(candidate => candidate.eventType === 'interesting-pattern')
+
+  const uncertainScore = buildOpportunityCandidates(
+    makeSnapshot({
+      semanticState: {
+        surface_type: 'graphic',
+        detected_text: 'RSI volume suporte resistencia',
+        probable_user_focus: 'grafico com range curto perto da resistencia'
+      },
+      globalIntent: {
+        mode: 'uncertain',
+        confidence: 0.32,
+        reason: 'sinal fraco',
+        evidence: [],
+        candidateMode: 'uncertain',
+        updatedAt: 100_000,
+        stabilityState: 'holding'
+      }
+    }),
+    makeState({ lastUserActivityAt: 0 }),
+    100_000
+  ).find(candidate => candidate.eventType === 'interesting-pattern')
+
+  assert.ok(decisionScore)
+  assert.ok(uncertainScore)
+  assert.ok(decisionScore.score.total > uncertainScore.score.total)
 })

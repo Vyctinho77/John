@@ -55,6 +55,15 @@ function makeContext(overrides: ContextOverrides = {}): PerceptionContextSnapsho
       topic_candidates: ['leitura de codigo'],
       recent_states: []
     },
+    globalIntent: {
+      mode: 'technical_focus',
+      confidence: 0.84,
+      reason: 'editor ativo com erro visivel',
+      evidence: ['superficie de codigo', 'erro em destaque'],
+      candidateMode: 'technical_focus',
+      updatedAt: 100_000,
+      stabilityState: 'stable'
+    },
     userProfile: makeProfile(),
     persisted_memory_summary: 'Perfil Victor · beginner · step_by_step · didactic. 3 memorias prontas para reutilizacao.',
     persisted_memory_highlights: ['Objetivo de estudo: javascript.', 'Estilo preferido: step_by_step.'],
@@ -127,6 +136,8 @@ test('buildRemoteSystemPrompt adapts uncertainty and tone directives', () => {
   assert.match(system, /Safety warning to respect: alto risco\./)
   assert.match(system, /First line = the answer or stance\. Always\./)
   assert.match(system, /Structure: key point/)
+  assert.match(system, /\[GlobalIntent\]/)
+  assert.match(system, /Current global mode: technical_focus\./)
   assert.match(system, /Think like Steven Pinker on explanation/)
 })
 
@@ -161,6 +172,8 @@ test('buildRemoteUserPrompt reinforces main read and next step', () => {
   assert.match(prompt, /Prioritize the next useful step before extra detail\./)
   assert.match(prompt, /Prefer natural transitions over visible section labels\./)
   assert.match(prompt, /Domain guidance: foco em diagnostico/)
+  assert.match(prompt, /Global intent mode: technical_focus/)
+  assert.match(prompt, /Global intent guidance: Be objective, prioritize error, cause, fix, and the next technical action\./)
   assert.match(prompt, /Persistent memory: Perfil Victor/)
   assert.match(prompt, /Memory highlights: Objetivo de estudo: javascript\./)
   assert.match(prompt, /Relevant persistent memory: Prefere respostas naturais e menos estruturadas\./)

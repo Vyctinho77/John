@@ -112,6 +112,29 @@ export interface SessionMemory {
   recent_states: SessionMemoryEntry[]
 }
 
+export type GlobalIntentMode =
+  | 'technical_focus'
+  | 'decision'
+  | 'study'
+  | 'light'
+  | 'review'
+  | 'uncertain'
+
+export type GlobalIntentStabilityState =
+  | 'stable'
+  | 'holding'
+  | 'switching'
+
+export interface GlobalIntentState {
+  mode: GlobalIntentMode
+  confidence: number
+  reason: string
+  evidence: string[]
+  candidateMode: GlobalIntentMode
+  updatedAt: number
+  stabilityState: GlobalIntentStabilityState
+}
+
 export interface UserProfile {
   display_name: string
   user_level: 'beginner' | 'intermediate' | 'advanced'
@@ -131,6 +154,7 @@ export interface IntermediateThought {
 export interface PerceptionContextSnapshot {
   semanticState: SemanticState
   sessionMemory: SessionMemory
+  globalIntent: GlobalIntentState
   userProfile: UserProfile
   persisted_memory_summary: string
   persisted_memory_highlights: string[]

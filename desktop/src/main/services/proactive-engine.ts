@@ -419,22 +419,33 @@ export function scoreCandidate(
         ? 0.58
         : 0.68
 
+  const intentAdjusted = applyGlobalIntentAdjustments(
+    snapshot.globalIntent.mode,
+    eventType,
+    {
+      relevance,
+      userInterruptCost,
+      userMatch,
+      fatiguePenalty
+    }
+  )
+
   const total = clamp(
-    relevance * 0.31 +
+    intentAdjusted.relevance * 0.31 +
       confidence * 0.24 +
-      (1 - userInterruptCost) * 0.17 +
+      (1 - intentAdjusted.userInterruptCost) * 0.17 +
       novelty * 0.14 +
-      userMatch * 0.14 -
-      fatiguePenalty * 0.16
+      intentAdjusted.userMatch * 0.14 -
+      intentAdjusted.fatiguePenalty * 0.16
   )
 
   return {
-    relevance: round(relevance),
+    relevance: round(intentAdjusted.relevance),
     confidence: round(confidence),
-    user_interrupt_cost: round(userInterruptCost),
+    user_interrupt_cost: round(intentAdjusted.userInterruptCost),
     novelty: round(novelty),
-    fatigue_penalty: round(fatiguePenalty),
-    user_match: round(userMatch),
+    fatigue_penalty: round(intentAdjusted.fatiguePenalty),
+    user_match: round(intentAdjusted.userMatch),
     total: round(total)
   }
 }
@@ -614,6 +625,67 @@ function clamp(value: number): number {
 
 function round(value: number): number {
   return Number(value.toFixed(2))
+}
+
+function applyGlobalIntentAdjustments(
+  mode: PerceptionContextSnapshot['globalIntent']['mode'],
+  eventType: ProactiveEventType,
+  base: {
+    relevance: number
+    userInterruptCost: number
+    userMatch: number
+    fatiguePenalty: number
+  }
+): {
+  relevance: number
+  userInterruptCost: number
+  userMatch: number
+  fatiguePenalty: number
+} {
+  switch (mode) {
+    case 'technical_focus':
+      return {
+        relevance: clamp(base.relevance + (eventType === 'interesting-pattern' ? 0.05 : 0)),
+        userInterruptCost: clamp(base.userInterruptCost + (eventType === 'possible-doubt' ? 0.12 : 0.06)),
+        userMatch: clamp(base.userMatch + (eventType === 'interesting-pattern' ? 0.06 : 0.02)),
+        fatiguePenalty: clamp(base.fatiguePenalty + 0.02)
+      }
+    case 'decision':
+      return {
+        relevance: clamp(base.relevance + (eventType === 'interesting-pattern' || eventType === 'new-content' ? 0.08 : 0.03)),
+        userInterruptCost: clamp(base.userInterruptCost - 0.05),
+        userMatch: clamp(base.userMatch + 0.06),
+        fatiguePenalty: clamp(base.fatiguePenalty)
+      }
+    case 'study':
+      return {
+        relevance: clamp(base.relevance + (eventType === 'possible-doubt' || eventType === 'revisit-focus' ? 0.06 : 0.02)),
+        userInterruptCost: clamp(base.userInterruptCost - 0.02),
+        userMatch: clamp(base.userMatch + 0.07),
+        fatiguePenalty: clamp(base.fatiguePenalty)
+      }
+    case 'light':
+      return {
+        relevance: clamp(base.relevance - 0.08),
+        userInterruptCost: clamp(base.userInterruptCost + 0.12),
+        userMatch: clamp(base.userMatch - 0.08),
+        fatiguePenalty: clamp(base.fatiguePenalty + 0.08)
+      }
+    case 'review':
+      return {
+        relevance: clamp(base.relevance + (eventType === 'revisit-focus' || eventType === 'new-content' ? 0.08 : 0.01)),
+        userInterruptCost: clamp(base.userInterruptCost),
+        userMatch: clamp(base.userMatch + 0.05),
+        fatiguePenalty: clamp(base.fatiguePenalty)
+      }
+    case 'uncertain':
+      return {
+        relevance: clamp(base.relevance - 0.12),
+        userInterruptCost: clamp(base.userInterruptCost + 0.14),
+        userMatch: clamp(base.userMatch - 0.1),
+        fatiguePenalty: clamp(base.fatiguePenalty + 0.1)
+      }
+  }
 }
 
 function getAdaptiveCooldownMs(ignoredStreak: number): number {

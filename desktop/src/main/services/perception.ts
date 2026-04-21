@@ -8,6 +8,12 @@ import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 import { getMemoryContext, syncPersistedMemory } from './memory-card'
 import { buildIntermediateThought } from './intermediate-thought'
 import {
+  createGlobalIntentState,
+  getGlobalIntentState,
+  resetGlobalIntentState,
+  resolveGlobalIntent
+} from './global-intent'
+import {
   effectiveObservationText,
   estimateUncertainty,
   extractPrimaryContentText
@@ -345,10 +351,21 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
       sessionMemory,
       persistedMemoryHighlights: memoryContext.highlights
     })
+    const globalIntent = await resolveGlobalIntent(
+      {
+        semanticState,
+        sessionMemory,
+        userProfile
+      },
+      {
+        appSwitchDetected
+      }
+    )
 
     const snapshot = {
       semanticState,
       sessionMemory,
+      globalIntent,
       userProfile,
       persisted_memory_summary: memoryContext.summary,
       persisted_memory_highlights: memoryContext.highlights,
@@ -440,6 +457,7 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
   const snapshot = {
     semanticState,
     sessionMemory,
+    globalIntent: getGlobalIntentState(),
     userProfile,
     persisted_memory_summary: memoryContext.summary,
     persisted_memory_highlights: memoryContext.highlights,
@@ -464,6 +482,7 @@ export async function updateUserProfile(patch: Partial<UserProfile>): Promise<Pe
 export function clearSessionMemory(): SessionMemory {
   lastRawText = ''
   sessionMemory = createSessionMemory()
+  resetGlobalIntentState()
 
   if (latestSnapshot) {
     const intermediateThought = buildIntermediateThought({
@@ -474,6 +493,7 @@ export function clearSessionMemory(): SessionMemory {
     latestSnapshot = {
       ...latestSnapshot,
       sessionMemory,
+      globalIntent: createGlobalIntentState(),
       intermediateThought
     }
   }
@@ -631,6 +651,7 @@ async function buildEmptySnapshot(
   return {
     semanticState,
     sessionMemory,
+    globalIntent: createGlobalIntentState(),
     userProfile,
     persisted_memory_summary: memoryContext.summary,
     persisted_memory_highlights: memoryContext.highlights,
@@ -823,6 +844,7 @@ function ensureActiveSession(): void {
   const now = Date.now()
   if (sessionMemory.expires_at <= now) {
     sessionMemory = createSessionMemory()
+    resetGlobalIntentState()
     lastRawText = ''
   }
 }

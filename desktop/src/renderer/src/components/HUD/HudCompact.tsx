@@ -18,7 +18,7 @@ export const HudCompact = memo(function HudCompact({
   onExpand,
   onExpandFull,
   onActivity,
-  isCapturing,
+  isCapturing: _isCapturing,
   minimalMode,
   passiveSuggestion,
   fallbackLabel,
@@ -83,12 +83,6 @@ export const HudCompact = memo(function HudCompact({
         style={{ color: 'var(--john-text-secondary)' }}
         aria-label="Abrir painel completo"
       >
-        {isCapturing && (
-          <span
-            className="absolute right-1 top-2 w-1.5 h-1.5 rounded-full"
-            style={{ background: 'var(--john-success)', boxShadow: '0 0 8px var(--john-success-soft)' }}
-          />
-        )}
         <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
       </button>
     </div>

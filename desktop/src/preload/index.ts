@@ -51,6 +51,8 @@ const hudAPI = {
     ipcRenderer.on('hud:screenshot-mode', handler)
     return () => ipcRenderer.removeListener('hud:screenshot-mode', handler)
   },
+  operatorNewsPanel: (open: boolean, panelWidth: number): Promise<void> =>
+    ipcRenderer.invoke('hud:operator-news-panel', { open, panelWidth }),
   sidebarResize: (width: number) => ipcRenderer.send('window:sidebar-resize', { width }),
   undockSidebar: (): Promise<void> => ipcRenderer.invoke('hud:undock-sidebar'),
   onSidebarDocked: (cb: (side: 'left' | 'right') => void) => {
@@ -273,6 +275,7 @@ const calendarAPI = {
 const operatorAPI = {
   start: () => ipcRenderer.send('operator:start'),
   stop:  () => ipcRenderer.send('operator:stop'),
+  analyzeNow: (): Promise<void> => ipcRenderer.invoke('operator:analyze-now'),
   onAlert: (cb: (alert: import('../main/services/operator-analyst').OperatorAlert) => void): (() => void) => {
     const handler = (_e: Electron.IpcRendererEvent, alert: import('../main/services/operator-analyst').OperatorAlert) => cb(alert)
     ipcRenderer.on('operator:alert', handler)

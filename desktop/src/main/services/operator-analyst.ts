@@ -25,6 +25,7 @@ let prevState: TradingViewConnectorState | null = null
 let unsubscribe: (() => void) | null = null
 let unsubscribeNews: (() => void) | null = null
 let snapshotTimer: ReturnType<typeof setTimeout> | null = null
+let getStateFn: (() => TradingViewConnectorState) | null = null
 
 function emit(alert: OperatorAlert) {
   for (const cb of listeners) cb(alert)
@@ -209,6 +210,7 @@ export const operatorAnalyst = {
     prevState = null
     lastAlertAt = 0
     lastHotNewsAt = 0
+    getStateFn = tradingViewService.getState
     unsubscribe = tradingViewService.onStatusChange(onStateChange)
     unsubscribeNews = newsService.onUpdate(snap => {
       if (!active || !snap.hotItems.length) return
@@ -231,6 +233,15 @@ export const operatorAnalyst = {
     unsubscribeNews?.()
     unsubscribeNews = null
     prevState = null
+    getStateFn = null
+  },
+
+  analyzeNow() {
+    if (!active || !getStateFn) return
+    const state = getStateFn()
+    if (!state.connected || !state.symbol) return
+    lastAlertAt = 0
+    void runSnapshot(state)
   },
 
   onAlert(cb: AlertCallback): () => void {

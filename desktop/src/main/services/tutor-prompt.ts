@@ -17,6 +17,7 @@ export function buildRemoteSystemPrompt(
     buildPersonaCore(offScreen),
     buildExecutiveModule(semanticState.uncertainty, warning),
     buildStrategistModule(context, mode, offScreen),
+    buildGlobalIntentModule(context),
     buildProfessorModule(userProfile, mode),
     buildDomainVoiceModule(context),
     buildCodeVoiceModule(context),
@@ -67,6 +68,12 @@ export function buildRemoteUserPrompt(
       : '',
     semanticState.emotional_signal
       ? `User emotional signal: ${semanticState.emotional_signal}`
+      : '',
+    `Global intent mode: ${context.globalIntent.mode}`,
+    `Global intent confidence: ${context.globalIntent.confidence.toFixed(2)}`,
+    `Global intent guidance: ${buildGlobalIntentInstruction(context.globalIntent.mode)}`,
+    context.globalIntent.reason
+      ? `Global intent reason: ${context.globalIntent.reason}`
       : '',
     `Current intent: ${sessionMemory.current_intent}`,
     `Continuity summary: ${sessionMemory.continuity_summary}`,
@@ -413,6 +420,20 @@ function buildProfessorModule(userProfile: UserProfile, mode: TutorMode): string
   ].filter(Boolean).join('\n')
 }
 
+function buildGlobalIntentModule(context: PerceptionContextSnapshot): string {
+  return [
+    '[GlobalIntent]',
+    `Current global mode: ${context.globalIntent.mode}.`,
+    `Confidence: ${context.globalIntent.confidence.toFixed(2)}.`,
+    `Stability: ${context.globalIntent.stabilityState}.`,
+    `Behavior instruction: ${buildGlobalIntentInstruction(context.globalIntent.mode)}`,
+    context.globalIntent.reason ? `Why: ${context.globalIntent.reason}.` : '',
+    context.globalIntent.evidence.length
+      ? `Evidence: ${context.globalIntent.evidence.join(' | ')}.`
+      : ''
+  ].filter(Boolean).join('\n')
+}
+
 function buildDomainVoiceModule(context: PerceptionContextSnapshot): string {
   if (!isMarketContext(context)) return ''
 
@@ -606,6 +627,23 @@ function buildModeInstruction(mode: TutorMode): string {
       return 'Test alignment with one focused question after giving the main read.'
     case 'layered':
       return 'Explain in layers from surface read to mechanism.'
+  }
+}
+
+function buildGlobalIntentInstruction(mode: PerceptionContextSnapshot['globalIntent']['mode']): string {
+  switch (mode) {
+    case 'technical_focus':
+      return 'Be objective, prioritize error, cause, fix, and the next technical action.'
+    case 'decision':
+      return 'Prioritize scenario reading, risk, implication, and the next decision point.'
+    case 'study':
+      return 'Teach progressively, clarify concepts, and preserve learning flow.'
+    case 'light':
+      return 'Keep it lighter, shorter, and less intrusive unless the user asks for depth.'
+    case 'review':
+      return 'Reconnect with prior context, summarize changes, and highlight what is different now.'
+    case 'uncertain':
+      return 'Stay conservative, avoid over-initiative, and rely on the most explicit grounded cues.'
   }
 }
 
