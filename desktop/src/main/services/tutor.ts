@@ -34,6 +34,7 @@ import {
 import type {
   ConnectorID,
   PerceptionContextSnapshot,
+  TutorMessage,
   TutorDominantContextSource,
   TutorMode,
   TutorRequest,
@@ -46,6 +47,8 @@ import type {
 /** Track how many responses have been generated this process session for flush scheduling */
 let responseCountSinceFlush = 0
 const FLUSH_EVERY_N_RESPONSES = 5
+const TUTOR_HISTORY_MAX_MESSAGES = 6
+const TUTOR_HISTORY_SUMMARY_MAX_CHARS = 900
 
 export async function generateTutorResponse(request: TutorRequest): Promise<TutorResponse> {
   const startedAt = Date.now()
@@ -156,7 +159,9 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       analysisBlock
     )
     const baseHistory = request.conversation.slice(0, -1)
-    const history   = staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+    const history = compactConversationHistory(
+      staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+    )
     const imageDataUrl = context.screenshotDataUrl ?? null
     const sourceConfidence = buildSourceConfidence({
       context,
@@ -193,6 +198,20 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         details: { domain: domainOutput?.domain ?? 'general', cacheKey: cacheKey.slice(0, 60) }
       })
       return cached
+    }
+
+    if (sensitive || context.semanticState.change_summary === 'major') {
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'tutor',
+        action: 'cache_bypassed',
+        sessionId: context.sessionMemory.session_id,
+        details: {
+          domain: domainOutput?.domain ?? 'general',
+          reason: sensitive ? 'sensitive_context' : 'major_screen_change',
+          cacheKey: cacheKey.slice(0, 60)
+        }
+      })
     }
 
     const remoteResult = await generateWithCodexFallback({
@@ -250,6 +269,10 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         screenshotIncluded: Boolean(imageDataUrl),
         screenAgeMs,
         latencyMs,
+        systemLength: system.length,
+        promptLength: prompt.length,
+        historyCount: history.length,
+        rawHistoryCount: baseHistory.length,
         calibratedLevel: calibration.effective_level,
         calibrationReason: calibration.reason
       }
@@ -549,7 +572,9 @@ export async function generateTutorResponseStream(
     offScreen, vsCodeBlock, spotifyBlock, tradingViewBlock, newsBlock || undefined, calendarBlock, analysisBlock
   )
   const baseHistory = request.conversation.slice(0, -1)
-  const history = staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+  const history = compactConversationHistory(
+    staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+  )
   const imageDataUrl = context.screenshotDataUrl ?? null
   const sourceConfidence = buildSourceConfidence({ context, connectorsUsed })
   const dominantContextSource = determineDominantContextSource({
@@ -583,6 +608,20 @@ export async function generateTutorResponseStream(
       details: { domain: domainOutput?.domain ?? 'general', cacheKey: cacheKey.slice(0, 60) }
     })
     return cached
+  }
+
+  if (sensitive || context.semanticState.change_summary === 'major') {
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'tutor',
+      action: 'cache_bypassed',
+      sessionId: context.sessionMemory.session_id,
+      details: {
+        domain: domainOutput?.domain ?? 'general',
+        reason: sensitive ? 'sensitive_context' : 'major_screen_change',
+        cacheKey: cacheKey.slice(0, 60)
+      }
+    })
   }
 
   // Try streaming via Codex first (no streaming API — emit as single chunk when done)
@@ -714,7 +753,11 @@ export async function generateTutorResponseStream(
       mode,
       provider: remoteResult?.providerId ?? 'local',
       model: remoteResult?.model ?? 'local',
-      latencyMs
+      latencyMs,
+      systemLength: system.length,
+      promptLength: prompt.length,
+      historyCount: history.length,
+      rawHistoryCount: baseHistory.length
     }
   })
   void recordPerformanceTrace({ operation: 'tutor.respond.stream', durationMs: latencyMs, status: 'ok' })
@@ -876,4 +919,242 @@ function buildConnectorKey(connectorsUsed: ConnectorID[]): string {
   }
 
   return parts.join('|')
+}
+
+function compactConversationHistory(messages: TutorMessage[]): TutorMessage[] {
+  if (messages.length <= TUTOR_HISTORY_MAX_MESSAGES) return messages
+
+  const recentMessages = messages.slice(-(TUTOR_HISTORY_MAX_MESSAGES - 1))
+  const olderMessages = messages.slice(0, -(TUTOR_HISTORY_MAX_MESSAGES - 1))
+  const summaryContent = summarizeConversationHistory(olderMessages)
+
+  if (!summaryContent) return recentMessages
+
+  return [
+    { role: 'assistant', content: summaryContent },
+    ...recentMessages
+  ]
+}
+
+function summarizeConversationHistory(messages: TutorMessage[]): string {
+  const groupedTurns = groupConversationTurns(messages)
+  const lines: string[] = [
+    '[ConversationSummary]',
+    'Compressed older context. Prefer the recent verbatim turns if there is any conflict.'
+  ]
+  let remaining = TUTOR_HISTORY_SUMMARY_MAX_CHARS - lines.join('\n').length - 1
+
+  const summaryState = extractConversationState(groupedTurns)
+  const summaryGoal = extractConversationGoal(groupedTurns)
+  const summaryDecision = extractConversationDecision(groupedTurns)
+  const overviewLines = [
+    summaryState ? `State: ${summaryState}` : '',
+    summaryGoal ? `Goal: ${summaryGoal}` : '',
+    summaryDecision ? `Decision: ${summaryDecision}` : ''
+  ].filter(Boolean)
+
+  if (overviewLines.length && remaining > 0) {
+    const overviewBlock = overviewLines.join('\n')
+    if (overviewBlock.length <= remaining) {
+      lines.push(overviewBlock)
+      remaining -= overviewBlock.length + 1
+    }
+  }
+
+  for (const turn of groupedTurns) {
+    if (remaining <= 0) break
+
+    const turnLines = [
+      turn.user ? `User goal: ${compressHistorySnippet(turn.user, 180)}` : '',
+      turn.assistant ? `Assistant takeaway: ${compressHistorySnippet(turn.assistant, 200)}` : ''
+    ].filter(Boolean)
+
+    if (turnLines.length === 0) continue
+
+    const block = turnLines.join('\n')
+    if (block.length > remaining) {
+      const truncated = block.slice(0, Math.max(0, remaining - 3)).trim()
+      if (truncated) lines.push(`${truncated}...`)
+      break
+    }
+
+    lines.push(block)
+    remaining -= block.length + 1
+  }
+
+  const openLoops = extractOpenLoops(groupedTurns)
+  if (openLoops.length && remaining > 0) {
+    const openLoopBlock = ['Open loops:', ...openLoops.map(item => `- ${item}`)].join('\n')
+    if (openLoopBlock.length <= remaining) {
+      lines.push(openLoopBlock)
+    } else {
+      const compactOpenLoops = compressHistorySnippet(openLoops.join(' | '), Math.max(80, remaining - 16))
+      if (compactOpenLoops) {
+        lines.push(`Open loops: ${compactOpenLoops}`)
+      }
+    }
+  }
+
+  return lines.length > 2 ? lines.join('\n') : ''
+}
+
+function groupConversationTurns(messages: TutorMessage[]): Array<{
+  user: string
+  assistant: string
+}> {
+  const turns: Array<{ user: string; assistant: string }> = []
+  let pendingUser = ''
+  let pendingAssistant = ''
+
+  for (const message of messages) {
+    const normalized = normalizeHistoryContent(message.content)
+    if (!normalized) continue
+
+    if (message.role === 'user') {
+      if (pendingUser || pendingAssistant) {
+        turns.push({ user: pendingUser, assistant: pendingAssistant })
+        pendingAssistant = ''
+      }
+      pendingUser = normalized
+      continue
+    }
+
+    if (!pendingUser && pendingAssistant) {
+      pendingAssistant = `${pendingAssistant} ${normalized}`.trim()
+      continue
+    }
+
+    pendingAssistant = pendingAssistant
+      ? `${pendingAssistant} ${normalized}`.trim()
+      : normalized
+  }
+
+  if (pendingUser || pendingAssistant) {
+    turns.push({ user: pendingUser, assistant: pendingAssistant })
+  }
+
+  return turns
+}
+
+function normalizeHistoryContent(content: string): string {
+  return content
+    .replace(/```[\s\S]*?```/g, '[code]')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function compressHistorySnippet(content: string, maxLength: number): string {
+  const normalized = normalizeHistoryContent(content)
+  if (normalized.length <= maxLength) return normalized
+
+  const sentences = normalized.split(/(?<=[.!?])\s+/)
+  const parts: string[] = []
+  let length = 0
+
+  for (const sentence of sentences) {
+    const nextLength = length + sentence.length + (parts.length ? 1 : 0)
+    if (nextLength > maxLength) break
+    parts.push(sentence)
+    length = nextLength
+  }
+
+  if (parts.length) return parts.join(' ')
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trim()}...`
+}
+
+function extractOpenLoops(turns: Array<{ user: string; assistant: string }>): string[] {
+  const loops: string[] = []
+
+  for (const turn of turns) {
+    const user = turn.user.trim()
+    const assistant = turn.assistant.trim()
+    if (!user) continue
+
+    const userLooksOpen = userHasOpenLoop(user)
+    const assistantLooksResolved = assistantResolvesLoop(assistant)
+
+    if (!assistant) {
+      loops.push(compressHistorySnippet(user, 140))
+      continue
+    }
+
+    if (userLooksOpen && !assistantLooksResolved) {
+      loops.push(compressHistorySnippet(user, 140))
+    }
+  }
+
+  return dedupeHistoryItems(loops).slice(0, 3)
+}
+
+function userHasOpenLoop(content: string): boolean {
+  const normalized = content.toLowerCase()
+  return /\?$/.test(content)
+    || /\b(como|por que|porque|qual|quais|quando|onde|vale a pena|faz sentido|consegue|pode|devo|me ajuda|me explica|me mostra|pr[oó]ximo passo|o que eu faço)\b/.test(normalized)
+}
+
+function assistantResolvesLoop(content: string): boolean {
+  if (!content) return false
+  const normalized = content.toLowerCase()
+  return /\b(passo|fa[cç]a|faz|segue|tente|use|troque|resposta|resumo|explica[cç][aã]o|solu[cç][aã]o|corrige|ajusta|o ponto [ée]|na pr[aá]tica)\b/.test(normalized)
+}
+
+function dedupeHistoryItems(items: string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+
+  for (const item of items) {
+    const key = item.toLowerCase()
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    result.push(item)
+  }
+
+  return result
+}
+
+function extractConversationState(turns: Array<{ user: string; assistant: string }>): string {
+  const latestAssistant = [...turns]
+    .reverse()
+    .map(turn => turn.assistant.trim())
+    .find(Boolean)
+
+  if (!latestAssistant) return ''
+  return compressHistorySnippet(latestAssistant, 160)
+}
+
+function extractConversationGoal(turns: Array<{ user: string; assistant: string }>): string {
+  const latestUser = [...turns]
+    .reverse()
+    .map(turn => turn.user.trim())
+    .find(Boolean)
+
+  if (!latestUser) return ''
+  return compressHistorySnippet(latestUser, 140)
+}
+
+function extractConversationDecision(turns: Array<{ user: string; assistant: string }>): string {
+  const candidates: string[] = []
+
+  for (const turn of turns) {
+    const user = turn.user.trim()
+    const assistant = turn.assistant.trim()
+
+    if (userHasOpenLoop(user)) {
+      candidates.push(user)
+      continue
+    }
+
+    if (assistantSuggestsDecision(assistant)) {
+      candidates.push(assistant)
+    }
+  }
+
+  const unique = dedupeHistoryItems(candidates)
+  return unique.length ? compressHistorySnippet(unique[unique.length - 1], 150) : ''
+}
+
+function assistantSuggestsDecision(content: string): boolean {
+  if (!content) return false
+  const normalized = content.toLowerCase()
+  return /\b(deve|melhor|vale|pr[oó]ximo passo|recomendo|faz sentido|o ideal|a melhor leitura|priorize|primeiro)\b/.test(normalized)
 }

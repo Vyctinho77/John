@@ -13,19 +13,31 @@ export function buildRemoteSystemPrompt(
   offScreen = false
 ): string {
   const { userProfile, semanticState } = context
-  return [
-    buildPersonaCore(offScreen),
-    buildExecutiveModule(semanticState.uncertainty, warning),
-    buildStrategistModule(context, mode, offScreen),
-    buildGlobalIntentModule(context),
-    buildProfessorModule(userProfile, mode),
-    buildDomainVoiceModule(context),
-    buildCodeVoiceModule(context),
-    buildModeContract(mode, userProfile),
-    buildSafetyAndUncertaintyPolicy(semanticState.uncertainty, warning)
-  ]
-    .filter(Boolean)
-    .join('\n\n')
+  return joinPromptBlocks([
+    buildPromptBlock('STATIC_CORE', [
+      buildPersonaCore(offScreen),
+      buildExecutiveModule(semanticState.uncertainty, warning),
+      buildProfessorModule(userProfile, mode),
+      buildModeContract(mode, userProfile),
+      buildSafetyAndUncertaintyPolicy(semanticState.uncertainty, warning)
+    ]),
+    buildPromptBlock('DYNAMIC_CONTEXT', [
+      buildStrategistModule(context, mode, offScreen),
+      buildGlobalIntentModule(context),
+      buildDomainVoiceModule(context),
+      buildCodeVoiceModule(context)
+    ])
+  ])
+}
+
+function buildPromptBlock(label: string, lines: Array<string | undefined>): string {
+  const content = lines.filter(Boolean).join('\n')
+  if (!content) return ''
+  return `[${label}]\n${content}`
+}
+
+function joinPromptBlocks(blocks: Array<string | undefined>): string {
+  return blocks.filter(Boolean).join('\n\n')
 }
 
 export function buildRemoteUserPrompt(
@@ -44,6 +56,76 @@ export function buildRemoteUserPrompt(
   const { semanticState, sessionMemory } = context
   const keyValuesLine = formatKeyValues(semanticState.key_values)
   const codeContextBlock = formatCodeContext(semanticState.code_context)
+  const uiElements = semanticState.ui_elements ?? []
+  return joinPromptBlocks([
+    buildPromptBlock('REQUEST', [
+      offScreen
+        ? '[OFF-SCREEN QUESTION: the user is asking about a topic not currently visible on screen. Answer directly as a knowledgeable tutor. Use screen context only if genuinely relevant â€” do not force a connection.]'
+        : '',
+      `User request: ${request.prompt}`
+    ]),
+    buildPromptBlock('SCREEN_CONTEXT', [
+      `Screen summary: ${semanticState.visual_summary}`,
+      `Detected text: ${semanticState.detected_text || 'none'}`,
+      `Surface type: ${semanticState.surface_type}`,
+      `Probable focus: ${semanticState.probable_user_focus}`,
+      semanticState.visual_context
+        ? `Visual context: ${semanticState.visual_context}`
+        : '',
+      semanticState.app_identifier
+        ? `Application: ${semanticState.app_identifier}`
+        : '',
+      keyValuesLine
+        ? `Extracted values from screen: ${keyValuesLine}`
+        : '',
+      codeContextBlock,
+      uiElements.length
+        ? `UI elements visible: ${uiElements.join(', ')}`
+        : '',
+      semanticState.emotional_signal
+        ? `User emotional signal: ${semanticState.emotional_signal}`
+        : ''
+    ]),
+    buildPromptBlock('SESSION_CONTEXT', [
+      `Global intent mode: ${context.globalIntent.mode}`,
+      `Global intent confidence: ${context.globalIntent.confidence.toFixed(2)}`,
+      `Global intent guidance: ${buildGlobalIntentInstruction(context.globalIntent.mode)}`,
+      context.globalIntent.reason
+        ? `Global intent reason: ${context.globalIntent.reason}`
+        : '',
+      `Current intent: ${sessionMemory.current_intent}`,
+      `Continuity summary: ${sessionMemory.continuity_summary}`,
+      `Persistent memory: ${context.persisted_memory_summary}`,
+      context.persisted_memory_highlights.length
+        ? `Memory highlights: ${context.persisted_memory_highlights.join(' | ')}`
+        : '',
+      relevantPersistentMemory.length
+        ? `Relevant persistent memory: ${relevantPersistentMemory.join(' | ')}`
+        : '',
+      semanticState.pedagogical_topics.length
+        ? `Topics: ${semanticState.pedagogical_topics.join(', ')}`
+        : ''
+    ]),
+    buildPromptBlock('CONNECTORS', [
+      vsCodeContext ?? '',
+      spotifyContext ?? '',
+      tradingViewContext ?? '',
+      newsContext ?? '',
+      calendarContext ?? '',
+      analysisContext ?? ''
+    ]),
+    buildPromptBlock('RESPONSE_CONTRACT', [
+      domainBody ? `Domain guidance: ${domainBody}` : '',
+      'Open with the main reading or recommendation first.',
+      'Prioritize the next useful step before extra detail.',
+      'Prefer natural transitions over visible section labels.',
+      'Do not announce every section with headers like "Leitura principal", "Passo 1", or "PrÃ³ximo passo" unless the density truly requires structure.',
+      'For short and medium answers, hide the scaffold and make it read like an intelligent human explanation.',
+      keyValuesLine
+        ? 'IMPORTANT: Use ONLY the "Extracted values from screen" for any numbers, prices, metrics, or measurements. Do NOT invent, round, or guess numerical values. If a value is not in the extracted data, say you cannot read it clearly.'
+        : ''
+    ])
+  ])
   return [
     offScreen
       ? '[OFF-SCREEN QUESTION: the user is asking about a topic not currently visible on screen. Answer directly as a knowledgeable tutor. Use screen context only if genuinely relevant — do not force a connection.]'
@@ -63,8 +145,8 @@ export function buildRemoteUserPrompt(
       ? `Extracted values from screen: ${keyValuesLine}`
       : '',
     codeContextBlock,
-    semanticState.ui_elements?.length
-      ? `UI elements visible: ${semanticState.ui_elements.join(', ')}`
+    uiElements.length
+      ? `UI elements visible: ${uiElements.join(', ')}`
       : '',
     semanticState.emotional_signal
       ? `User emotional signal: ${semanticState.emotional_signal}`

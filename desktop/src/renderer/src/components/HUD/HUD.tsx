@@ -30,7 +30,6 @@ import { HudIntermediate } from './HudIntermediate'
 import { HudExpanded } from './HudExpanded'
 import { HudSidebar } from './HudSidebar'
 import { HudOperator } from './HudOperator'
-import { StreamingTimeline } from './StreamingTimeline'
 
 // ─── Conversation context window ─────────────────────────────────
 const CONVO_WINDOW       = 10   // active messages kept in memory

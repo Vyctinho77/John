@@ -46,7 +46,7 @@ const NEWS_PANEL_W = 250
 const CHAT_PANEL_MIN_W = 250
 const CHAT_PANEL_MAX_W = 420
 const MAIN_HUD_W = 840
-const FLOATING_GAP = 16
+const FLOATING_GAP = 11
 
 function buildChartUrl(symbol: string): string {
   const params = new URLSearchParams({
@@ -154,11 +154,12 @@ function NewsPanel({
               </span>
             </div>
           ) : (
-            <div className="flex flex-col gap-8">
-              {items.slice(0, 6).map((item, index) => {
+            <div className="flex flex-col gap-6">
+              {items.slice(0, 10).map((item, index) => {
                 const isHot = hotLinks.has(item.link)
                 const timeLabel = relativeTime(item.pubDate)
                 const context = deriveNewsContext(item.title, fallbackContext)
+                const sourceLabel = item.source ?? timeLabel ?? 'mercado'
 
                 return (
                   <a
@@ -171,38 +172,48 @@ function NewsPanel({
                     className="block transition-opacity hover:opacity-80"
                     style={{ textDecoration: 'none' }}
                   >
-                    {isHot ? (
-                      <p
-                        className="mb-1 text-[10px] font-semibold uppercase"
-                        style={{ color: '#ff4a4a', letterSpacing: '0.03em' }}
-                      >
-                        Agora:
-                      </p>
-                    ) : (
-                      <p
-                        className="mb-1 text-[10px] uppercase"
-                        style={{ color: 'rgba(255,255,255,0.44)', letterSpacing: '0.08em' }}
-                      >
-                        {timeLabel || 'mercado'}
-                      </p>
-                    )}
+                    <div className="mb-1 flex items-center gap-1.5">
+                      {isHot ? (
+                        <p
+                          className="text-[10px] font-semibold uppercase"
+                          style={{ color: '#ff4a4a', letterSpacing: '0.03em' }}
+                        >
+                          Agora
+                        </p>
+                      ) : (
+                        <p
+                          className="text-[10px] uppercase"
+                          style={{ color: 'rgba(255,255,255,0.44)', letterSpacing: '0.06em' }}
+                        >
+                          {sourceLabel}
+                        </p>
+                      )}
+                      {timeLabel && item.source ? (
+                        <p
+                          className="text-[9px]"
+                          style={{ color: 'rgba(255,255,255,0.28)', letterSpacing: '0.04em' }}
+                        >
+                          {timeLabel}
+                        </p>
+                      ) : null}
+                    </div>
 
                     <p
-                      className="text-[13px] font-semibold underline"
+                      className="text-[12px] font-semibold underline"
                       style={{
                         color: '#f7f7f7',
                         textUnderlineOffset: '2px',
                         lineHeight: 1.35
                       }}
                     >
-                      {clipText(item.title, 56)}
+                      {clipText(item.title, 60)}
                     </p>
 
                     <p
-                      className="mt-3 text-[12px]"
+                      className="mt-2 text-[11px]"
                       style={{
-                        color: 'rgba(255,255,255,0.92)',
-                        lineHeight: 1.55
+                        color: 'rgba(255,255,255,0.80)',
+                        lineHeight: 1.5
                       }}
                     >
                       {context}
@@ -346,7 +357,7 @@ export function HudOperator({
   const loadDiary = useCallback(async () => {
     setDiaryLoading(true)
     try {
-      const activeSymbol = symbol ?? tradingViewState?.symbol
+      const activeSymbol = symbol ?? tradingViewState?.symbol ?? undefined
       const entries = await window.analysisAPI.list(activeSymbol)
       setDiaryEntries(entries)
     } catch {
@@ -753,7 +764,7 @@ export function HudOperator({
                           <div className="w-full max-w-full">
                             {streamingSteps.length > 0 ? (
                               <div className="mb-2">
-                                <StreamingTimeline steps={streamingSteps} />
+                                <StreamingTimeline steps={streamingSteps} streamingContent={streamingContent} />
                               </div>
                             ) : null}
 

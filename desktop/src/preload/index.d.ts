@@ -198,7 +198,7 @@ declare global {
       start: () => void
       stop: () => void
       analyzeNow: () => Promise<void>
-      onAlert: (cb: (alert: import('../main/services/operator-analyst').OperatorAlert) => void) => () => void
+      onAlert: (cb: (alert: { id: string; content: string; triggeredBy: string[]; at: number }) => void) => () => void
     }
   }
 }

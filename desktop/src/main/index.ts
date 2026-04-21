@@ -828,7 +828,10 @@ ipcMain.handle('news:force-refresh', async () => {
 
 // ─── Operator analyst IPC ─────────────────────────────────────────────────────
 
-ipcMain.on('operator:start', () => operatorAnalyst.start(tradingViewService))
+ipcMain.on('operator:start', () => {
+  newsService.start()
+  operatorAnalyst.start(tradingViewService)
+})
 ipcMain.on('operator:stop',  () => operatorAnalyst.stop())
 ipcMain.handle('operator:analyze-now', () => operatorAnalyst.analyzeNow())
 

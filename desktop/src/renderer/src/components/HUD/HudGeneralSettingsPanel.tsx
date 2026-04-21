@@ -184,7 +184,7 @@ export function GeneralSettingsPanel({
   onVSCodeAction,
   onSpotifyAction,
   onTradingViewAction,
-  onOpenSpotifyClientIdCard,
+  onOpenSpotifyClientIdCard: _onOpenSpotifyClientIdCard,
   onCloseSpotifyClientIdCard,
   onSpotifyClientIdDraftChange,
   onSubmitSpotifyClientId,

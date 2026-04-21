@@ -173,11 +173,13 @@ export function SectionTitle({
 export function SettingsCard({
   children,
   className = 'mt-4 rounded-[22px] p-4',
-  elevated = false
+  elevated = false,
+  style
 }: {
   children: ReactNode
   className?: string
   elevated?: boolean
+  style?: React.CSSProperties
 }) {
   return (
     <div
@@ -186,7 +188,8 @@ export function SettingsCard({
         background: elevated
           ? 'color-mix(in srgb, var(--john-surface-overlay) 96%, transparent)'
           : 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
-        border: `1px solid ${elevated ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`
+        border: `1px solid ${elevated ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`,
+        ...style
       }}
     >
       {children}

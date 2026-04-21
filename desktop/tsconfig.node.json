@@ -12,6 +12,9 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["node", "electron-vite/node"]
+    "types": ["node", "electron-vite/node"],
+    "paths": {
+      "@shared/*": ["./src/shared/*"]
+    }
   }
 }

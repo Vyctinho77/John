@@ -18,6 +18,10 @@ import { recordDiagnosticEvent, recordPerformanceTrace } from './observability'
 // ---------------------------------------------------------------------------
 
 const VISION_TIMEOUT_MS = 28_000
+let lastVisionCache: {
+  key: string
+  analysis: VisionAnalysis
+} | null = null
 
 /**
  * Sends a screenshot to the configured Vision LLM and returns a structured
@@ -33,12 +37,30 @@ export async function analyzeScreenWithVision(
   const startedAt = Date.now()
 
   try {
+    const cacheKey = buildVisionCacheKey(screenshotDataUrl, userProfile)
+    if (lastVisionCache?.key === cacheKey) {
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'perception',
+        action: 'vision_dedup_hit',
+        details: {
+          cacheKey: cacheKey.slice(0, 48),
+          durationMs: Date.now() - startedAt
+        }
+      })
+      return {
+        ...lastVisionCache.analysis,
+        change_summary: 'none'
+      }
+    }
+
     const prompt = buildVisionPrompt(ocrText, previousText, userProfile)
 
     // Try configured AI providers first; fall back to Codex if authenticated
     let result = await withTimeout(
       generateRemoteText({
         sensitive: false,
+        feature: 'vision',
         system: VISION_SYSTEM_PROMPT,
         prompt,
         imageDataUrl: screenshotDataUrl
@@ -111,6 +133,11 @@ export async function analyzeScreenWithVision(
         durationMs: Date.now() - startedAt
       }
     })
+
+    lastVisionCache = {
+      key: cacheKey,
+      analysis
+    }
 
     return analysis
   } catch (error) {
@@ -274,6 +301,19 @@ function buildVisionPrompt(
   }
 
   return parts.join('\n')
+}
+
+function buildVisionCacheKey(dataUrl: string, userProfile: UserProfile): string {
+  const prefix = dataUrl.slice(0, 96)
+  const suffix = dataUrl.slice(-96)
+  const goals = userProfile.study_goals.slice(0, 3).join('|')
+  return [
+    userProfile.user_level,
+    goals,
+    String(dataUrl.length),
+    prefix,
+    suffix
+  ].join('::')
 }
 
 // ---------------------------------------------------------------------------

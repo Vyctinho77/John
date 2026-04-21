@@ -210,7 +210,7 @@ export const operatorAnalyst = {
     prevState = null
     lastAlertAt = 0
     lastHotNewsAt = 0
-    getStateFn = tradingViewService.getState
+    getStateFn = () => tradingViewService.getState()
     unsubscribe = tradingViewService.onStatusChange(onStateChange)
     unsubscribeNews = newsService.onUpdate(snap => {
       if (!active || !snap.hotItems.length) return

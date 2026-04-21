@@ -1,5 +1,6 @@
 import { bridgeServer } from './bridge'
 import { generateRemoteText } from './ai-provider'
+import { recordDiagnosticEvent } from './observability'
 import type {
   GlobalIntentMode,
   GlobalIntentState,
@@ -66,10 +67,29 @@ export async function resolveGlobalIntent(
   const classifierInput = buildClassifierInput(input, options)
   const previous = tracker.current
   const heuristicCandidate = deriveHeuristicIntent(classifierInput)
+  const shouldSkipRemoteClassification = !options.classify
+    && shouldSkipLLMClassification(classifierInput, previous, heuristicCandidate)
   const llmCandidate =
-    options.classify
-      ? await options.classify(classifierInput)
-      : await classifyGlobalIntent(classifierInput)
+    shouldSkipRemoteClassification
+      ? null
+      : options.classify
+        ? await options.classify(classifierInput)
+        : await classifyGlobalIntent(classifierInput)
+
+  if (shouldSkipRemoteClassification) {
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'perception',
+      action: 'global_intent_llm_skipped',
+      sessionId: input.sessionMemory.session_id,
+      details: {
+        currentMode: previous?.mode ?? 'none',
+        heuristicMode: heuristicCandidate.mode,
+        changeSummary: classifierInput.semanticState.change_summary,
+        stabilityState: previous?.stabilityState ?? 'none'
+      }
+    })
+  }
 
   const candidate = normalizeCandidate(llmCandidate) ?? buildFallbackCandidate(previous, heuristicCandidate)
   const next = applyHysteresis(previous, candidate, {
@@ -416,6 +436,20 @@ function buildClassifierPrompt(input: IntentClassifierInput): string {
         }
       : null
   })
+}
+
+function shouldSkipLLMClassification(
+  input: IntentClassifierInput,
+  previous: GlobalIntentState | null,
+  heuristicCandidate: IntentCandidate
+): boolean {
+  if (!previous) return false
+  if (input.appSwitchDetected || input.explicitOperatorMode) return false
+  if (input.semanticState.change_summary !== 'none') return false
+  if (!input.idleHint) return false
+  if (previous.stabilityState !== 'stable') return false
+  if (heuristicCandidate.mode !== previous.mode) return false
+  return true
 }
 
 function parseIntentCandidate(raw: string): IntentCandidate | null {

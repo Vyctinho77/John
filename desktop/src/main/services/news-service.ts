@@ -5,23 +5,41 @@ type NewsCallback = (snapshot: MarketNewsSnapshot) => void
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 const STALE_GRACE_MS = 10 * 60 * 1000
-const MAX_ITEMS = 8
 const MAX_PROMPT_ITEMS = 5
 const MAX_TITLE_LEN = 110
+const GLOBAL_FEED_LIMIT = 3   // items per global asset feed
+const SYMBOL_FEED_LIMIT = 5   // items for the active chart symbol
+const MAX_DISPLAY = 20        // total items shown in panel after merge
 
-const QUERY_MAP: Array<[RegExp, string]> = [
-  [/^(XAUUSD|GOLD|GC|GLD)$/i, 'gold'],
-  [/^(XAGUSD|SI)$/i, 'silver'],
-  [/^(BTCUSDT|BTCUSD|BTC)$/i, 'bitcoin'],
-  [/^(ETHUSDT|ETHUSD|ETH)$/i, 'ethereum'],
-  [/^EURUSD$/i, 'euro dollar'],
-  [/^GBPUSD$/i, 'british pound'],
-  [/^(USOIL|CL|WTIUSD)$/i, 'oil price'],
-  [/^(SPX|SPY|ES)$/i, 'S&P 500'],
-  [/^(NDX|QQQ|NQ)$/i, 'Nasdaq'],
+// Major globally traded assets — always fetched when service is active.
+// Tickers are standard Yahoo Finance symbols accepted by the RSS headline endpoint.
+const GLOBAL_FEEDS: Array<{ ticker: string; label: string }> = [
+  { ticker: 'GC=F',     label: 'Ouro' },
+  { ticker: '^GSPC',    label: 'S&P 500' },
+  { ticker: '^NDX',     label: 'Nasdaq' },
+  { ticker: 'BTC-USD',  label: 'Bitcoin' },
+  { ticker: 'EURUSD=X', label: 'EUR/USD' },
+  { ticker: 'CL=F',     label: 'Petróleo' },
+  { ticker: 'DX-Y.NYB', label: 'Dólar' },
+  { ticker: '^DJI',     label: 'Dow Jones' },
+  { ticker: 'USDJPY=X', label: 'USD/JPY' },
 ]
 
-// Score 2 = evento macro crítico, Score 1 = relevante, Score 0 = neutro
+const QUERY_MAP: Array<[RegExp, string]> = [
+  [/^(XAUUSD|GOLD|GC|GLD)$/i, 'GC=F'],
+  [/^(XAGUSD|SI)$/i, 'SI=F'],
+  [/^(BTCUSDT|BTCUSD|BTC)$/i, 'BTC-USD'],
+  [/^(ETHUSDT|ETHUSD|ETH)$/i, 'ETH-USD'],
+  [/^EURUSD$/i, 'EURUSD=X'],
+  [/^GBPUSD$/i, 'GBPUSD=X'],
+  [/^USDJPY$/i, 'USDJPY=X'],
+  [/^(USOIL|CL|WTIUSD)$/i, 'CL=F'],
+  [/^(SPX|SPY|ES)$/i, '^GSPC'],
+  [/^(NDX|QQQ|NQ)$/i, '^NDX'],
+  [/^(DJI|YM|DJIA)$/i, '^DJI'],
+]
+
+// Score 2 = critical macro event, Score 1 = relevant, Score 0 = neutral
 const HOT_THRESHOLD = 2
 
 const SCORE_RULES: Array<[RegExp, number]> = [
@@ -53,11 +71,11 @@ function resolveQuery(symbol: string): string {
   return symbol
 }
 
-function parseRssItems(xml: string): MarketNewsItem[] {
+function parseRssItems(xml: string, limit: number): MarketNewsItem[] {
   const items: MarketNewsItem[] = []
   const itemRe = /<item>([\s\S]*?)<\/item>/g
   let match: RegExpExecArray | null
-  while ((match = itemRe.exec(xml)) !== null && items.length < MAX_ITEMS) {
+  while ((match = itemRe.exec(xml)) !== null && items.length < limit) {
     const block = match[1]
     const title = (/<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(block) ?? /<title>(.*?)<\/title>/.exec(block))?.[1]?.trim() ?? ''
     const link = (/<link>(.*?)<\/link>/.exec(block))?.[1]?.trim() ?? ''
@@ -67,15 +85,17 @@ function parseRssItems(xml: string): MarketNewsItem[] {
   return items
 }
 
-function fetchHeadlines(query: string): Promise<MarketNewsItem[]> {
+function fetchHeadlines(ticker: string, source: string | undefined, limit: number): Promise<MarketNewsItem[]> {
   return new Promise(resolve => {
-    const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(query)}&region=US&lang=en-US`
+    const url = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(ticker)}&region=US&lang=en-US`
     const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
       let body = ''
       res.on('data', (chunk: Buffer) => { body += chunk.toString() })
       res.on('end', () => {
         try {
-          resolve(parseRssItems(body))
+          const items = parseRssItems(body, limit)
+          if (source) for (const item of items) item.source = source
+          resolve(items)
         } catch {
           resolve([])
         }
@@ -88,6 +108,7 @@ function fetchHeadlines(query: string): Promise<MarketNewsItem[]> {
 
 let currentSymbol = ''
 let currentQuery = ''
+let active = false
 let snapshot: MarketNewsSnapshot = { symbol: '', query: '', items: [], hotItems: [], fetchedAt: null }
 let timer: ReturnType<typeof setInterval> | null = null
 const listeners: Set<NewsCallback> = new Set()
@@ -96,9 +117,50 @@ function emit() {
   for (const cb of listeners) cb(snapshot)
 }
 
+// Returns true if the current symbol is already covered by a global feed
+// (to avoid label duplication — e.g. BTCUSD → Bitcoin is already a global feed).
+function symbolCoveredByGlobal(): boolean {
+  if (!currentQuery) return false
+  return GLOBAL_FEEDS.some(f => f.ticker === currentQuery)
+}
+
 async function doFetch() {
-  if (!currentQuery) return
-  const items = await fetchHeadlines(currentQuery)
+  if (!active) return
+
+  const fetches: Promise<MarketNewsItem[]>[] = []
+
+  // Always fetch all major global feeds in parallel
+  for (const feed of GLOBAL_FEEDS) {
+    fetches.push(fetchHeadlines(feed.ticker, feed.label, GLOBAL_FEED_LIMIT))
+  }
+
+  // Also fetch the active chart symbol unless it's already a global feed
+  if (currentQuery && !symbolCoveredByGlobal()) {
+    fetches.push(fetchHeadlines(currentQuery, currentSymbol || undefined, SYMBOL_FEED_LIMIT))
+  }
+
+  const results = await Promise.all(fetches)
+
+  // Merge across all feeds, deduplicate by link
+  const seen = new Set<string>()
+  const merged: MarketNewsItem[] = []
+  for (const items of results) {
+    for (const item of items) {
+      if (!seen.has(item.link)) {
+        seen.add(item.link)
+        merged.push(item)
+      }
+    }
+  }
+
+  // Sort most-recent first (invalid dates fall to the end)
+  merged.sort((a, b) => {
+    const ta = a.pubDate ? new Date(a.pubDate).getTime() : 0
+    const tb = b.pubDate ? new Date(b.pubDate).getTime() : 0
+    return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+  })
+
+  const items = merged.slice(0, MAX_DISPLAY)
   const hotItems = items.filter(item => scoreHeadline(item.title) >= HOT_THRESHOLD)
   snapshot = { symbol: currentSymbol, query: currentQuery, items, hotItems, fetchedAt: Date.now() }
   emit()
@@ -111,16 +173,24 @@ function startTimer() {
 }
 
 export const newsService = {
+  start() {
+    if (active) return
+    active = true
+    startTimer()
+  },
+
   setSymbol(sym: string) {
     const trimmed = sym.trim().toUpperCase()
-    if (trimmed === currentSymbol) return
+    if (trimmed === currentSymbol && active) return
     currentSymbol = trimmed
     currentQuery = trimmed ? resolveQuery(trimmed) : ''
-    snapshot = { symbol: currentSymbol, query: currentQuery, items: [], hotItems: [], fetchedAt: null }
-    if (currentQuery) {
-      startTimer()
+    if (active) {
+      // Symbol changed while running — refresh immediately
+      void doFetch()
     } else {
-      if (timer) { clearInterval(timer); timer = null }
+      // Auto-start on first setSymbol call
+      active = true
+      startTimer()
     }
   },
 
@@ -141,10 +211,11 @@ export const newsService = {
     const lines = snapshot.items
       .slice(0, MAX_PROMPT_ITEMS)
       .map((item, i) => {
+        const prefix = item.source ? `[${item.source}] ` : ''
         const t = item.title.length > MAX_TITLE_LEN ? item.title.slice(0, MAX_TITLE_LEN - 1) + '…' : item.title
-        return `[${i + 1}] ${t}`
+        return `[${i + 1}] ${prefix}${t}`
       })
-    return `--- Market News (${snapshot.symbol} / ${snapshot.query}) ---\n${lines.join('\n')}\n---`
+    return `--- Market News ---\n${lines.join('\n')}\n---`
   },
 
   hasHotNews(): boolean {
@@ -157,9 +228,11 @@ export const newsService = {
   },
 
   stop() {
+    active = false
     if (timer) { clearInterval(timer); timer = null }
     listeners.clear()
     currentSymbol = ''
     currentQuery = ''
+    snapshot = { symbol: '', query: '', items: [], hotItems: [], fetchedAt: null }
   }
 }

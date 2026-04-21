@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { TutorAction, TutorResponse, TutorStep } from '@shared/perception.types'
-import { StreamingTimeline } from './StreamingTimeline'
 import { LogoMark } from './LogoMark'
 import { SendIcon } from './SendIcon'
 import { MessageBody } from './MessageBody'
@@ -39,7 +38,7 @@ export function HudSidebar({
   messages,
   isStreaming,
   streamingContent,
-  streamingSteps = [],
+  streamingSteps: _streamingSteps = [],
   inputValue,
   onInputChange,
   onSubmit,

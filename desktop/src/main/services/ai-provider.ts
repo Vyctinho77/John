@@ -14,6 +14,7 @@ import type {
   TestAIProviderResult
 } from '../../shared/ai-provider.types'
 import { assertOpenAIBudgetAvailable, getAICostSnapshot, recordAICost } from './ai-costs'
+import { recordDiagnosticEvent } from './observability'
 
 const AI_SETTINGS_PATH = join(app.getPath('userData'), 'ai-providers.json')
 
@@ -83,7 +84,52 @@ interface RemoteChatRequest {
   feature?: AIFeatureTask
 }
 
+interface FeatureBudget {
+  maxOutputTokens: number
+  temperature: number
+}
+
+interface OpenAIPromptCacheSettings {
+  key: string
+  retention?: 'in_memory' | '24h'
+}
+
+interface AnthropicCacheSettings {
+  cacheControl: {
+    type: 'ephemeral'
+    ttl?: '5m' | '1h'
+  }
+}
+
 let cachedSettings: StoredAISettings | null = null
+
+const DEFAULT_FEATURE_BUDGET: FeatureBudget = {
+  maxOutputTokens: 700,
+  temperature: 0.35
+}
+
+const FEATURE_BUDGETS: Record<AIFeatureTask, FeatureBudget> = {
+  tutor: {
+    maxOutputTokens: 900,
+    temperature: 0.35
+  },
+  vision: {
+    maxOutputTokens: 420,
+    temperature: 0.1
+  },
+  router: {
+    maxOutputTokens: 140,
+    temperature: 0
+  },
+  title: {
+    maxOutputTokens: 80,
+    temperature: 0.2
+  },
+  stage2: {
+    maxOutputTokens: 320,
+    temperature: 0.25
+  }
+}
 
 const PROVIDER_DEFINITIONS: Record<AIProviderId, ProviderDefinition> = {
   openai: {
@@ -359,6 +405,9 @@ async function streamOpenAIChat(
 ): Promise<ProviderExecutionResult> {
   await assertOpenAIBudgetAvailable()
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
+  const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
+  const promptCache = resolveOpenAIPromptCacheSettings(model, request)
   const userContent = request.imageDataUrl
     ? [
         { type: 'text', text: request.prompt },
@@ -370,8 +419,11 @@ async function streamOpenAIChat(
     method: 'POST',
     headers: { 'content-type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel,
-      temperature: 0.35,
+      model,
+      temperature: budget.temperature,
+      max_tokens: budget.maxOutputTokens,
+      prompt_cache_key: promptCache.key,
+      ...(promptCache.retention ? { prompt_cache_retention: promptCache.retention } : {}),
       stream: true,
       stream_options: { include_usage: true },
       messages: [
@@ -384,19 +436,21 @@ async function streamOpenAIChat(
   if (!response.ok) throw new Error(`OpenAI respondeu ${response.status}.`)
   if (!response.body) throw new Error('OpenAI: resposta sem body.')
 
-  let fullText = ''
-  let usageData: {
+  type OpenAIUsage = {
     prompt_tokens?: number
     completion_tokens?: number
     prompt_tokens_details?: { cached_tokens?: number }
-  } | null = null
+  }
+
+  let fullText = ''
+  let usageData: OpenAIUsage | null = null
 
   for await (const data of parseSSELines(response.body)) {
     if (data === '[DONE]') break
     try {
       const parsed = JSON.parse(data) as {
         choices?: Array<{ delta?: { content?: string } }>
-        usage?: typeof usageData
+        usage?: OpenAIUsage
       }
       const delta = parsed.choices?.[0]?.delta?.content
       if (delta) { fullText += delta; onChunk(delta) }
@@ -405,7 +459,6 @@ async function streamOpenAIChat(
   }
 
   if (!fullText) throw new Error('OpenAI nao retornou texto.')
-  const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
   if (usageData) {
     const promptTokens = usageData.prompt_tokens ?? 0
     const completionTokens = usageData.completion_tokens ?? 0
@@ -414,6 +467,17 @@ async function streamOpenAIChat(
       providerId: 'openai', model, operation: 'chat', feature: request.feature,
       costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
       inputTokens: promptTokens, cachedInputTokens, outputTokens: completionTokens, at: Date.now()
+    })
+    void recordAIUsageDiagnostic({
+      providerId: 'openai',
+      model,
+      feature: request.feature,
+      inputTokens: promptTokens,
+      cachedInputTokens,
+      outputTokens: completionTokens,
+      appliedBudget: budget.maxOutputTokens,
+      promptCacheKey: promptCache.key,
+      promptCacheRetention: promptCache.retention ?? 'in_memory'
     })
   }
   return { providerId: 'openai', model, text: fullText }
@@ -425,6 +489,8 @@ async function streamAnthropicChat(
   onChunk: (text: string) => void
 ): Promise<ProviderExecutionResult> {
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
+  const cacheSettings = resolveAnthropicCacheSettings(request)
   const imageB64 = request.imageDataUrl ? extractBase64(request.imageDataUrl) : null
   const userContent = imageB64
     ? [
@@ -438,13 +504,15 @@ async function streamAnthropicChat(
     headers: {
       'content-type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'prompt-caching-2024-07-31'
     },
     body: JSON.stringify({
       model: provider.selectedModel ?? 'claude-sonnet-4-6',
-      max_tokens: 900,
+      max_tokens: budget.maxOutputTokens,
       stream: true,
-      system: request.system,
+      cache_control: cacheSettings.cacheControl,
+      system: [{ type: 'text', text: request.system, cache_control: cacheSettings.cacheControl }],
       messages: [
         ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userContent }
@@ -456,16 +524,38 @@ async function streamAnthropicChat(
 
   let fullText = ''
   let modelFromEvent = ''
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheCreationTokens = 0
+  let cacheReadTokens = 0
 
   for await (const data of parseSSELines(response.body)) {
     try {
       const event = JSON.parse(data) as {
         type?: string
         delta?: { type?: string; text?: string }
-        message?: { model?: string }
+        usage?: { output_tokens?: number }
+        message?: {
+          model?: string
+          usage?: {
+            input_tokens?: number
+            output_tokens?: number
+            cache_creation_input_tokens?: number
+            cache_read_input_tokens?: number
+          }
+        }
       }
-      if (event.type === 'message_start' && event.message?.model) {
-        modelFromEvent = event.message.model
+      if (event.type === 'message_start' && event.message) {
+        if (event.message.model) modelFromEvent = event.message.model
+        if (event.message.usage) {
+          inputTokens = event.message.usage.input_tokens ?? 0
+          outputTokens = event.message.usage.output_tokens ?? 0
+          cacheCreationTokens = event.message.usage.cache_creation_input_tokens ?? 0
+          cacheReadTokens = event.message.usage.cache_read_input_tokens ?? 0
+        }
+      }
+      if (event.type === 'message_delta' && event.usage) {
+        outputTokens = event.usage.output_tokens ?? outputTokens
       }
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta' && event.delta.text) {
         fullText += event.delta.text
@@ -475,11 +565,26 @@ async function streamAnthropicChat(
   }
 
   if (!fullText) throw new Error('Anthropic nao retornou texto.')
-  return {
-    providerId: 'anthropic',
-    model: modelFromEvent || provider.selectedModel || 'anthropic',
-    text: fullText
+  const model = modelFromEvent || provider.selectedModel || 'anthropic'
+  if (inputTokens > 0 || outputTokens > 0) {
+    await recordAICost({
+      providerId: 'anthropic', model, operation: 'chat', feature: request.feature,
+      costUsd: calculateAnthropicTextCost(model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens),
+      inputTokens, cachedInputTokens: cacheReadTokens, outputTokens, at: Date.now()
+    })
+    void recordAIUsageDiagnostic({
+      providerId: 'anthropic',
+      model,
+      feature: request.feature,
+      inputTokens,
+      cachedInputTokens: cacheReadTokens,
+      outputTokens,
+      cacheCreationTokens,
+      appliedBudget: budget.maxOutputTokens,
+      anthropicCacheTtl: cacheSettings.cacheControl.ttl ?? '5m'
+    })
   }
+  return { providerId: 'anthropic', model, text: fullText }
 }
 
 async function streamGeminiChat(
@@ -488,6 +593,7 @@ async function streamGeminiChat(
   onChunk: (text: string) => void
 ): Promise<ProviderExecutionResult> {
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
   const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.gemini.defaultModel ?? 'gemini-2.5-flash'
   const url = `${trimTrailingSlash(provider.baseUrl)}/models/${model}:streamGenerateContent?alt=sse&key=${encodeURIComponent(apiKey)}`
 
@@ -512,7 +618,10 @@ async function streamGeminiChat(
           ]
         }
       ],
-      generationConfig: { temperature: 0.35 }
+      generationConfig: {
+        temperature: budget.temperature,
+        maxOutputTokens: budget.maxOutputTokens
+      }
     })
   })
   if (!response.ok) throw new Error(`Gemini respondeu ${response.status}.`)
@@ -540,6 +649,7 @@ async function streamOllamaChat(
   onChunk: (text: string) => void
 ): Promise<ProviderExecutionResult> {
   const model = provider.selectedModel
+  const budget = resolveFeatureBudget(request.feature)
   if (!model) throw new Error('Selecione um modelo do Ollama antes de usar este provedor.')
 
   const response = await fetch(joinUrl(provider.baseUrl, '/api/chat'), {
@@ -547,6 +657,10 @@ async function streamOllamaChat(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       model, stream: true,
+      options: {
+        temperature: budget.temperature,
+        num_predict: budget.maxOutputTokens
+      },
       messages: [
         { role: 'system', content: request.system },
         ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
@@ -987,6 +1101,9 @@ async function sendOpenAIChat(
 ): Promise<ProviderExecutionResult> {
   await assertOpenAIBudgetAvailable()
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
+  const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
+  const promptCache = resolveOpenAIPromptCacheSettings(model, request)
   const userContent = request.imageDataUrl
     ? [
         { type: 'text', text: request.prompt },
@@ -1001,8 +1118,11 @@ async function sendOpenAIChat(
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel,
-      temperature: 0.35,
+      model,
+      temperature: budget.temperature,
+      max_tokens: budget.maxOutputTokens,
+      prompt_cache_key: promptCache.key,
+      ...(promptCache.retention ? { prompt_cache_retention: promptCache.retention } : {}),
       messages: [
         { role: 'system', content: request.system },
         ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
@@ -1026,25 +1146,36 @@ async function sendOpenAIChat(
   }
   const text = payload.choices?.[0]?.message?.content?.trim()
   if (!text) throw new Error('OpenAI nao retornou texto.')
-  const model = payload.model ?? provider.selectedModel ?? 'openai'
+  const responseModel = payload.model ?? model
   const promptTokens = payload.usage?.prompt_tokens ?? 0
   const completionTokens = payload.usage?.completion_tokens ?? 0
   const cachedInputTokens = payload.usage?.prompt_tokens_details?.cached_tokens ?? 0
   await recordAICost({
     providerId: 'openai',
-    model,
+    model: responseModel,
     operation: 'chat',
     feature: request.feature,
-    costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
+    costUsd: calculateOpenAITextCost(responseModel, promptTokens, completionTokens, cachedInputTokens),
     inputTokens: promptTokens,
     cachedInputTokens,
     outputTokens: completionTokens,
     at: Date.now()
   })
+  void recordAIUsageDiagnostic({
+    providerId: 'openai',
+    model: responseModel,
+    feature: request.feature,
+    inputTokens: promptTokens,
+    cachedInputTokens,
+    outputTokens: completionTokens,
+    appliedBudget: budget.maxOutputTokens,
+    promptCacheKey: promptCache.key,
+    promptCacheRetention: promptCache.retention ?? 'in_memory'
+  })
 
   return {
     providerId: 'openai',
-    model,
+    model: responseModel,
     text
   }
 }
@@ -1054,6 +1185,8 @@ async function sendAnthropicChat(
   request: RemoteChatRequest
 ): Promise<ProviderExecutionResult> {
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
+  const cacheSettings = resolveAnthropicCacheSettings(request)
   const imageB64 = request.imageDataUrl ? extractBase64(request.imageDataUrl) : null
   const userContent = imageB64
     ? [
@@ -1070,12 +1203,14 @@ async function sendAnthropicChat(
     headers: {
       'content-type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'prompt-caching-2024-07-31'
     },
     body: JSON.stringify({
       model: provider.selectedModel ?? 'claude-sonnet-4-6',
-      max_tokens: 900,
-      system: request.system,
+      max_tokens: budget.maxOutputTokens,
+      cache_control: cacheSettings.cacheControl,
+      system: [{ type: 'text', text: request.system, cache_control: cacheSettings.cacheControl }],
       messages: [
         ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
         { role: 'user', content: userContent }
@@ -1088,6 +1223,12 @@ async function sendAnthropicChat(
   const payload = await response.json() as {
     model?: string
     content?: Array<{ type: string; text?: string }>
+    usage?: {
+      input_tokens?: number
+      output_tokens?: number
+      cache_creation_input_tokens?: number
+      cache_read_input_tokens?: number
+    }
   }
   const text = payload.content
     ?.filter(block => block.type === 'text')
@@ -1095,11 +1236,30 @@ async function sendAnthropicChat(
     .join('\n')
     .trim()
   if (!text) throw new Error('Anthropic nao retornou texto.')
-  return {
-    providerId: 'anthropic',
-    model: payload.model ?? provider.selectedModel ?? 'anthropic',
-    text
+  const model = payload.model ?? provider.selectedModel ?? 'anthropic'
+  if (payload.usage) {
+    const inputTokens = payload.usage.input_tokens ?? 0
+    const outputTokens = payload.usage.output_tokens ?? 0
+    const cacheCreationTokens = payload.usage.cache_creation_input_tokens ?? 0
+    const cacheReadTokens = payload.usage.cache_read_input_tokens ?? 0
+    await recordAICost({
+      providerId: 'anthropic', model, operation: 'chat', feature: request.feature,
+      costUsd: calculateAnthropicTextCost(model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens),
+      inputTokens, cachedInputTokens: cacheReadTokens, outputTokens, at: Date.now()
+    })
+    void recordAIUsageDiagnostic({
+      providerId: 'anthropic',
+      model,
+      feature: request.feature,
+      inputTokens,
+      cachedInputTokens: cacheReadTokens,
+      outputTokens,
+      cacheCreationTokens,
+      appliedBudget: budget.maxOutputTokens,
+      anthropicCacheTtl: cacheSettings.cacheControl.ttl ?? '5m'
+    })
   }
+  return { providerId: 'anthropic', model, text }
 }
 
 async function sendGeminiChat(
@@ -1107,6 +1267,7 @@ async function sendGeminiChat(
   request: RemoteChatRequest
 ): Promise<ProviderExecutionResult> {
   const apiKey = requireSecret(provider)
+  const budget = resolveFeatureBudget(request.feature)
   const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.gemini.defaultModel ?? 'gemini-2.5-flash'
   const url = `${trimTrailingSlash(provider.baseUrl)}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
   const response = await fetch(url, {
@@ -1139,7 +1300,8 @@ async function sendGeminiChat(
         }
       ],
       generationConfig: {
-        temperature: 0.35
+        temperature: budget.temperature,
+        maxOutputTokens: budget.maxOutputTokens
       }
     })
   })
@@ -1167,6 +1329,7 @@ async function sendOllamaChat(
   request: RemoteChatRequest
 ): Promise<ProviderExecutionResult> {
   const model = provider.selectedModel
+  const budget = resolveFeatureBudget(request.feature)
   if (!model) {
     throw new Error('Selecione um modelo do Ollama antes de usar este provedor.')
   }
@@ -1179,6 +1342,10 @@ async function sendOllamaChat(
     body: JSON.stringify({
       model,
       stream: false,
+      options: {
+        temperature: budget.temperature,
+        num_predict: budget.maxOutputTokens
+      },
       messages: [
         { role: 'system', content: request.system },
         ...(request.messages ?? []).map(m => ({ role: m.role, content: m.content })),
@@ -1248,10 +1415,131 @@ function calculateOpenAITextCost(
   )
 }
 
+function calculateAnthropicTextCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheCreationTokens: number,
+  cacheReadTokens: number
+): number {
+  const normalized = model.toLowerCase()
+  let inputPer1M = 3.0
+  let outputPer1M = 15.0
+  if (normalized.includes('opus')) {
+    inputPer1M = 5.0; outputPer1M = 25.0
+  } else if (normalized.includes('haiku')) {
+    inputPer1M = 1.0; outputPer1M = 5.0
+  }
+  const cacheWritePer1M = inputPer1M * 1.25
+  const cacheReadPer1M = inputPer1M * 0.1
+  const billableInput = Math.max(0, inputTokens - cacheReadTokens - cacheCreationTokens)
+  return (
+    (billableInput / 1_000_000) * inputPer1M
+    + (cacheCreationTokens / 1_000_000) * cacheWritePer1M
+    + (cacheReadTokens / 1_000_000) * cacheReadPer1M
+    + (outputTokens / 1_000_000) * outputPer1M
+  )
+}
+
 function calculateEmbeddingCost(model: string, promptTokens: number): number {
   const pricing = resolveEmbeddingPricing(model)
   if (!pricing) return 0
   return (promptTokens / 1_000_000) * pricing.input
+}
+
+function resolveFeatureBudget(feature?: AIFeatureTask): FeatureBudget {
+  const budget = feature ? FEATURE_BUDGETS[feature] : null
+  return budget ?? DEFAULT_FEATURE_BUDGET
+}
+
+function resolveOpenAIPromptCacheSettings(
+  model: string,
+  request: RemoteChatRequest
+): OpenAIPromptCacheSettings {
+  const normalizedModel = model.toLowerCase()
+  const retention = supportsExtendedOpenAIPromptCache(normalizedModel) ? '24h' : undefined
+  return {
+    key: buildOpenAIPromptCacheKey(model, request),
+    retention
+  }
+}
+
+function supportsExtendedOpenAIPromptCache(normalizedModel: string): boolean {
+  return normalizedModel === 'gpt-4.1' || normalizedModel.startsWith('gpt-4.1-')
+}
+
+function buildOpenAIPromptCacheKey(model: string, request: RemoteChatRequest): string {
+  const systemPrefix = request.system.slice(0, 240)
+  const historyPrefix = (request.messages ?? [])
+    .slice(0, 2)
+    .map(message => `${message.role}:${message.content.slice(0, 120)}`)
+    .join('|')
+  const promptPrefix = request.prompt.slice(0, 120)
+  const imageMarker = request.imageDataUrl ? 'image' : 'text'
+  return [
+    request.feature ?? 'unknown',
+    model,
+    imageMarker,
+    `s${stableHash(systemPrefix)}`,
+    `h${stableHash(historyPrefix)}`,
+    `p${stableHash(promptPrefix)}`
+  ].join(':')
+}
+
+function stableHash(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function resolveAnthropicCacheSettings(request: RemoteChatRequest): AnthropicCacheSettings {
+  const shouldUseExtendedTtl = request.feature === 'tutor' && (request.messages?.length ?? 0) >= 2
+  return {
+    cacheControl: shouldUseExtendedTtl
+      ? { type: 'ephemeral', ttl: '1h' }
+      : { type: 'ephemeral' }
+  }
+}
+
+function recordAIUsageDiagnostic(input: {
+  providerId: AIProviderId
+  model: string
+  feature?: AIFeatureTask
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+  cacheCreationTokens?: number
+  appliedBudget?: number
+  promptCacheKey?: string
+  promptCacheRetention?: 'in_memory' | '24h'
+  anthropicCacheTtl?: '5m' | '1h'
+}): Promise<void> {
+  const cacheHitRate = input.inputTokens > 0
+    ? Number((input.cachedInputTokens / input.inputTokens).toFixed(4))
+    : 0
+
+  return recordDiagnosticEvent({
+    type: 'trace',
+    source: 'main',
+    action: 'usage_recorded',
+    details: {
+      provider: input.providerId,
+      model: input.model,
+      feature: input.feature ?? 'unknown',
+      inputTokens: input.inputTokens,
+      cachedInputTokens: input.cachedInputTokens,
+      cacheCreationTokens: input.cacheCreationTokens ?? 0,
+      outputTokens: input.outputTokens,
+      appliedBudget: input.appliedBudget ?? 0,
+      cacheHitRate,
+      promptCacheKey: input.promptCacheKey ?? '',
+      promptCacheRetention: input.promptCacheRetention ?? '',
+      anthropicCacheTtl: input.anthropicCacheTtl ?? ''
+    }
+  })
 }
 
 function resolveOpenAITextPricing(model: string): {

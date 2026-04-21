@@ -24,10 +24,8 @@ import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { ChatSidebar } from './ChatSidebar'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
-import { StreamingTimeline } from './StreamingTimeline'
 import {
-  SettingsNavItem,
-  SettingsRow
+  SettingsNavItem
 } from './HudSettingsPrimitives'
 import {
   AccountSettingsPanel,
@@ -44,7 +42,6 @@ import type {
   AIFeatureTask,
   AIFeatureTier,
   AIProviderId,
-  AIProviderSnapshot,
   AIRoutingSettings,
   AISettingsSnapshot,
   SaveAIProviderInput,
@@ -231,12 +228,12 @@ const FEATURE_TIER_LABELS: Record<AIFeatureTier, string> = {
 }
 
 function getCostAlertState(costs: AICostSnapshot | null): {
-  level: 'none' | 'watch' | 'danger' | 'blocked'
-  label: string | null
-  message: string | null
+  level: 'none' | 'warning' | 'danger' | 'blocked'
+  label: string
+  message: string
 } {
   if (!costs || costs.dailyLimitUsd === null || costs.dailyLimitUsd <= 0) {
-    return { level: 'none', label: null, message: null }
+    return { level: 'none', label: '', message: '' }
   }
 
   const ratio = costs.spentUsd / costs.dailyLimitUsd
@@ -259,13 +256,13 @@ function getCostAlertState(costs: AICostSnapshot | null): {
 
   if (ratio >= 0.8) {
     return {
-      level: 'watch',
+      level: 'warning',
       label: 'acima de 80%',
       message: 'O gasto diario esta entrando na faixa de atencao.'
     }
   }
 
-  return { level: 'none', label: null, message: null }
+  return { level: 'none', label: '', message: '' }
 }
 
 function MicIcon({ className }: { className?: string }) {
@@ -296,7 +293,7 @@ export const HudExpanded = memo(function HudExpanded({
   messages,
   isStreaming,
   streamingContent,
-  streamingSteps = [],
+  streamingSteps: _streamingSteps = [],
   latestResponseMeta,
   semanticState,
   sessionMemory,

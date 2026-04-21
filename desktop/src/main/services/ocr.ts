@@ -12,6 +12,44 @@ let lastOcrResult: PerceptionResult | null = null
 const OCR_LANG = 'eng+por'
 const OCR_DPI = '110'
 
+// Leptonica (the C++ image library bundled into tesseract.js via WASM) emits
+// preprocessing diagnostics straight to stderr when a frame has no clear text
+// regions — typical on charts, dashboards, or mostly-graphic UIs. They look
+// like errors ("Error in pixScanForForeground: invalid box") but OCR keeps
+// running and just returns a zero-confidence result. They're not thrown as JS
+// exceptions, so try/catch can't see them. Filter them at the process.stderr
+// level so the log stays readable without hiding real errors.
+const LEPTONICA_NOISE_PATTERNS = [
+  /Error in pixScanForForeground:/,
+  /Error in boxClipToRectangle:/,
+  /Error in pixGetBlackOrWhiteVal_/,
+  /Error in pixaGetPix:/,
+  /Error in pixReadMemPng:/
+]
+
+let stderrFilterInstalled = false
+
+function installLeptonicaStderrFilter(): void {
+  if (stderrFilterInstalled) return
+  stderrFilterInstalled = true
+
+  const originalWrite = process.stderr.write.bind(process.stderr)
+  process.stderr.write = ((chunk: unknown, ...rest: unknown[]) => {
+    const text =
+      typeof chunk === 'string'
+        ? chunk
+        : chunk instanceof Buffer
+          ? chunk.toString('utf8')
+          : ''
+
+    if (text && LEPTONICA_NOISE_PATTERNS.some(re => re.test(text))) {
+      return true
+    }
+    // @ts-expect-error — forwarding variadic signature of stream.write
+    return originalWrite(chunk, ...rest)
+  }) as typeof process.stderr.write
+}
+
 // If N consecutive full-run frames all return zero confidence (pure graphics),
 // back off for COOLDOWN_MS before trying again. This prevents Tesseract from
 // repeatedly hammering graphic frames and emitting Leptonica bbox errors.
@@ -31,6 +69,7 @@ async function getWorker(): Promise<Worker> {
 
   initializing = true
   initPromise = (async () => {
+    installLeptonicaStderrFilter()
     console.log('[ocr] Initializing tesseract worker...')
     worker = await Tesseract.createWorker(OCR_LANG, 1, {
       logger: () => {}

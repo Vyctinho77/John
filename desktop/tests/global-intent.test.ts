@@ -9,7 +9,7 @@ import {
 import type { PerceptionContextSnapshot } from '../src/shared/perception.types.ts'
 
 function makeSnapshot(
-  overrides: Partial<PerceptionContextSnapshot> & {
+  overrides: {
     semanticState?: Partial<PerceptionContextSnapshot['semanticState']>
     sessionMemory?: Partial<PerceptionContextSnapshot['sessionMemory']>
   } = {}

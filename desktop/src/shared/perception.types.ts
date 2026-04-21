@@ -560,6 +560,7 @@ export interface MarketNewsItem {
   title: string
   link: string
   pubDate: string
+  source?: string
 }
 
 export interface MarketNewsSnapshot {
