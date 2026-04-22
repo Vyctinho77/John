@@ -24,6 +24,7 @@ import type {
   AISettingsSnapshot
 } from '@shared/ai-provider.types'
 import type { AuthStatus } from '@shared/auth.types'
+import type { MarketAutonomyViewSnapshot } from '@shared/market-autonomy-view.types'
 import {
   InlineEditableRow,
   PillButton,
@@ -227,6 +228,292 @@ export function TypographySettingsPanel({
           ))}
         </div>
       </div>
+    </>
+  )
+}
+
+export function MarketAutonomySettingsPanel({
+  view,
+  loading,
+  onRefresh
+}: {
+  view: MarketAutonomyViewSnapshot | null
+  loading: boolean
+  onRefresh: () => void
+}) {
+  const snapshot = view?.snapshot ?? null
+  const strategy = view?.strategy ?? null
+  const risk = view?.riskDecision ?? null
+  const intent = view?.executionIntent ?? null
+  const idea = strategy?.idea ?? null
+  const guards = view?.marketGuards ?? {
+    hasHotNews: false,
+    macroBlocked: false,
+    hotNewsItems: [],
+    upcomingMacroEvents: []
+  }
+
+  return (
+    <>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <SectionTitle className="mb-1 text-[18px]">Mercado</SectionTitle>
+          <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
+            Snapshot, setup, risco e intenção de execução do pipeline local de autonomia.
+          </p>
+        </div>
+        <PillButton
+          onMouseDown={e => { e.preventDefault(); onRefresh() }}
+          tone="accent"
+          className="px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap"
+        >
+          {loading ? 'atualizando...' : 'atualizar'}
+        </PillButton>
+      </div>
+
+      <SettingsCard className="mt-5 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Snapshot</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Estado consolidado do mercado a partir do TradingView atual.
+            </p>
+          </div>
+          <StatusBadge tone={snapshot ? 'success' : 'neutral'}>
+            {snapshot ? 'ativo' : 'indisponível'}
+          </StatusBadge>
+        </div>
+
+        <div className="mt-4">
+          <SettingsRow label="Símbolo" value={snapshot?.symbol || 'indisponível'} />
+          <SettingsRow label="Timeframe" value={snapshot?.timeframe || 'indisponível'} />
+          <SettingsRow label="Regime" value={snapshot?.marketRegime || 'indisponível'} />
+          <SettingsRow label="Sessão" value={snapshot?.session || 'indisponível'} />
+          <SettingsRow
+            label="Último preço"
+            value={snapshot ? String(snapshot.lastPrice) : 'indisponível'}
+            last={!view?.snapshotReasons.length}
+          />
+          {view?.snapshotReasons.length ? (
+            <SettingsRow
+              label="Avisos"
+              value={view.snapshotReasons.join(', ')}
+              muted
+              last
+            />
+          ) : null}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Setup</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Resultado atual do strategy engine.
+            </p>
+          </div>
+          <StatusBadge tone={strategy?.eligible ? 'success' : 'neutral'}>
+            {strategy?.eligible ? 'candidato' : 'sem trade'}
+          </StatusBadge>
+        </div>
+
+        <div className="mt-4">
+          <SettingsRow label="Estratégia" value={strategy?.strategyId || 'indisponível'} />
+          <SettingsRow label="Status" value={strategy?.reason || 'sem avaliação'} />
+          <SettingsRow label="Lado" value={idea?.side || 'indisponível'} />
+          <SettingsRow
+            label="Confiança"
+            value={idea ? `${Math.round(idea.confidence * 100)}%` : 'indisponível'}
+          />
+          <SettingsRow
+            label="Entrada"
+            value={idea ? `${idea.entryType}${idea.entryPrice != null ? ` @ ${idea.entryPrice}` : ''}` : 'indisponível'}
+          />
+          <SettingsRow
+            label="Stop / alvo"
+            value={idea ? `${idea.stopLossPrice ?? '-'} / ${idea.takeProfitPrice ?? '-'}` : 'indisponível'}
+            last
+          />
+        </div>
+
+        {idea?.thesis && (
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.55 }}>
+            {idea.thesis}
+          </p>
+        )}
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Risco</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Decisão da policy e sizing sugerido.
+            </p>
+          </div>
+          <StatusBadge tone={risk?.allowed ? 'success' : risk ? 'danger' : 'neutral'}>
+            {risk ? (risk.allowed ? 'permitido' : 'bloqueado') : 'sem decisão'}
+          </StatusBadge>
+        </div>
+
+        <div className="mt-4">
+          <SettingsRow label="Motivo principal" value={risk?.reason || 'indisponível'} />
+          <SettingsRow
+            label="Violações"
+            value={risk?.violations.length ? risk.violations.join(', ') : 'nenhuma'}
+          />
+          <SettingsRow
+            label="Quantidade"
+            value={risk?.positionSize ? String(risk.positionSize.quantity) : 'indisponível'}
+          />
+          <SettingsRow
+            label="Risco USD"
+            value={risk?.positionSize ? `$${risk.positionSize.riskUsd.toFixed(2)}` : 'indisponível'}
+            last
+          />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Guards de mercado</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Bloqueios e alertas contextuais por notícia quente e macro próximo.
+            </p>
+          </div>
+          <StatusBadge tone={guards.macroBlocked || guards.hasHotNews ? 'danger' : 'success'}>
+            {guards.macroBlocked || guards.hasHotNews ? 'atenção' : 'limpo'}
+          </StatusBadge>
+        </div>
+
+        <div className="mt-4">
+          <SettingsRow
+            label="Hot news"
+            value={guards.hasHotNews ? `${guards.hotNewsItems.length} alerta(s)` : 'nenhuma'}
+          />
+          <SettingsRow
+            label="Macro próximo"
+            value={guards.macroBlocked ? `${guards.upcomingMacroEvents.length} evento(s)` : 'nenhum'}
+            last
+          />
+        </div>
+
+        {guards.hotNewsItems.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {guards.hotNewsItems.map(item => (
+              <div
+                key={item.link}
+                className="rounded-[14px] px-3 py-2"
+                style={{
+                  background: 'color-mix(in srgb, var(--john-danger-soft) 26%, var(--john-surface-1))',
+                  border: '1px solid color-mix(in srgb, var(--john-danger) 24%, transparent)'
+                }}
+              >
+                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)', lineHeight: 1.45 }}>
+                  {item.title}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {guards.upcomingMacroEvents.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {guards.upcomingMacroEvents.map(event => (
+              <div
+                key={`${event.title}-${event.timestamp}`}
+                className="rounded-[14px] px-3 py-2"
+                style={{
+                  background: 'color-mix(in srgb, var(--john-accent-soft) 24%, var(--john-surface-1))',
+                  border: '1px solid color-mix(in srgb, var(--john-accent) 22%, transparent)'
+                }}
+              >
+                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)', lineHeight: 1.45 }}>
+                  [{event.impact}] {event.country} {event.title}
+                </p>
+                <p className="mt-1 text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                  {new Date(event.timestamp).toLocaleString('pt-BR')}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <SectionTitle className="text-[15px]">Execução</SectionTitle>
+        <div className="mt-4">
+          <SettingsRow label="Broker" value={intent?.broker || 'paper'} />
+          <SettingsRow label="Side" value={intent?.side || 'indisponível'} />
+          <SettingsRow label="Quantidade" value={intent ? String(intent.quantity) : 'indisponível'} />
+          <SettingsRow
+            label="Ordens protetivas"
+            value={intent ? String(intent.protectiveOrders.length) : '0'}
+            last
+          />
+        </div>
+      </SettingsCard>
+
+      {(view?.invalidReason || view?.lastValidSnapshot) && (
+        <SettingsCard className="mt-4 rounded-[22px] p-4">
+          <SectionTitle className="text-[15px]">Fallback</SectionTitle>
+          <div className="mt-4">
+            <SettingsRow label="Motivo inválido" value={view?.invalidReason || 'nenhum'} />
+            <SettingsRow
+              label="Último válido"
+              value={
+                view?.lastValidSnapshot
+                  ? `${view.lastValidSnapshot.symbol} ${view.lastValidSnapshot.timeframe} ${view.lastValidSnapshot.marketRegime}`
+                  : 'nenhum'
+              }
+              last
+            />
+          </div>
+        </SettingsCard>
+      )}
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <SectionTitle className="text-[15px]">Auditoria recente</SectionTitle>
+        {view?.recentAuditTrail.length ? (
+          <div className="mt-3 flex flex-col gap-2">
+            {view.recentAuditTrail.map(record => (
+              <div
+                key={record.id}
+                className="rounded-[14px] px-3 py-2"
+                style={{
+                  background: 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
+                  border: '1px solid var(--john-border-soft)'
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px]" style={{ color: 'var(--john-text-primary)' }}>
+                    {record.phase}
+                  </span>
+                  <span className="text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                    {new Date(record.createdAt).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.45 }}>
+                  {Object.entries(record.payload)
+                    .slice(0, 4)
+                    .map(([key, value]) => `${key}: ${String(value)}`)
+                    .join(' | ')}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            Nenhum evento registrado ainda.
+          </p>
+        )}
+      </SettingsCard>
     </>
   )
 }

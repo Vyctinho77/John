@@ -387,6 +387,71 @@ Status geral: Prioridade 2 essencialmente concluída no código atual. O que res
 - [x] implementar compaction/summarization controlada
 - adicionar contagem preventiva de tokens em fluxos grandes
 
+Status geral: parcialmente concluída. A compactação do tutor já existe, mas a OpenAI ainda roda em `chat/completions` no path principal e ainda não há pré-checagem de tokens antes do envio.
+
+Leitura atual do código:
+
+- `desktop/src/main/services/ai-provider.ts` ainda usa `POST /chat/completions` para OpenAI, tanto no fluxo streaming quanto no não-streaming
+- `desktop/src/main/services/tutor.ts` já faz compaction heurística do histórico antes de reenviar contexto
+- `desktop/src/main/auth/CodexClient.ts` já conversa com endpoints no estilo Responses, o que serve como referência local de payload e parsing SSE
+- ainda não existe `max_input_tokens` efetivo nem contador preventivo centralizado por request
+
+Ordem prática para fechar esta prioridade:
+
+1. migrar primeiro o `tutor` para Responses API
+2. manter `vision` e `router` em `chat/completions` por enquanto
+3. introduzir contagem preventiva de tokens antes da chamada remota
+4. trocar a compaction atual por thresholds guiados por tokens reais
+
+Detalhamento:
+
+- `Responses API`:
+  - status atual: implementado em versão 1 no `tutor`
+  - o path OpenAI agora usa `Responses API` de forma seletiva para `feature === 'tutor'`
+  - `previous_response_id` já é reaproveitado em follow-ups textuais estáveis por sessão
+  - o estado é resetado quando a tela muda de forma relevante ou quando o fluxo volta a depender de screenshot fresca
+  - segundo marco: avaliar compaction via `/responses/compact` ou equivalente apenas quando o histórico acumulado passar de um limiar real de tokens
+  - importante: isso melhora estado conversacional e gestão de contexto, mas não substitui budget; os tokens anteriores continuam contando como input
+
+- `Compaction/summarization`:
+  - status atual: concluído em versão 1
+  - o tutor já preserva as mensagens mais recentes verbatim e comprime o histórico antigo em bloco de resumo
+  - o tutor agora também aplica compaction por orçamento estimado de input, reduzindo memória auxiliar, apertando histórico e cortando blocos secundários quando necessário
+  - a estimativa local já fica mais conservadora ao longo do tempo com base no desvio observado entre estimativa e uso real
+  - limitação atual: os estágios ainda são heurísticos e precisam de calibração com telemetria real
+
+- `Contagem preventiva de tokens`:
+  - status atual: implementado em versão 1 para OpenAI `Responses`, com fallback heurístico
+  - hoje o app já tenta `POST /responses/input_tokens` antes da request principal nos fluxos OpenAI `Responses`
+  - se esse endpoint falhar ou não responder como esperado, cai para estimativa heurística local
+  - a observabilidade já registra se a contagem veio do endpoint real ou do fallback
+  - também já existe medição de erro entre `estimatedInputTokens` e `usage.input_tokens` para calibrar thresholds
+  - falta um contador local antes do envio para decidir entre:
+    - enviar normal
+    - compactar histórico
+    - cortar anexos/contexto secundário
+    - degradar `strong -> cheap`
+    - cair em heurística
+  - melhor ponto de entrada continua sendo `generateRemoteText` e `streamRemoteText`, mas agora com prioridade para contagem real quando o provider suportar
+  - o próximo passo é espalhar essa estratégia para além do `tutor` e refinar os thresholds com base no erro observado
+
+Critérios de aceite para encerrar a Prioridade 3:
+
+- `tutor` usando Responses API de forma seletiva no path OpenAI
+- `previous_response_id` persistido por sessão curta ou conversa ativa
+- thresholds de compaction baseados em tokens estimados
+- logs/telemetria registrando `estimatedInputTokens`, motivo de compaction e motivo de degrade/skip
+- budget explícito de input por feature, além do budget de output que já existe
+
+Plano imediato de implementação:
+
+- fase 1: ligar `Responses API` só no `tutor` quando o provider efetivo for OpenAI
+- fase 1: usar `previous_response_id` apenas em follow-ups textuais estáveis, evitando reaproveitar estado antigo junto com screenshots variáveis
+- fase 1: adicionar estimativa preventiva de input tokens e logar excesso de budget antes da request
+- fase 1.5: usar `responses/input_tokens` quando disponível e medir erro contra `usage`
+- fase 2: usar esse orçamento para disparar compaction por tokens, não só por quantidade de mensagens
+- fase 3: expandir a mesma lógica para outros fluxos OpenAI onde fizer sentido
+
 ---
 
 ## Fontes oficiais

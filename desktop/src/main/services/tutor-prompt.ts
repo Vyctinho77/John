@@ -6,6 +6,12 @@ import type {
   UserProfile
 } from '../../shared/perception.types'
 
+export interface TutorPromptBlock {
+  id: 'request' | 'screen_context' | 'session_context' | 'connectors' | 'response_contract'
+  label: 'REQUEST' | 'SCREEN_CONTEXT' | 'SESSION_CONTEXT' | 'CONNECTORS' | 'RESPONSE_CONTRACT'
+  lines: string[]
+}
+
 export function buildRemoteSystemPrompt(
   mode: TutorMode,
   context: PerceptionContextSnapshot,
@@ -187,6 +193,109 @@ export function buildRemoteUserPrompt(
   ]
     .filter(Boolean)
     .join('\n')
+}
+
+export function buildRemoteUserPromptBlocks(
+  request: TutorRequest,
+  context: PerceptionContextSnapshot,
+  domainBody: string | null,
+  relevantPersistentMemory: string[] = [],
+  offScreen = false,
+  vsCodeContext?: string,
+  spotifyContext?: string,
+  tradingViewContext?: string,
+  newsContext?: string,
+  calendarContext?: string,
+  analysisContext?: string
+): TutorPromptBlock[] {
+  const { semanticState, sessionMemory } = context
+  const keyValuesLine = formatKeyValues(semanticState.key_values)
+  const codeContextBlock = formatCodeContext(semanticState.code_context)
+  const uiElements = semanticState.ui_elements ?? []
+
+  return [
+    {
+      id: 'request',
+      label: 'REQUEST',
+      lines: [
+        offScreen
+          ? '[OFF-SCREEN QUESTION: the user is asking about a topic not currently visible on screen. Answer directly as a knowledgeable tutor. Use screen context only if genuinely relevant - do not force a connection.]'
+          : '',
+        `User request: ${request.prompt}`
+      ].filter(Boolean)
+    },
+    {
+      id: 'screen_context',
+      label: 'SCREEN_CONTEXT',
+      lines: [
+        `Screen summary: ${semanticState.visual_summary}`,
+        `Detected text: ${semanticState.detected_text || 'none'}`,
+        `Surface type: ${semanticState.surface_type}`,
+        `Probable focus: ${semanticState.probable_user_focus}`,
+        semanticState.visual_context ? `Visual context: ${semanticState.visual_context}` : '',
+        semanticState.app_identifier ? `Application: ${semanticState.app_identifier}` : '',
+        keyValuesLine ? `Extracted values from screen: ${keyValuesLine}` : '',
+        codeContextBlock,
+        uiElements.length ? `UI elements visible: ${uiElements.join(', ')}` : '',
+        semanticState.emotional_signal ? `User emotional signal: ${semanticState.emotional_signal}` : ''
+      ].filter(Boolean)
+    },
+    {
+      id: 'session_context',
+      label: 'SESSION_CONTEXT',
+      lines: [
+        `Global intent mode: ${context.globalIntent.mode}`,
+        `Global intent confidence: ${context.globalIntent.confidence.toFixed(2)}`,
+        `Global intent guidance: ${buildGlobalIntentInstruction(context.globalIntent.mode)}`,
+        context.globalIntent.reason ? `Global intent reason: ${context.globalIntent.reason}` : '',
+        `Current intent: ${sessionMemory.current_intent}`,
+        `Continuity summary: ${sessionMemory.continuity_summary}`,
+        `Persistent memory: ${context.persisted_memory_summary}`,
+        context.persisted_memory_highlights.length
+          ? `Memory highlights: ${context.persisted_memory_highlights.join(' | ')}`
+          : '',
+        relevantPersistentMemory.length
+          ? `Relevant persistent memory: ${relevantPersistentMemory.join(' | ')}`
+          : '',
+        semanticState.pedagogical_topics.length
+          ? `Topics: ${semanticState.pedagogical_topics.join(', ')}`
+          : ''
+      ].filter(Boolean)
+    },
+    {
+      id: 'connectors',
+      label: 'CONNECTORS',
+      lines: [
+        vsCodeContext ?? '',
+        spotifyContext ?? '',
+        tradingViewContext ?? '',
+        newsContext ?? '',
+        calendarContext ?? '',
+        analysisContext ?? ''
+      ].filter(Boolean)
+    },
+    {
+      id: 'response_contract',
+      label: 'RESPONSE_CONTRACT',
+      lines: [
+        domainBody ? `Domain guidance: ${domainBody}` : '',
+        'Open with the main reading or recommendation first.',
+        'Prioritize the next useful step before extra detail.',
+        'Prefer natural transitions over visible section labels.',
+        'Do not announce every section with headers like "Leitura principal", "Passo 1", or "Proximo passo" unless the density truly requires structure.',
+        'For short and medium answers, hide the scaffold and make it read like an intelligent human explanation.',
+        keyValuesLine
+          ? 'IMPORTANT: Use ONLY the "Extracted values from screen" for any numbers, prices, metrics, or measurements. Do NOT invent, round, or guess numerical values. If a value is not in the extracted data, say you cannot read it clearly.'
+          : ''
+      ].filter(Boolean)
+    }
+  ]
+}
+
+export function renderTutorPromptBlocks(blocks: TutorPromptBlock[]): string {
+  return joinPromptBlocks(
+    blocks.map(block => buildPromptBlock(block.label, block.lines))
+  )
 }
 
 export function formatVSCodeConnectorContext(data: unknown): string {

@@ -46,6 +46,7 @@ import type {
   MemoryExportResult,
   MemoryImportPreview
 } from '../shared/memory.types'
+import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
 import type { StoredMessage } from '../main/services/conversation-store'
 import type { Chat, ChatMeta } from '../main/services/chat-store'
 
@@ -92,6 +93,9 @@ declare global {
       getDiagnostics: () => Promise<DiagnosticsSnapshot>
       getPrivacy: () => Promise<PrivacySnapshot>
       deleteLocalData: () => Promise<DataDeletionSummary>
+    }
+    marketAutonomyAPI: {
+      getView: () => Promise<MarketAutonomyViewSnapshot>
     }
     aiAPI: {
       getSettings: () => Promise<AISettingsSnapshot>

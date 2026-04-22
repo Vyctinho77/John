@@ -72,7 +72,13 @@ import { newsService } from './services/news-service'
 import { operatorAnalyst } from './services/operator-analyst'
 import { calendarService } from './services/calendar-service'
 import { analysisStore } from './services/analysis-store'
+import { evaluateCurrentMarketRun } from './services/market-autonomy-runner'
+import { resolveMarketAutonomyPolicy } from './services/risk-policy'
+import { PaperBroker } from './services/brokers/paper-broker'
+import { marketStateStore } from './services/market-state-store'
+import { listTradeAuditRecords } from './services/trade-audit-log'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
+import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
 
 let hudWindow: BrowserWindow | null = null
 let screenshotModeTimer: ReturnType<typeof setTimeout> | null = null
@@ -843,6 +849,57 @@ ipcMain.handle('calendar:get-snapshot', () => calendarService.getSnapshot())
 
 ipcMain.handle('analysis:list',  (_e, symbol?: string) => analysisStore.list(symbol))
 ipcMain.handle('analysis:clear', () => analysisStore.clear())
+
+ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewSnapshot> => {
+  const policy = resolveMarketAutonomyPolicy('copilot')
+  const broker = new PaperBroker()
+  const result = await evaluateCurrentMarketRun({
+    policy,
+    broker,
+    executeTrade: false
+  })
+  const storeState = marketStateStore.getState()
+  const newsSnapshot = newsService.getSnapshot()
+  const hotNewsItems = [...newsSnapshot.hotItems].slice(0, 4)
+  const upcomingMacroEvents = calendarService.getUpcoming(policy.blockNearMacroEventsMin * 60 * 1000).slice(0, 4)
+
+  return {
+    snapshot: result.snapshot,
+    snapshotReasons: result.snapshotReasons,
+    strategy: result.strategy
+      ? {
+          strategyId: result.strategy.strategyId,
+          eligible: result.strategy.eligible,
+          reason: result.strategy.reason,
+          idea: result.strategy.idea
+            ? {
+                symbol: result.strategy.idea.symbol,
+                side: result.strategy.idea.side,
+                confidence: result.strategy.idea.confidence,
+                thesis: result.strategy.idea.thesis,
+                invalidation: result.strategy.idea.invalidation,
+                entryType: result.strategy.idea.entry.type,
+                entryPrice: result.strategy.idea.entry.price,
+                stopLossPrice: result.strategy.idea.stopLoss?.price,
+                takeProfitPrice: result.strategy.idea.takeProfit?.price,
+                tags: [...result.strategy.idea.tags]
+              }
+            : null
+        }
+      : null,
+    riskDecision: result.riskDecision,
+    executionIntent: result.executionIntent,
+    marketGuards: {
+      hasHotNews: hotNewsItems.length > 0,
+      macroBlocked: upcomingMacroEvents.length > 0,
+      hotNewsItems,
+      upcomingMacroEvents
+    },
+    lastValidSnapshot: storeState.lastValid,
+    invalidReason: storeState.invalidReason,
+    recentAuditTrail: listTradeAuditRecords().slice(-6).reverse()
+  }
+})
 
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 

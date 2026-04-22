@@ -32,6 +32,7 @@ import {
   APISettingsPanel,
   DataSettingsPanel,
   GeneralSettingsPanel,
+  MarketAutonomySettingsPanel,
   NotificationsSettingsPanel,
   TypographySettingsPanel
 } from './HudSettingsPanels'
@@ -68,6 +69,7 @@ import type {
   MemoryImportMode,
   MemoryImportPreview
 } from '@shared/memory.types'
+import type { MarketAutonomyViewSnapshot } from '@shared/market-autonomy-view.types'
 import type { SpotifyPlaybackState, TickerQuote } from '../../../../preload/index.d'
 import { TutorActionChips } from './TutorActionChips'
 import { ResponseSourceBadge } from './ResponseSourceBadge'
@@ -164,7 +166,7 @@ interface HudExpandedProps {
   onEnterOperator?: () => void
 }
 
-type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography'
+type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography' | 'market'
 
 type ProviderDraftMap = Record<
   AIProviderId,
@@ -383,6 +385,8 @@ export const HudExpanded = memo(function HudExpanded({
   const [tickerCard, setTickerCard] = useState(false)
   const [tickerDraft, setTickerDraft] = useState('')
   const [chatSidebarOpen, setChatSidebarOpen] = useState(false)
+  const [marketAutonomyView, setMarketAutonomyView] = useState<MarketAutonomyViewSnapshot | null>(null)
+  const [marketAutonomyLoading, setMarketAutonomyLoading] = useState(false)
   const [codexStatus, setCodexStatus] = useState<import('@shared/auth.types').AuthStatus>({ authenticated: false })
   const [codexLoading, setCodexLoading] = useState(false)
   const [codexError, setCodexError] = useState<string | null>(null)
@@ -447,6 +451,26 @@ export const HudExpanded = memo(function HudExpanded({
       onRefreshAISettings()
     }
   }, [activeSettingsTab, onRefreshAISettings, settingsOpen])
+
+  useEffect(() => {
+    if (!settingsOpen || activeSettingsTab !== 'market') return
+    setMarketAutonomyLoading(true)
+    window.marketAutonomyAPI.getView()
+      .then(setMarketAutonomyView)
+      .finally(() => setMarketAutonomyLoading(false))
+  }, [activeSettingsTab, settingsOpen, tradingViewState?.symbol, tradingViewState?.timeframe, tradingViewState?.lastObservedAt])
+
+  useEffect(() => {
+    if (!settingsOpen || activeSettingsTab !== 'market') return
+
+    const intervalId = window.setInterval(() => {
+      window.marketAutonomyAPI.getView().then(setMarketAutonomyView).catch(() => {})
+    }, 12_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [activeSettingsTab, settingsOpen])
 
   useEffect(() => {
     if (!aiSettings) return
@@ -933,6 +957,21 @@ export const HudExpanded = memo(function HudExpanded({
       )
     }
 
+    if (activeSettingsTab === 'market') {
+      return (
+        <MarketAutonomySettingsPanel
+          view={marketAutonomyView}
+          loading={marketAutonomyLoading}
+          onRefresh={() => {
+            setMarketAutonomyLoading(true)
+            void window.marketAutonomyAPI.getView()
+              .then(setMarketAutonomyView)
+              .finally(() => setMarketAutonomyLoading(false))
+          }}
+        />
+      )
+    }
+
     if (activeSettingsTab === 'account') {
       return (
         <AccountSettingsPanel
@@ -1223,6 +1262,12 @@ export const HudExpanded = memo(function HudExpanded({
                     active={activeSettingsTab === 'typography'}
                     onClick={() => setActiveSettingsTab('typography')}
                     icon={<span className="text-[18px] leading-none">Aa</span>}
+                  />
+                  <SettingsNavItem
+                    label="Mercado"
+                    active={activeSettingsTab === 'market'}
+                    onClick={() => setActiveSettingsTab('market')}
+                    icon={<BarChart2 size={16} strokeWidth={1.75} />}
                   />
                 </div>
               </aside>

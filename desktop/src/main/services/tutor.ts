@@ -10,12 +10,13 @@ import { calendarService } from './calendar-service'
 import { analysisStore } from './analysis-store'
 import {
   buildRemoteSystemPrompt,
-  buildRemoteUserPrompt,
+  buildRemoteUserPromptBlocks,
   composeResponse,
   inferWarning,
   formatVSCodeConnectorContext,
   formatSpotifyConnectorContext,
-  formatTradingViewConnectorContext
+  formatTradingViewConnectorContext,
+  renderTutorPromptBlocks
 } from './tutor-prompt'
 import { bridgeServer } from './bridge'
 import { buildVSCodeActionsFromContext, getVSCodeConnectorData } from './vscode-command-router'
@@ -43,12 +44,16 @@ import type {
   TutorStep,
   UserProfile
 } from '../../shared/perception.types'
+import type { TutorPromptBlock } from './tutor-prompt'
 
 /** Track how many responses have been generated this process session for flush scheduling */
 let responseCountSinceFlush = 0
 const FLUSH_EVERY_N_RESPONSES = 5
 const TUTOR_HISTORY_MAX_MESSAGES = 6
 const TUTOR_HISTORY_SUMMARY_MAX_CHARS = 900
+const TUTOR_INPUT_TOKEN_BUDGET = 12_000
+const TUTOR_INPUT_TOKEN_TARGET = 10_500
+let tutorInputEstimateBias = 1
 
 export async function generateTutorResponse(request: TutorRequest): Promise<TutorResponse> {
   const startedAt = Date.now()
@@ -145,23 +150,28 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
         : ''
     ].filter(Boolean)
     const system = systemLines.join('\n\n')
-    const prompt    = buildRemoteUserPrompt(
+    const baseHistory = request.conversation.slice(0, -1)
+    const initialHistory = compactConversationHistory(
+      staleContextGuarded ? baseHistory.slice(-2) : baseHistory
+    )
+    const budgetedContext = buildBudgetedTutorContext({
       request,
-      effectiveContext,
-      domainOutput?.content ?? null,
-      [...relevantPersistentMemory, ...behaviorSummaryLines],
+      context: effectiveContext,
+      domainBody: domainOutput?.content ?? null,
+      relevantMemoryLines: [...relevantPersistentMemory, ...behaviorSummaryLines],
       offScreen,
       vsCodeBlock,
       spotifyBlock,
       tradingViewBlock,
-      newsBlock || undefined,
+      newsBlock: newsBlock || undefined,
       calendarBlock,
-      analysisBlock
-    )
-    const baseHistory = request.conversation.slice(0, -1)
-    const history = compactConversationHistory(
-      staleContextGuarded ? baseHistory.slice(-2) : baseHistory
-    )
+      analysisBlock,
+      system,
+      history: initialHistory,
+      imageDataUrl: context.screenshotDataUrl ?? null
+    })
+    const prompt = budgetedContext.prompt
+    const history = budgetedContext.history
     const imageDataUrl = context.screenshotDataUrl ?? null
     const sourceConfidence = buildSourceConfidence({
       context,
@@ -214,16 +224,40 @@ export async function generateTutorResponse(request: TutorRequest): Promise<Tuto
       })
     }
 
+    if (budgetedContext.compactionStage !== 'full') {
+      void recordDiagnosticEvent({
+        type: 'trace',
+        source: 'tutor',
+        action: 'prompt_compacted',
+        sessionId: context.sessionMemory.session_id,
+        details: {
+          domain: domainOutput?.domain ?? 'general',
+          stage: budgetedContext.compactionStage,
+          estimatedInputTokens: budgetedContext.estimatedInputTokens,
+          budgetTarget: TUTOR_INPUT_TOKEN_TARGET,
+          estimateBias: tutorInputEstimateBias,
+          promptBlocks: budgetedContext.blocks.map(block => block.id).join(',')
+        }
+      })
+    }
+
     const remoteResult = await generateWithCodexFallback({
       sensitive,
       system,
       prompt,
       history,
       imageDataUrl,
+      conversationKey: context.sessionMemory.session_id,
+      allowResponseState: !imageDataUrl && !staleContextGuarded,
+      resetResponseState: staleContextGuarded || context.semanticState.change_summary === 'major',
       screenCapturedAt: context.semanticState.capturedAt,
       screenChangeSummary: context.semanticState.change_summary,
       screenVisualSummary: context.semanticState.visual_summary
     })
+    updateTutorInputEstimateBias(
+      budgetedContext.estimatedInputTokens,
+      remoteResult?.actualInputTokens
+    )
     const content = remoteResult?.text?.trim() || localContent
     const latencyMs = Date.now() - startedAt
 
@@ -367,6 +401,9 @@ async function generateWithCodexFallback(input: {
   prompt: string
   history: Array<{ role: 'user' | 'assistant'; content: string }>
   imageDataUrl: string | null
+  conversationKey: string
+  allowResponseState: boolean
+  resetResponseState: boolean
   screenCapturedAt: number
   screenChangeSummary: PerceptionContextSnapshot['semanticState']['change_summary']
   screenVisualSummary: string
@@ -427,7 +464,10 @@ async function generateWithCodexFallback(input: {
     prompt: input.prompt,
     messages: input.history,
     imageDataUrl: input.imageDataUrl,
-    feature: 'tutor'
+    feature: 'tutor',
+    conversationKey: input.conversationKey,
+    allowResponseState: input.allowResponseState,
+    resetResponseState: input.resetResponseState
   })
 }
 
@@ -468,7 +508,7 @@ function buildFollowUps(mode: TutorMode, context: PerceptionContextSnapshot): st
   return [...followUps].slice(0, 4)
 }
 
-export { buildRemoteSystemPrompt, buildRemoteUserPrompt, composeResponse }
+export { buildRemoteSystemPrompt, buildRemoteUserPromptBlocks, renderTutorPromptBlocks, composeResponse }
 
 // ─── Streaming tutor response — same pipeline with step + chunk callbacks ─────
 
@@ -566,15 +606,28 @@ export async function generateTutorResponseStream(
       : ''
   ].filter(Boolean)
   const system = systemLines.join('\n\n')
-  const prompt = buildRemoteUserPrompt(
-    request, effectiveContext, domainOutput?.content ?? null,
-    [...relevantPersistentMemory, ...behaviorSummaryLines],
-    offScreen, vsCodeBlock, spotifyBlock, tradingViewBlock, newsBlock || undefined, calendarBlock, analysisBlock
-  )
   const baseHistory = request.conversation.slice(0, -1)
-  const history = compactConversationHistory(
+  const initialHistory = compactConversationHistory(
     staleContextGuarded ? baseHistory.slice(-2) : baseHistory
   )
+  const budgetedContext = buildBudgetedTutorContext({
+    request,
+    context: effectiveContext,
+    domainBody: domainOutput?.content ?? null,
+    relevantMemoryLines: [...relevantPersistentMemory, ...behaviorSummaryLines],
+    offScreen,
+    vsCodeBlock,
+    spotifyBlock,
+    tradingViewBlock,
+    newsBlock: newsBlock || undefined,
+    calendarBlock,
+    analysisBlock,
+    system,
+    history: initialHistory,
+    imageDataUrl: context.screenshotDataUrl ?? null
+  })
+  const prompt = budgetedContext.prompt
+  const history = budgetedContext.history
   const imageDataUrl = context.screenshotDataUrl ?? null
   const sourceConfidence = buildSourceConfidence({ context, connectorsUsed })
   const dominantContextSource = determineDominantContextSource({
@@ -625,6 +678,23 @@ export async function generateTutorResponseStream(
   }
 
   // Try streaming via Codex first (no streaming API — emit as single chunk when done)
+  if (budgetedContext.compactionStage !== 'full') {
+    void recordDiagnosticEvent({
+      type: 'trace',
+      source: 'tutor',
+      action: 'prompt_compacted',
+      sessionId: context.sessionMemory.session_id,
+      details: {
+        domain: domainOutput?.domain ?? 'general',
+        stage: budgetedContext.compactionStage,
+        estimatedInputTokens: budgetedContext.estimatedInputTokens,
+        budgetTarget: TUTOR_INPUT_TOKEN_TARGET,
+        estimateBias: tutorInputEstimateBias,
+        promptBlocks: budgetedContext.blocks.map(block => block.id).join(',')
+      }
+    })
+  }
+
   if (!sensitive && codexAuth.getStatus().authenticated) {
     try {
       const shouldTrimHistoryForFreshScreen = Boolean(imageDataUrl) && context.semanticState.change_summary === 'major'
@@ -673,7 +743,17 @@ export async function generateTutorResponseStream(
   if (!remoteResult) {
     let firstChunk = true
     remoteResult = await streamRemoteText(
-      { sensitive, system, prompt, messages: history, imageDataUrl, feature: 'tutor' },
+      {
+        sensitive,
+        system,
+        prompt,
+        messages: history,
+        imageDataUrl,
+        feature: 'tutor',
+        conversationKey: context.sessionMemory.session_id,
+        allowResponseState: !imageDataUrl && !staleContextGuarded,
+        resetResponseState: staleContextGuarded || context.semanticState.change_summary === 'major'
+      },
       (chunk) => {
         if (firstChunk) {
           firstChunk = false
@@ -683,6 +763,11 @@ export async function generateTutorResponseStream(
       }
     )
   }
+
+  updateTutorInputEstimateBias(
+    budgetedContext.estimatedInputTokens,
+    remoteResult?.actualInputTokens
+  )
 
   onStep({ id: 'generate', label: 'Gerando resposta', status: 'done' })
 
@@ -921,12 +1006,179 @@ function buildConnectorKey(connectorsUsed: ConnectorID[]): string {
   return parts.join('|')
 }
 
-function compactConversationHistory(messages: TutorMessage[]): TutorMessage[] {
-  if (messages.length <= TUTOR_HISTORY_MAX_MESSAGES) return messages
+function buildBudgetedTutorContext(input: {
+  request: TutorRequest
+  context: PerceptionContextSnapshot
+  domainBody: string | null
+  relevantMemoryLines: string[]
+  offScreen: boolean
+  vsCodeBlock?: string
+  spotifyBlock?: string
+  tradingViewBlock?: string
+  newsBlock?: string
+  calendarBlock?: string
+  analysisBlock?: string
+  system: string
+  history: TutorMessage[]
+  imageDataUrl: string | null
+}): {
+  prompt: string
+  blocks: TutorPromptBlock[]
+  history: TutorMessage[]
+  estimatedInputTokens: number
+  compactionStage: 'full' | 'memory_trimmed' | 'history_compacted' | 'connector_trimmed'
+} {
+  const estimate = (prompt: string, history: TutorMessage[]): number => estimateTutorInputTokens({
+    system: input.system,
+    prompt,
+    history,
+    imageDataUrl: input.imageDataUrl
+  })
 
-  const recentMessages = messages.slice(-(TUTOR_HISTORY_MAX_MESSAGES - 1))
-  const olderMessages = messages.slice(0, -(TUTOR_HISTORY_MAX_MESSAGES - 1))
-  const summaryContent = summarizeConversationHistory(olderMessages)
+  const buildBlocks = (overrides?: {
+    relevantMemoryLines?: string[]
+    spotifyBlock?: string | null
+    newsBlock?: string | null
+    calendarBlock?: string | null
+    analysisBlock?: string | null
+  }): TutorPromptBlock[] => buildRemoteUserPromptBlocks(
+    input.request,
+    input.context,
+    input.domainBody,
+    overrides?.relevantMemoryLines ?? input.relevantMemoryLines,
+    input.offScreen,
+    input.vsCodeBlock,
+    overrides?.spotifyBlock !== undefined ? overrides.spotifyBlock ?? undefined : input.spotifyBlock,
+    input.tradingViewBlock,
+    overrides?.newsBlock !== undefined ? overrides.newsBlock ?? undefined : input.newsBlock,
+    overrides?.calendarBlock !== undefined ? overrides.calendarBlock ?? undefined : input.calendarBlock,
+    overrides?.analysisBlock !== undefined ? overrides.analysisBlock ?? undefined : input.analysisBlock
+  )
+
+  const fullBlocks = buildBlocks()
+  const fullPrompt = renderTutorPromptBlocks(fullBlocks)
+  const fullEstimate = estimate(fullPrompt, input.history)
+  if (fullEstimate <= TUTOR_INPUT_TOKEN_TARGET) {
+    return {
+      prompt: fullPrompt,
+      blocks: fullBlocks,
+      history: input.history,
+      estimatedInputTokens: fullEstimate,
+      compactionStage: 'full'
+    }
+  }
+
+  const trimmedMemoryLines = compactPromptSupportLines(input.relevantMemoryLines, 360)
+  const memoryTrimmedBlocks = buildBlocks({ relevantMemoryLines: trimmedMemoryLines })
+  const memoryTrimmedPrompt = renderTutorPromptBlocks(memoryTrimmedBlocks)
+  const memoryTrimmedEstimate = estimate(memoryTrimmedPrompt, input.history)
+  if (memoryTrimmedEstimate <= TUTOR_INPUT_TOKEN_TARGET) {
+    return {
+      prompt: memoryTrimmedPrompt,
+      blocks: memoryTrimmedBlocks,
+      history: input.history,
+      estimatedInputTokens: memoryTrimmedEstimate,
+      compactionStage: 'memory_trimmed'
+    }
+  }
+
+  const tighterHistory = compactConversationHistory(input.history, {
+    maxMessages: 4,
+    summaryMaxChars: 520
+  })
+  const historyCompactedEstimate = estimate(memoryTrimmedPrompt, tighterHistory)
+  if (historyCompactedEstimate <= TUTOR_INPUT_TOKEN_TARGET || historyCompactedEstimate <= TUTOR_INPUT_TOKEN_BUDGET) {
+    return {
+      prompt: memoryTrimmedPrompt,
+      blocks: memoryTrimmedBlocks,
+      history: tighterHistory,
+      estimatedInputTokens: historyCompactedEstimate,
+      compactionStage: 'history_compacted'
+    }
+  }
+
+  const connectorTrimmedBlocks = buildBlocks({
+    relevantMemoryLines: trimmedMemoryLines,
+    spotifyBlock: null,
+    newsBlock: null,
+    calendarBlock: null,
+    analysisBlock: null
+  })
+  const connectorTrimmedPrompt = renderTutorPromptBlocks(connectorTrimmedBlocks)
+  return {
+    prompt: connectorTrimmedPrompt,
+    blocks: connectorTrimmedBlocks,
+    history: tighterHistory,
+    estimatedInputTokens: estimate(connectorTrimmedPrompt, tighterHistory),
+    compactionStage: 'connector_trimmed'
+  }
+}
+
+function compactPromptSupportLines(lines: string[], maxChars: number): string[] {
+  const result: string[] = []
+  let remaining = maxChars
+
+  for (const line of lines) {
+    const normalized = normalizeHistoryContent(line)
+    if (!normalized || remaining <= 0) break
+    const compacted = compressHistorySnippet(normalized, Math.min(remaining, 160))
+    if (!compacted) continue
+    result.push(compacted)
+    remaining -= compacted.length + 3
+  }
+
+  return result
+}
+
+function estimateTutorInputTokens(input: {
+  system: string
+  prompt: string
+  history: TutorMessage[]
+  imageDataUrl: string | null
+}): number {
+  let charCount = input.system.length + input.prompt.length
+
+  for (const message of input.history) {
+    charCount += message.content.length + 12
+  }
+
+  if (input.imageDataUrl) {
+    charCount += 1_200
+  }
+
+  const rawEstimate = Math.max(1, Math.ceil(charCount / 4))
+  return Math.max(1, Math.ceil(rawEstimate * tutorInputEstimateBias))
+}
+
+function updateTutorInputEstimateBias(
+  estimatedInputTokens: number,
+  actualInputTokens?: number
+): void {
+  if (!actualInputTokens || estimatedInputTokens <= 0 || actualInputTokens <= 0) return
+
+  const ratio = clampTutorBias(actualInputTokens / estimatedInputTokens)
+  tutorInputEstimateBias = Number((tutorInputEstimateBias * 0.72 + ratio * 0.28).toFixed(3))
+}
+
+function clampTutorBias(value: number): number {
+  return Math.max(1, Math.min(1.6, value))
+}
+
+function compactConversationHistory(
+  messages: TutorMessage[],
+  options: {
+    maxMessages?: number
+    summaryMaxChars?: number
+  } = {}
+): TutorMessage[] {
+  const maxMessages = options.maxMessages ?? TUTOR_HISTORY_MAX_MESSAGES
+  const summaryMaxChars = options.summaryMaxChars ?? TUTOR_HISTORY_SUMMARY_MAX_CHARS
+
+  if (messages.length <= maxMessages) return messages
+
+  const recentMessages = messages.slice(-(maxMessages - 1))
+  const olderMessages = messages.slice(0, -(maxMessages - 1))
+  const summaryContent = summarizeConversationHistory(olderMessages, summaryMaxChars)
 
   if (!summaryContent) return recentMessages
 
@@ -936,13 +1188,13 @@ function compactConversationHistory(messages: TutorMessage[]): TutorMessage[] {
   ]
 }
 
-function summarizeConversationHistory(messages: TutorMessage[]): string {
+function summarizeConversationHistory(messages: TutorMessage[], summaryMaxChars = TUTOR_HISTORY_SUMMARY_MAX_CHARS): string {
   const groupedTurns = groupConversationTurns(messages)
   const lines: string[] = [
     '[ConversationSummary]',
     'Compressed older context. Prefer the recent verbatim turns if there is any conflict.'
   ]
-  let remaining = TUTOR_HISTORY_SUMMARY_MAX_CHARS - lines.join('\n').length - 1
+  let remaining = summaryMaxChars - lines.join('\n').length - 1
 
   const summaryState = extractConversationState(groupedTurns)
   const summaryGoal = extractConversationGoal(groupedTurns)

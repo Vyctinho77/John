@@ -34,6 +34,7 @@ import type {
   MemoryExportResult,
   MemoryImportPreview
 } from '../shared/memory.types'
+import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
 
 const hudAPI = {
   resize:    (width: number, height: number) => ipcRenderer.send('hud:resize', { width, height }),
@@ -122,6 +123,10 @@ const settingsAPI = {
   getDiagnostics: () => ipcRenderer.invoke('diagnostics:get'),
   getPrivacy: () => ipcRenderer.invoke('privacy:get'),
   deleteLocalData: () => ipcRenderer.invoke('privacy:delete-local-data')
+}
+
+const marketAutonomyAPI = {
+  getView: (): Promise<MarketAutonomyViewSnapshot> => ipcRenderer.invoke('market-autonomy:get-view')
 }
 
 const aiAPI = {
@@ -334,6 +339,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('perceptionAPI', perceptionAPI)
     contextBridge.exposeInMainWorld('tutorAPI', tutorAPI)
     contextBridge.exposeInMainWorld('settingsAPI', settingsAPI)
+    contextBridge.exposeInMainWorld('marketAutonomyAPI', marketAutonomyAPI)
     contextBridge.exposeInMainWorld('aiAPI', aiAPI)
     contextBridge.exposeInMainWorld('proactiveAPI', proactiveAPI)
     contextBridge.exposeInMainWorld('memoryAPI', memoryAPI)
@@ -364,6 +370,8 @@ if (process.contextIsolated) {
   window.tutorAPI = tutorAPI
   // @ts-ignore
   window.settingsAPI = settingsAPI
+  // @ts-ignore
+  window.marketAutonomyAPI = marketAutonomyAPI
   // @ts-ignore
   window.aiAPI = aiAPI
   // @ts-ignore

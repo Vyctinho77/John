@@ -14,7 +14,18 @@ import type {
   TestAIProviderResult
 } from '../../shared/ai-provider.types'
 import { assertOpenAIBudgetAvailable, getAICostSnapshot, recordAICost } from './ai-costs'
+import {
+  getOpenAIConversationResponseId,
+  resetOpenAIConversationResponseId,
+  setOpenAIConversationResponseId
+} from './ai-conversation-state'
+import { resolveFeatureBudget, type FeatureBudget } from './ai-budget-policy'
 import { recordDiagnosticEvent } from './observability'
+import {
+  buildOpenAIResponsesInput,
+  resolveOpenAIInputTokenEstimate,
+  shouldUseOpenAIResponsesAPI
+} from './ai-token-meter'
 
 const AI_SETTINGS_PATH = join(app.getPath('userData'), 'ai-providers.json')
 
@@ -69,6 +80,9 @@ export interface ProviderExecutionResult {
   providerId: AIProviderId
   model: string
   text: string
+  responseId?: string
+  estimatedInputTokens?: number
+  actualInputTokens?: number
 }
 
 export interface OpenAIEmbeddingAvailability {
@@ -82,11 +96,9 @@ interface RemoteChatRequest {
   imageDataUrl?: string | null
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>
   feature?: AIFeatureTask
-}
-
-interface FeatureBudget {
-  maxOutputTokens: number
-  temperature: number
+  conversationKey?: string
+  allowResponseState?: boolean
+  resetResponseState?: boolean
 }
 
 interface OpenAIPromptCacheSettings {
@@ -102,34 +114,6 @@ interface AnthropicCacheSettings {
 }
 
 let cachedSettings: StoredAISettings | null = null
-
-const DEFAULT_FEATURE_BUDGET: FeatureBudget = {
-  maxOutputTokens: 700,
-  temperature: 0.35
-}
-
-const FEATURE_BUDGETS: Record<AIFeatureTask, FeatureBudget> = {
-  tutor: {
-    maxOutputTokens: 900,
-    temperature: 0.35
-  },
-  vision: {
-    maxOutputTokens: 420,
-    temperature: 0.1
-  },
-  router: {
-    maxOutputTokens: 140,
-    temperature: 0
-  },
-  title: {
-    maxOutputTokens: 80,
-    temperature: 0.2
-  },
-  stage2: {
-    maxOutputTokens: 320,
-    temperature: 0.25
-  }
-}
 
 const PROVIDER_DEFINITIONS: Record<AIProviderId, ProviderDefinition> = {
   openai: {
@@ -343,6 +327,9 @@ export async function streamRemoteText(
     imageDataUrl?: string | null
     messages?: Array<{ role: 'user' | 'assistant'; content: string }>
     feature?: AIFeatureTask
+    conversationKey?: string
+    allowResponseState?: boolean
+    resetResponseState?: boolean
   },
   onChunk: (text: string) => void
 ): Promise<ProviderExecutionResult | null> {
@@ -360,7 +347,10 @@ export async function streamRemoteText(
     prompt: input.prompt,
     imageDataUrl: input.imageDataUrl,
     messages: input.messages,
-    feature: input.feature
+    feature: input.feature,
+    conversationKey: input.conversationKey,
+    allowResponseState: input.allowResponseState,
+    resetResponseState: input.resetResponseState
   }
 
   if (settings.routing.preferLocalForSensitive && input.sensitive) {
@@ -407,6 +397,45 @@ async function streamOpenAIChat(
   const apiKey = requireSecret(provider)
   const budget = resolveFeatureBudget(request.feature)
   const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
+  const usingResponsesApi = shouldUseOpenAIResponsesAPI(model, request)
+  if (request.resetResponseState && request.conversationKey) {
+    resetOpenAIConversationResponseId(request.conversationKey)
+  }
+  const previousResponseId =
+    usingResponsesApi && request.allowResponseState && request.conversationKey
+      ? getOpenAIConversationResponseId(request.conversationKey)
+      : null
+  const inputEstimate = await resolveOpenAIInputTokenEstimate({
+    baseUrl: provider.baseUrl,
+    apiKey,
+    model,
+    request,
+    previousResponseId,
+    usingResponsesApi
+  })
+  const estimatedInputTokens = inputEstimate.estimatedInputTokens
+  void recordOpenAIInputBudgetDiagnostic({
+    feature: request.feature,
+    model,
+    estimatedInputTokens,
+    maxInputTokens: budget.maxInputTokens,
+    conversationKey: request.conversationKey,
+    usingResponsesApi,
+    usedPreviousResponseState: Boolean(previousResponseId),
+    usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint
+  })
+
+  if (usingResponsesApi) {
+    return streamOpenAIResponses(provider, request, onChunk, {
+      apiKey,
+      budget,
+      model,
+      estimatedInputTokens,
+      usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint,
+      previousResponseId
+    })
+  }
+
   const promptCache = resolveOpenAIPromptCacheSettings(model, request)
   const userContent = request.imageDataUrl
     ? [
@@ -436,12 +465,6 @@ async function streamOpenAIChat(
   if (!response.ok) throw new Error(`OpenAI respondeu ${response.status}.`)
   if (!response.body) throw new Error('OpenAI: resposta sem body.')
 
-  type OpenAIUsage = {
-    prompt_tokens?: number
-    completion_tokens?: number
-    prompt_tokens_details?: { cached_tokens?: number }
-  }
-
   let fullText = ''
   let usageData: OpenAIUsage | null = null
 
@@ -460,27 +483,162 @@ async function streamOpenAIChat(
 
   if (!fullText) throw new Error('OpenAI nao retornou texto.')
   if (usageData) {
-    const promptTokens = usageData.prompt_tokens ?? 0
-    const completionTokens = usageData.completion_tokens ?? 0
-    const cachedInputTokens = usageData.prompt_tokens_details?.cached_tokens ?? 0
+    const { inputTokens, outputTokens, cachedInputTokens } = resolveOpenAIUsageMetrics(usageData)
+    void recordOpenAIInputEstimateAccuracy({
+      model,
+      feature: request.feature,
+      estimatedInputTokens,
+      actualInputTokens: inputTokens,
+      usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint,
+      usingResponsesApi: false
+    })
     await recordAICost({
       providerId: 'openai', model, operation: 'chat', feature: request.feature,
-      costUsd: calculateOpenAITextCost(model, promptTokens, completionTokens, cachedInputTokens),
-      inputTokens: promptTokens, cachedInputTokens, outputTokens: completionTokens, at: Date.now()
+      costUsd: calculateOpenAITextCost(model, inputTokens, outputTokens, cachedInputTokens),
+      inputTokens, cachedInputTokens, outputTokens, at: Date.now()
     })
     void recordAIUsageDiagnostic({
       providerId: 'openai',
       model,
       feature: request.feature,
-      inputTokens: promptTokens,
+      inputTokens,
       cachedInputTokens,
-      outputTokens: completionTokens,
+      outputTokens,
       appliedBudget: budget.maxOutputTokens,
+      maxInputTokens: budget.maxInputTokens,
+      estimatedInputTokens,
       promptCacheKey: promptCache.key,
-      promptCacheRetention: promptCache.retention ?? 'in_memory'
+      promptCacheRetention: promptCache.retention ?? 'in_memory',
+      usingResponsesApi: false,
+      usedPreviousResponseState: false,
+      usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint
     })
   }
-  return { providerId: 'openai', model, text: fullText }
+  return {
+    providerId: 'openai',
+    model,
+    text: fullText,
+    estimatedInputTokens,
+    actualInputTokens: usageData ? resolveOpenAIUsageMetrics(usageData).inputTokens : undefined
+  }
+}
+
+async function streamOpenAIResponses(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  onChunk: (text: string) => void,
+  context: {
+    apiKey: string
+    budget: FeatureBudget
+    model: string
+    estimatedInputTokens: number
+    usedInputTokenCountEndpoint: boolean
+    previousResponseId: string | null
+  }
+): Promise<ProviderExecutionResult> {
+  const payload = buildOpenAIResponsesPayload({
+    model: context.model,
+    request,
+    budget: context.budget,
+    previousResponseId: context.previousResponseId,
+    stream: true
+  })
+  const promptCache = resolveOpenAIPromptCacheSettings(context.model, request)
+  const response = await fetch(joinUrl(provider.baseUrl, '/responses'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${context.apiKey}`
+    },
+    body: JSON.stringify(payload)
+  })
+  if (!response.ok) throw new Error(`OpenAI responses respondeu ${response.status}.`)
+  if (!response.body) throw new Error('OpenAI responses: resposta sem body.')
+
+  let fullText = ''
+  let responseId = ''
+  let usageData: OpenAIUsage | null = null
+
+  for await (const data of parseSSELines(response.body)) {
+    if (data === '[DONE]') break
+    try {
+      const parsed = JSON.parse(data) as {
+        type?: string
+        delta?: string
+        response?: {
+          id?: string
+          usage?: OpenAIUsage
+          output?: OpenAIResponsesOutputItem[]
+        }
+      }
+      if (parsed.type === 'response.output_text.delta' && parsed.delta) {
+        fullText += parsed.delta
+        onChunk(parsed.delta)
+      }
+      if (parsed.type === 'response.completed' && parsed.response) {
+        responseId = parsed.response.id ?? responseId
+        usageData = parsed.response.usage ?? usageData
+        if (!fullText) {
+          fullText = extractOpenAIResponseText(parsed.response.output)
+        }
+      }
+    } catch {
+      // skip malformed lines
+    }
+  }
+
+  if (!fullText) throw new Error('OpenAI responses nao retornou texto.')
+  if (request.conversationKey && request.allowResponseState && responseId) {
+    setOpenAIConversationResponseId(request.conversationKey, responseId)
+  }
+  if (usageData) {
+    const { inputTokens, outputTokens, cachedInputTokens } = resolveOpenAIUsageMetrics(usageData)
+    void recordOpenAIInputEstimateAccuracy({
+      model: context.model,
+      feature: request.feature,
+      estimatedInputTokens: context.estimatedInputTokens,
+      actualInputTokens: inputTokens,
+      usedInputTokenCountEndpoint: context.usedInputTokenCountEndpoint,
+      usingResponsesApi: true
+    })
+    await recordAICost({
+      providerId: 'openai',
+      model: context.model,
+      operation: 'chat',
+      feature: request.feature,
+      costUsd: calculateOpenAITextCost(context.model, inputTokens, outputTokens, cachedInputTokens),
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      at: Date.now()
+    })
+    void recordAIUsageDiagnostic({
+      providerId: 'openai',
+      model: context.model,
+      feature: request.feature,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      appliedBudget: context.budget.maxOutputTokens,
+      maxInputTokens: context.budget.maxInputTokens,
+      estimatedInputTokens: context.estimatedInputTokens,
+      promptCacheKey: promptCache.key,
+      promptCacheRetention: promptCache.retention ?? 'in_memory',
+      usingResponsesApi: true,
+      usedPreviousResponseState: Boolean(context.previousResponseId),
+      usedInputTokenCountEndpoint: context.usedInputTokenCountEndpoint,
+      responseId
+    })
+  }
+
+  return {
+    providerId: 'openai',
+    model: context.model,
+    text: fullText,
+    responseId,
+    estimatedInputTokens: context.estimatedInputTokens,
+    actualInputTokens: usageData ? resolveOpenAIUsageMetrics(usageData).inputTokens : undefined
+  }
 }
 
 async function streamAnthropicChat(
@@ -584,7 +742,12 @@ async function streamAnthropicChat(
       anthropicCacheTtl: cacheSettings.cacheControl.ttl ?? '5m'
     })
   }
-  return { providerId: 'anthropic', model, text: fullText }
+  return {
+    providerId: 'anthropic',
+    model,
+    text: fullText,
+    actualInputTokens: inputTokens || undefined
+  }
 }
 
 async function streamGeminiChat(
@@ -707,6 +870,9 @@ export async function generateRemoteText(input: {
   imageDataUrl?: string | null
   messages?: Array<{ role: 'user' | 'assistant'; content: string }>
   feature?: AIFeatureTask
+  conversationKey?: string
+  allowResponseState?: boolean
+  resetResponseState?: boolean
 }): Promise<ProviderExecutionResult | null> {
   const settings = await getStoredSettings()
 
@@ -726,7 +892,10 @@ export async function generateRemoteText(input: {
     prompt: input.prompt,
     imageDataUrl: input.imageDataUrl,
     messages: input.messages,
-    feature: input.feature
+    feature: input.feature,
+    conversationKey: input.conversationKey,
+    allowResponseState: input.allowResponseState,
+    resetResponseState: input.resetResponseState
   }
 
   if (settings.routing.preferLocalForSensitive && input.sensitive) {
@@ -1103,6 +1272,45 @@ async function sendOpenAIChat(
   const apiKey = requireSecret(provider)
   const budget = resolveFeatureBudget(request.feature)
   const model = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel ?? 'openai'
+  const usingResponsesApi = shouldUseOpenAIResponsesAPI(model, request)
+  if (request.resetResponseState && request.conversationKey) {
+    resetOpenAIConversationResponseId(request.conversationKey)
+  }
+  const previousResponseId =
+    usingResponsesApi && request.allowResponseState && request.conversationKey
+      ? getOpenAIConversationResponseId(request.conversationKey)
+      : null
+  const inputEstimate = await resolveOpenAIInputTokenEstimate({
+    baseUrl: provider.baseUrl,
+    apiKey,
+    model,
+    request,
+    previousResponseId,
+    usingResponsesApi
+  })
+  const estimatedInputTokens = inputEstimate.estimatedInputTokens
+  void recordOpenAIInputBudgetDiagnostic({
+    feature: request.feature,
+    model,
+    estimatedInputTokens,
+    maxInputTokens: budget.maxInputTokens,
+    conversationKey: request.conversationKey,
+    usingResponsesApi,
+    usedPreviousResponseState: Boolean(previousResponseId),
+    usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint
+  })
+
+  if (usingResponsesApi) {
+    return sendOpenAIResponses(provider, request, {
+      apiKey,
+      budget,
+      model,
+      estimatedInputTokens,
+      usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint,
+      previousResponseId
+    })
+  }
+
   const promptCache = resolveOpenAIPromptCacheSettings(model, request)
   const userContent = request.imageDataUrl
     ? [
@@ -1136,48 +1344,281 @@ async function sendOpenAIChat(
   const payload = await response.json() as {
     choices?: Array<{ message?: { content?: string } }>
     model?: string
-    usage?: {
-      prompt_tokens?: number
-      completion_tokens?: number
-      prompt_tokens_details?: {
-        cached_tokens?: number
-      }
-    }
+    usage?: OpenAIUsage
   }
   const text = payload.choices?.[0]?.message?.content?.trim()
   if (!text) throw new Error('OpenAI nao retornou texto.')
   const responseModel = payload.model ?? model
-  const promptTokens = payload.usage?.prompt_tokens ?? 0
-  const completionTokens = payload.usage?.completion_tokens ?? 0
-  const cachedInputTokens = payload.usage?.prompt_tokens_details?.cached_tokens ?? 0
+  const { inputTokens, outputTokens, cachedInputTokens } = resolveOpenAIUsageMetrics(payload.usage)
+  void recordOpenAIInputEstimateAccuracy({
+    model: responseModel,
+    feature: request.feature,
+    estimatedInputTokens,
+    actualInputTokens: inputTokens,
+    usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint,
+    usingResponsesApi: false
+  })
   await recordAICost({
     providerId: 'openai',
     model: responseModel,
     operation: 'chat',
     feature: request.feature,
-    costUsd: calculateOpenAITextCost(responseModel, promptTokens, completionTokens, cachedInputTokens),
-    inputTokens: promptTokens,
+    costUsd: calculateOpenAITextCost(responseModel, inputTokens, outputTokens, cachedInputTokens),
+    inputTokens,
     cachedInputTokens,
-    outputTokens: completionTokens,
+    outputTokens,
     at: Date.now()
   })
   void recordAIUsageDiagnostic({
     providerId: 'openai',
     model: responseModel,
     feature: request.feature,
-    inputTokens: promptTokens,
+    inputTokens,
     cachedInputTokens,
-    outputTokens: completionTokens,
+    outputTokens,
     appliedBudget: budget.maxOutputTokens,
+    maxInputTokens: budget.maxInputTokens,
+    estimatedInputTokens,
     promptCacheKey: promptCache.key,
-    promptCacheRetention: promptCache.retention ?? 'in_memory'
+    promptCacheRetention: promptCache.retention ?? 'in_memory',
+    usingResponsesApi: false,
+    usedPreviousResponseState: false,
+    usedInputTokenCountEndpoint: inputEstimate.usedInputTokenCountEndpoint
   })
 
   return {
     providerId: 'openai',
     model: responseModel,
-    text
+    text,
+    estimatedInputTokens,
+    actualInputTokens: inputTokens
   }
+}
+
+async function sendOpenAIResponses(
+  provider: StoredAIProvider,
+  request: RemoteChatRequest,
+  context: {
+    apiKey: string
+    budget: FeatureBudget
+    model: string
+    estimatedInputTokens: number
+    usedInputTokenCountEndpoint: boolean
+    previousResponseId: string | null
+  }
+): Promise<ProviderExecutionResult> {
+  const requestPayload = buildOpenAIResponsesPayload({
+    model: context.model,
+    request,
+    budget: context.budget,
+    previousResponseId: context.previousResponseId,
+    stream: false
+  })
+  const promptCache = resolveOpenAIPromptCacheSettings(context.model, request)
+  const response = await fetch(joinUrl(provider.baseUrl, '/responses'), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${context.apiKey}`
+    },
+    body: JSON.stringify(requestPayload)
+  })
+  if (!response.ok) {
+    throw new Error(`OpenAI responses respondeu ${response.status}.`)
+  }
+
+  const responsePayload = await response.json() as {
+    id?: string
+    model?: string
+    output?: OpenAIResponsesOutputItem[]
+    usage?: OpenAIUsage
+  }
+  const text = extractOpenAIResponseText(responsePayload.output)
+  if (!text) throw new Error('OpenAI responses nao retornou texto.')
+
+  const responseId = responsePayload.id ?? ''
+  if (request.conversationKey && request.allowResponseState && responseId) {
+    setOpenAIConversationResponseId(request.conversationKey, responseId)
+  }
+
+  const responseModel = responsePayload.model ?? context.model
+  const { inputTokens, outputTokens, cachedInputTokens } = resolveOpenAIUsageMetrics(responsePayload.usage)
+  void recordOpenAIInputEstimateAccuracy({
+    model: responseModel,
+    feature: request.feature,
+    estimatedInputTokens: context.estimatedInputTokens,
+    actualInputTokens: inputTokens,
+    usedInputTokenCountEndpoint: context.usedInputTokenCountEndpoint,
+    usingResponsesApi: true
+  })
+  await recordAICost({
+    providerId: 'openai',
+    model: responseModel,
+    operation: 'chat',
+    feature: request.feature,
+    costUsd: calculateOpenAITextCost(responseModel, inputTokens, outputTokens, cachedInputTokens),
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    at: Date.now()
+  })
+  void recordAIUsageDiagnostic({
+    providerId: 'openai',
+    model: responseModel,
+    feature: request.feature,
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    appliedBudget: context.budget.maxOutputTokens,
+    maxInputTokens: context.budget.maxInputTokens,
+    estimatedInputTokens: context.estimatedInputTokens,
+    promptCacheKey: promptCache.key,
+    promptCacheRetention: promptCache.retention ?? 'in_memory',
+    usingResponsesApi: true,
+    usedPreviousResponseState: Boolean(context.previousResponseId),
+    usedInputTokenCountEndpoint: context.usedInputTokenCountEndpoint,
+    responseId
+  })
+
+  return {
+    providerId: 'openai',
+    model: responseModel,
+    text,
+    responseId,
+    estimatedInputTokens: context.estimatedInputTokens,
+    actualInputTokens: inputTokens
+  }
+}
+
+type OpenAIUsage = {
+  prompt_tokens?: number
+  completion_tokens?: number
+  input_tokens?: number
+  output_tokens?: number
+  total_tokens?: number
+  prompt_tokens_details?: { cached_tokens?: number }
+  input_tokens_details?: { cached_tokens?: number }
+}
+
+type OpenAIResponsesOutputItem = {
+  type?: string
+  role?: string
+  content?: Array<{ type?: string; text?: string }>
+}
+
+function buildOpenAIResponsesPayload(input: {
+  model: string
+  request: RemoteChatRequest
+  budget: FeatureBudget
+  previousResponseId: string | null
+  stream: boolean
+}): Record<string, unknown> {
+  const promptCache = resolveOpenAIPromptCacheSettings(input.model, input.request)
+  const isGpt5Family = input.model.toLowerCase().startsWith('gpt-5')
+
+  return {
+    model: input.model,
+    instructions: input.request.system,
+    ...(isGpt5Family ? {} : { temperature: input.budget.temperature }),
+    max_output_tokens: input.budget.maxOutputTokens,
+    prompt_cache_key: promptCache.key,
+    ...(promptCache.retention ? { prompt_cache_retention: promptCache.retention } : {}),
+    ...(input.previousResponseId ? { previous_response_id: input.previousResponseId } : {}),
+    input: buildOpenAIResponsesInput(input.request, Boolean(input.previousResponseId)),
+    stream: input.stream,
+    store: false
+  }
+}
+
+function extractOpenAIResponseText(output?: OpenAIResponsesOutputItem[]): string {
+  const parts: string[] = []
+
+  for (const item of output ?? []) {
+    if (item.type !== 'message') continue
+    if (item.role !== 'assistant') continue
+    for (const block of item.content ?? []) {
+      if (typeof block.text !== 'string' || !block.text.trim()) continue
+      parts.push(block.text)
+    }
+  }
+
+  return parts.join('\n').trim()
+}
+
+function resolveOpenAIUsageMetrics(usage?: OpenAIUsage): {
+  inputTokens: number
+  cachedInputTokens: number
+  outputTokens: number
+} {
+  return {
+    inputTokens: usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.total_tokens ?? 0,
+    cachedInputTokens:
+      usage?.prompt_tokens_details?.cached_tokens
+      ?? usage?.input_tokens_details?.cached_tokens
+      ?? 0,
+    outputTokens: usage?.completion_tokens ?? usage?.output_tokens ?? 0
+  }
+}
+
+async function recordOpenAIInputBudgetDiagnostic(input: {
+  feature?: AIFeatureTask
+  model: string
+  estimatedInputTokens: number
+  maxInputTokens: number
+  conversationKey?: string
+  usingResponsesApi: boolean
+  usedPreviousResponseState: boolean
+  usedInputTokenCountEndpoint?: boolean
+}): Promise<void> {
+  const overBudget = input.estimatedInputTokens > input.maxInputTokens
+  await recordDiagnosticEvent({
+    type: 'trace',
+    source: 'main',
+    action: overBudget ? 'input_budget_warning' : 'input_budget_estimated',
+    details: {
+      provider: 'openai',
+      model: input.model,
+      feature: input.feature ?? 'unknown',
+      estimatedInputTokens: input.estimatedInputTokens,
+      maxInputTokens: input.maxInputTokens,
+      overBudget,
+      usingResponsesApi: input.usingResponsesApi,
+      usedPreviousResponseState: input.usedPreviousResponseState,
+      usedInputTokenCountEndpoint: input.usedInputTokenCountEndpoint ?? false,
+      hasConversationKey: Boolean(input.conversationKey)
+    }
+  })
+}
+
+async function recordOpenAIInputEstimateAccuracy(input: {
+  model: string
+  feature?: AIFeatureTask
+  estimatedInputTokens: number
+  actualInputTokens: number
+  usedInputTokenCountEndpoint: boolean
+  usingResponsesApi: boolean
+}): Promise<void> {
+  if (input.estimatedInputTokens <= 0 || input.actualInputTokens <= 0) return
+
+  const absoluteError = Math.abs(input.actualInputTokens - input.estimatedInputTokens)
+  const relativeError = Number((absoluteError / input.actualInputTokens).toFixed(4))
+
+  await recordDiagnosticEvent({
+    type: 'trace',
+    source: 'main',
+    action: 'input_estimate_accuracy',
+    details: {
+      provider: 'openai',
+      model: input.model,
+      feature: input.feature ?? 'unknown',
+      estimatedInputTokens: input.estimatedInputTokens,
+      actualInputTokens: input.actualInputTokens,
+      absoluteError,
+      relativeError,
+      usedInputTokenCountEndpoint: input.usedInputTokenCountEndpoint,
+      usingResponsesApi: input.usingResponsesApi
+    }
+  })
 }
 
 async function sendAnthropicChat(
@@ -1237,11 +1678,13 @@ async function sendAnthropicChat(
     .trim()
   if (!text) throw new Error('Anthropic nao retornou texto.')
   const model = payload.model ?? provider.selectedModel ?? 'anthropic'
+  let actualInputTokens: number | undefined
   if (payload.usage) {
     const inputTokens = payload.usage.input_tokens ?? 0
     const outputTokens = payload.usage.output_tokens ?? 0
     const cacheCreationTokens = payload.usage.cache_creation_input_tokens ?? 0
     const cacheReadTokens = payload.usage.cache_read_input_tokens ?? 0
+    actualInputTokens = inputTokens || undefined
     await recordAICost({
       providerId: 'anthropic', model, operation: 'chat', feature: request.feature,
       costUsd: calculateAnthropicTextCost(model, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens),
@@ -1259,7 +1702,12 @@ async function sendAnthropicChat(
       anthropicCacheTtl: cacheSettings.cacheControl.ttl ?? '5m'
     })
   }
-  return { providerId: 'anthropic', model, text }
+  return {
+    providerId: 'anthropic',
+    model,
+    text,
+    actualInputTokens
+  }
 }
 
 async function sendGeminiChat(
@@ -1447,11 +1895,6 @@ function calculateEmbeddingCost(model: string, promptTokens: number): number {
   return (promptTokens / 1_000_000) * pricing.input
 }
 
-function resolveFeatureBudget(feature?: AIFeatureTask): FeatureBudget {
-  const budget = feature ? FEATURE_BUDGETS[feature] : null
-  return budget ?? DEFAULT_FEATURE_BUDGET
-}
-
 function resolveOpenAIPromptCacheSettings(
   model: string,
   request: RemoteChatRequest
@@ -1513,9 +1956,15 @@ function recordAIUsageDiagnostic(input: {
   outputTokens: number
   cacheCreationTokens?: number
   appliedBudget?: number
+  maxInputTokens?: number
+  estimatedInputTokens?: number
   promptCacheKey?: string
   promptCacheRetention?: 'in_memory' | '24h'
   anthropicCacheTtl?: '5m' | '1h'
+  usingResponsesApi?: boolean
+  usedPreviousResponseState?: boolean
+  usedInputTokenCountEndpoint?: boolean
+  responseId?: string
 }): Promise<void> {
   const cacheHitRate = input.inputTokens > 0
     ? Number((input.cachedInputTokens / input.inputTokens).toFixed(4))
@@ -1534,10 +1983,16 @@ function recordAIUsageDiagnostic(input: {
       cacheCreationTokens: input.cacheCreationTokens ?? 0,
       outputTokens: input.outputTokens,
       appliedBudget: input.appliedBudget ?? 0,
+      maxInputTokens: input.maxInputTokens ?? 0,
+      estimatedInputTokens: input.estimatedInputTokens ?? 0,
       cacheHitRate,
       promptCacheKey: input.promptCacheKey ?? '',
       promptCacheRetention: input.promptCacheRetention ?? '',
-      anthropicCacheTtl: input.anthropicCacheTtl ?? ''
+      anthropicCacheTtl: input.anthropicCacheTtl ?? '',
+      usingResponsesApi: input.usingResponsesApi ?? false,
+      usedPreviousResponseState: input.usedPreviousResponseState ?? false,
+      usedInputTokenCountEndpoint: input.usedInputTokenCountEndpoint ?? false,
+      responseId: input.responseId ?? ''
     }
   })
 }
