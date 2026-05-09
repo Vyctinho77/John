@@ -1,6 +1,5 @@
-import { bridgeServer } from './bridge'
-import { generateRemoteText } from './ai-provider'
-import { recordDiagnosticEvent } from './observability'
+import { bridgeServer } from './bridge.ts'
+import { safeRecordDiagnosticEvent } from './observability.ts'
 import type {
   GlobalIntentMode,
   GlobalIntentState,
@@ -77,7 +76,7 @@ export async function resolveGlobalIntent(
         : await classifyGlobalIntent(classifierInput)
 
   if (shouldSkipRemoteClassification) {
-    void recordDiagnosticEvent({
+    void safeRecordDiagnosticEvent({
       type: 'trace',
       source: 'perception',
       action: 'global_intent_llm_skipped',
@@ -138,6 +137,7 @@ export function createGlobalIntentState(
 export async function classifyGlobalIntent(
   input: IntentClassifierInput
 ): Promise<IntentCandidate | null> {
+  const { generateRemoteText } = await import('./ai-provider.ts')
   const result = await generateRemoteText({
     sensitive: false,
     feature: 'router',

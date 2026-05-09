@@ -12,9 +12,8 @@ import type {
 } from '../../shared/perception.types'
 import { getAppSettings, getFeaturePolicySnapshot } from './settings'
 
-const DIAGNOSTICS_DIR = join(app.getPath('userData'), 'diagnostics')
-const EVENTS_PATH = join(DIAGNOSTICS_DIR, 'events.log')
-const CONSENT_PATH = join(DIAGNOSTICS_DIR, 'consent.json')
+const eventsPath = () => join(app.getPath('userData'), 'diagnostics', 'events.log')
+const consentPath = () => join(app.getPath('userData'), 'diagnostics', 'consent.json')
 
 const recentEvents: DiagnosticEvent[] = []
 const recentTraces: PerformanceTrace[] = []
@@ -39,8 +38,23 @@ export async function recordDiagnosticEvent(
   const settings = await getAppSettings()
   if (!settings.telemetryOptIn) return
 
-  await mkdir(dirname(EVENTS_PATH), { recursive: true })
-  await appendFile(EVENTS_PATH, `${JSON.stringify(fullEvent)}\n`, 'utf-8')
+  const path = eventsPath()
+  await mkdir(dirname(path), { recursive: true })
+  await appendFile(path, `${JSON.stringify(fullEvent)}\n`, 'utf-8')
+}
+
+export async function safeRecordDiagnosticEvent(
+  event: Omit<DiagnosticEvent, 'id' | 'at'>
+): Promise<void> {
+  try {
+    await recordDiagnosticEvent(event)
+  } catch (error) {
+    console.error('[observability] recordDiagnosticEvent failed', {
+      action: event.action,
+      source: event.source,
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
 }
 
 export async function recordPerformanceTrace(input: {
@@ -62,8 +76,9 @@ export async function recordPerformanceTrace(input: {
   const settings = await getAppSettings()
   if (!settings.telemetryOptIn) return
 
-  await mkdir(dirname(EVENTS_PATH), { recursive: true })
-  await appendFile(EVENTS_PATH, `${JSON.stringify({ type: 'performance', ...trace })}\n`, 'utf-8')
+  const path = eventsPath()
+  await mkdir(dirname(path), { recursive: true })
+  await appendFile(path, `${JSON.stringify({ type: 'performance', ...trace })}\n`, 'utf-8')
 }
 
 export async function getDiagnosticsSnapshot(): Promise<DiagnosticsSnapshot> {
@@ -145,8 +160,9 @@ export async function recordConsentChange(input: {
   consentTrail.push(record)
   if (consentTrail.length > MAX_CONSENTS) consentTrail.shift()
 
-  await mkdir(dirname(CONSENT_PATH), { recursive: true })
-  await writeFile(CONSENT_PATH, JSON.stringify(consentTrail, null, 2), 'utf-8')
+  const path = consentPath()
+  await mkdir(dirname(path), { recursive: true })
+  await writeFile(path, JSON.stringify(consentTrail, null, 2), 'utf-8')
 }
 
 export async function getPrivacySnapshot(): Promise<PrivacySnapshot> {
@@ -159,12 +175,12 @@ export async function getPrivacySnapshot(): Promise<PrivacySnapshot> {
 export async function clearDiagnostics(): Promise<void> {
   recentEvents.length = 0
   recentTraces.length = 0
-  await rm(EVENTS_PATH, { force: true })
+  await rm(eventsPath(), { force: true })
 }
 
 export async function clearConsentTrail(): Promise<void> {
   consentTrail.length = 0
-  await rm(CONSENT_PATH, { force: true })
+  await rm(consentPath(), { force: true })
 }
 
 export function markDataDeletion(): void {

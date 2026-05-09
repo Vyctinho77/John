@@ -5,9 +5,9 @@ import type {
   RiskDecision,
   TradeIdea
 } from '../../shared/market-autonomy.types'
-import { PaperBroker, type PaperBrokerScenario } from './brokers/paper-broker'
-import { evaluateTradeRisk } from './risk-engine'
-import { simulateTradeRun } from './trade-supervisor'
+import { PaperBroker, type PaperBrokerScenario } from './brokers/paper-broker.ts'
+import { evaluateTradeRisk } from './risk-engine.ts'
+import { simulateTradeRun } from './trade-supervisor.ts'
 
 export type ChaosScenarioId =
   | 'cooldown_active'

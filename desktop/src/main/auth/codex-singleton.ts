@@ -1,5 +1,5 @@
-import { CodexAuthManager } from './CodexAuthManager'
-import { CodexClient } from './CodexClient'
+import { CodexAuthManager } from './CodexAuthManager.ts'
+import { CodexClient } from './CodexClient.ts'
 
 // Singletons compartilhados entre index.ts e serviços do main process.
 // CodexAuthManager.loadFromDisk() é seguro antes de app.ready pois

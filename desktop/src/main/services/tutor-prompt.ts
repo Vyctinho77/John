@@ -66,7 +66,7 @@ export function buildRemoteUserPrompt(
   return joinPromptBlocks([
     buildPromptBlock('REQUEST', [
       offScreen
-        ? '[OFF-SCREEN QUESTION: the user is asking about a topic not currently visible on screen. Answer directly as a knowledgeable tutor. Use screen context only if genuinely relevant â€” do not force a connection.]'
+        ? '[OFF-SCREEN QUESTION: the user is asking about a topic not currently visible on screen. Answer directly as a knowledgeable tutor. Use screen context only if genuinely relevant - do not force a connection.]'
         : '',
       `User request: ${request.prompt}`
     ]),
@@ -125,7 +125,7 @@ export function buildRemoteUserPrompt(
       'Open with the main reading or recommendation first.',
       'Prioritize the next useful step before extra detail.',
       'Prefer natural transitions over visible section labels.',
-      'Do not announce every section with headers like "Leitura principal", "Passo 1", or "PrÃ³ximo passo" unless the density truly requires structure.',
+      'Do not announce every section with headers like "Leitura principal", "Passo 1", or "Proximo passo" unless the density truly requires structure.',
       'For short and medium answers, hide the scaffold and make it read like an intelligent human explanation.',
       keyValuesLine
         ? 'IMPORTANT: Use ONLY the "Extracted values from screen" for any numbers, prices, metrics, or measurements. Do NOT invent, round, or guess numerical values. If a value is not in the extracted data, say you cannot read it clearly.'

@@ -5,8 +5,6 @@ import type {
   TutorAction,
   TutorResponse
 } from '../../shared/perception.types.ts'
-import { codexAuth, codexClient } from '../auth/codex-singleton.ts'
-import { generateRemoteText } from './ai-provider.ts'
 import type {
   SpotifyPlaybackState,
   SpotifyQueryResolution,
@@ -217,12 +215,14 @@ async function maybeInferSpotifyIntentWithLLM(
   let raw: string | null = null
 
   try {
+    const { codexAuth, codexClient } = await import('../auth/codex-singleton.ts')
     if (codexAuth.getStatus().authenticated) {
       raw = await codexClient.chat({
         model: 'codex-mini-latest',
         messages: [{ role: 'user', content: prompt }]
       })
     } else {
+      const { generateRemoteText } = await import('./ai-provider.ts')
       const result = await generateRemoteText({
         sensitive: false,
         system: 'Você classifica comandos do Spotify em JSON estrito.',

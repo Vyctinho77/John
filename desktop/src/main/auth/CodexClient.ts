@@ -1,4 +1,4 @@
-import { CodexAuthManager } from './CodexAuthManager'
+import { CodexAuthManager } from './CodexAuthManager.ts'
 
 const BASE_URL              = 'https://chatgpt.com/backend-api'
 const CODEX_RESPONSES_URL   = `${BASE_URL}/codex/responses`

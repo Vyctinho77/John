@@ -4,9 +4,8 @@ import type {
   PositionState
 } from '@shared/market-autonomy.types'
 import type { TradingViewConnectorState } from '@shared/perception.types'
-import { newsService } from './news-service'
-import { assessMarketRegime } from './market-regime'
-import { tradingViewService } from './tradingview'
+import { newsService } from './news-service.ts'
+import { assessMarketRegime } from './market-regime.ts'
 
 export interface BuildMarketSnapshotOptions {
   tradingViewState?: TradingViewConnectorState
@@ -22,7 +21,10 @@ export interface MarketSnapshotEnvelope {
 export function getCurrentMarketSnapshot(
   options: BuildMarketSnapshotOptions = {}
 ): MarketSnapshotEnvelope {
-  const state = options.tradingViewState ?? tradingViewService.getState()
+  const state = options.tradingViewState
+  if (!state) {
+    return { snapshot: null, reasons: ['tradingview_state_unavailable'] }
+  }
   return buildMarketSnapshotFromTradingView(state, options)
 }
 

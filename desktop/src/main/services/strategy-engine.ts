@@ -1,6 +1,6 @@
 import type { MarketAutonomyPolicy, MarketSnapshot, TradeIdea } from '@shared/market-autonomy.types'
-import { recordDiagnosticEvent } from './observability'
-import { evaluateBreakoutIdea } from './strategy-rules/breakout'
+import { evaluateBreakoutIdea } from './strategy-rules/breakout.ts'
+import { safeRecordDiagnosticEvent } from './observability.ts'
 
 export interface StrategyEngineResult {
   strategyId: string
@@ -47,7 +47,7 @@ async function emitStrategyDiagnostic(
   snapshot: MarketSnapshot,
   result: StrategyEngineResult
 ): Promise<void> {
-  await recordDiagnosticEvent({
+  await safeRecordDiagnosticEvent({
     type: 'trace',
     source: 'main',
     action: 'strategy_engine_evaluated',
@@ -61,3 +61,4 @@ async function emitStrategyDiagnostic(
     }
   })
 }
+

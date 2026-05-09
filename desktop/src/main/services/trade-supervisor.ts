@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import type {
   BrokerAdapter,
   UnsubscribeFn
-} from './brokers/base'
+} from './brokers/base.ts'
 import type {
   BrokerOrderEvent,
   ExecutionIntent,
@@ -12,8 +12,8 @@ import type {
   RiskDecision,
   TradeIdea
 } from '../../shared/market-autonomy.types'
-import { appendTradeAuditRecord } from './trade-audit-log'
-import { recordDiagnosticEvent } from './observability'
+import { appendTradeAuditRecord } from './trade-audit-log.ts'
+import { safeRecordDiagnosticEvent } from './observability.ts'
 
 export interface SimulatedTradeRunInput {
   broker: BrokerAdapter
@@ -83,7 +83,7 @@ export async function simulateTradeRun(
 
     executionResult = await input.broker.placeOrder(input.executionIntent)
 
-    void recordDiagnosticEvent({
+    void safeRecordDiagnosticEvent({
       type: 'trace',
       source: 'main',
       action: 'trade_run_executed',
@@ -95,7 +95,7 @@ export async function simulateTradeRun(
       }
     })
   } else {
-    void recordDiagnosticEvent({
+    void safeRecordDiagnosticEvent({
       type: 'trace',
       source: 'main',
       action: 'trade_run_blocked',

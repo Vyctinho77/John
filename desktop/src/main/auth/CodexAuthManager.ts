@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { generatePKCE } from './pkce'
-import { waitForCallback } from './LocalCallbackServer'
+import { waitForCallback } from './LocalCallbackServer.ts'
 import type { CodexTokens, AuthStatus } from '../../shared/auth.types'
 
 const CLIENT_ID    = 'app_EMoamEEZ73f0CkXaXp7hrann'

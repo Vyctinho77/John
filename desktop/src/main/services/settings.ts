@@ -15,7 +15,7 @@ import {
   resolveEffectiveFeatureFlags
 } from './feature-policy'
 
-const SETTINGS_PATH = join(app.getPath('userData'), 'app-settings.json')
+const settingsPath = () => join(app.getPath('userData'), 'app-settings.json')
 
 const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   passiveSuggestions: true,
@@ -103,7 +103,7 @@ export async function getFeaturePolicySnapshot(): Promise<FeaturePolicySnapshot>
 
 export async function resetAppSettings(): Promise<AppSettings> {
   cachedSettings = createDefaultStoredSettings()
-  await rm(SETTINGS_PATH, { force: true })
+  await rm(settingsPath(), { force: true })
   await persistSettings(cachedSettings)
   return toPublicSettings(cachedSettings)
 }
@@ -112,7 +112,7 @@ async function getStoredSettings(): Promise<StoredSettings> {
   if (cachedSettings) return cachedSettings
 
   try {
-    const raw = await readFile(SETTINGS_PATH, 'utf-8')
+    const raw = await readFile(settingsPath(), 'utf-8')
     cachedSettings = normalizeStoredSettings(JSON.parse(raw) as Partial<StoredSettings>)
   } catch {
     cachedSettings = createDefaultStoredSettings()
@@ -219,6 +219,6 @@ function normalizeDailyCostLimit(value: unknown): number | null {
 }
 
 async function persistSettings(settings: StoredSettings): Promise<void> {
-  await mkdir(dirname(SETTINGS_PATH), { recursive: true })
-  await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8')
+  await mkdir(dirname(settingsPath()), { recursive: true })
+  await writeFile(settingsPath(), JSON.stringify(settings, null, 2), 'utf-8')
 }

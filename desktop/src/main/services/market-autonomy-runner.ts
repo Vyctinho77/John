@@ -5,20 +5,19 @@ import type {
   MarketSnapshot,
   RiskDecision
 } from '@shared/market-autonomy.types'
-import type { BrokerAdapter } from './brokers/base'
-import { buildExecutionIntent } from './execution-policy'
+import type { BrokerAdapter } from './brokers/base.ts'
+import { buildExecutionIntent } from './execution-policy.ts'
 import {
   buildMarketSnapshotFromTradingView,
   type BuildMarketSnapshotOptions
-} from './market-data'
-import { marketStateStore } from './market-state-store'
-import { newsService } from './news-service'
-import { recordDiagnosticEvent } from './observability'
-import { evaluateTradeRisk } from './risk-engine'
-import { generateTradeIdea, type StrategyEngineResult } from './strategy-engine'
-import { simulateTradeRun, type SimulatedTradeRunResult } from './trade-supervisor'
-import { tradingViewService } from './tradingview'
-import { calendarService } from './calendar-service'
+} from './market-data.ts'
+import { marketStateStore } from './market-state-store.ts'
+import { newsService } from './news-service.ts'
+import { evaluateTradeRisk } from './risk-engine.ts'
+import { generateTradeIdea, type StrategyEngineResult } from './strategy-engine.ts'
+import { simulateTradeRun, type SimulatedTradeRunResult } from './trade-supervisor.ts'
+import { calendarService } from './calendar-service.ts'
+import { safeRecordDiagnosticEvent } from './observability.ts'
 
 export interface EvaluateMarketRunOptions {
   policy: MarketAutonomyPolicy
@@ -27,6 +26,7 @@ export interface EvaluateMarketRunOptions {
   tradesExecutedThisSession?: number
   cooldownUntil?: number | null
   executeTrade?: boolean
+  killSwitchActive?: boolean
   snapshotOptions?: Omit<BuildMarketSnapshotOptions, 'openOrders' | 'openPosition'>
 }
 
@@ -48,7 +48,7 @@ export async function evaluateCurrentMarketRun(
     ? await Promise.all([broker.getOpenPositions(), broker.getOpenOrders()])
     : [[], []]
 
-  const state = options.snapshotOptions?.tradingViewState ?? tradingViewService.getState()
+  const state = options.snapshotOptions?.tradingViewState ?? (await import('./tradingview.ts')).tradingViewService.getState()
   const snapshotEnvelope = buildMarketSnapshotFromTradingView(state, {
     ...options.snapshotOptions,
     openPosition: openPositions[0] ?? null,
@@ -57,7 +57,7 @@ export async function evaluateCurrentMarketRun(
 
   if (!snapshotEnvelope.snapshot) {
     marketStateStore.markInvalid(snapshotEnvelope.reasons[0] ?? 'snapshot_unavailable')
-    await recordDiagnosticEvent({
+    await safeRecordDiagnosticEvent({
       type: 'trace',
       source: 'main',
       action: 'market_snapshot_unavailable',
@@ -93,7 +93,7 @@ export async function evaluateCurrentMarketRun(
     }
   }
 
-  const riskDecision = evaluateTradeRisk(strategy.idea, {
+  const baseRiskDecision = evaluateTradeRisk(strategy.idea, {
     policy: options.policy,
     openPositions,
     openOrderCount: openOrders.length,
@@ -103,6 +103,9 @@ export async function evaluateCurrentMarketRun(
     currentTimeframe: snapshot.timeframe,
     marketGuards
   })
+  const riskDecision = options.killSwitchActive
+    ? applyKillSwitch(baseRiskDecision)
+    : baseRiskDecision
 
   const executionIntent = buildExecutionIntent(
     strategy.idea,
@@ -121,7 +124,7 @@ export async function evaluateCurrentMarketRun(
     })
   }
 
-  await recordDiagnosticEvent({
+  await safeRecordDiagnosticEvent({
     type: 'trace',
     source: 'main',
     action: 'market_autonomy_run_evaluated',
@@ -146,6 +149,16 @@ export async function evaluateCurrentMarketRun(
     executionIntent,
     marketGuards,
     simulation
+  }
+}
+
+function applyKillSwitch(decision: RiskDecision): RiskDecision {
+  return {
+    ...decision,
+    allowed: false,
+    reason: 'kill_switch_active',
+    violations: [...new Set([...decision.violations, 'kill_switch_active'])],
+    positionSize: undefined
   }
 }
 
