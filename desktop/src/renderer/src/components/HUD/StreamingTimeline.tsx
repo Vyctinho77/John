@@ -47,7 +47,7 @@ export function StreamingTimeline({ steps, streamingContent }: Props) {
             {/* Step label */}
             <div className="py-[3px] pb-2">
               <span
-                className="text-[11px] leading-tight font-medium"
+                className="hud-label text-[11px] leading-tight font-medium"
                 style={{
                   color: isRun
                     ? 'var(--ares-accent)'

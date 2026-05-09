@@ -138,6 +138,7 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
       style={{
         background: 'var(--ares-surface-0)',
         boxShadow: 'var(--ares-shadow-panel)',
+        border: '1px solid rgba(255,255,255,0.09)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'
       }}

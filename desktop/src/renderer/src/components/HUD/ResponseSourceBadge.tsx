@@ -48,6 +48,7 @@ export function ResponseSourceBadge({
   return (
     <span
       title={meta ? buildTitle(meta) : undefined}
+      className="hud-label"
       style={{
         display: 'inline-flex',
         alignItems: 'center',

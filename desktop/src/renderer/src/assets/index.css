@@ -1,6 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=League+Spartan:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Override do preflight do Tailwind — garante Cinzel como padrão global */
+html {
+  font-family: "Cinzel", "Segoe UI Variable Text", "Segoe UI", serif !important;
+}
 
 * {
   box-sizing: border-box;
@@ -25,28 +32,28 @@ html, body, #root {
 }
 
 .hud-typography {
-  /* Background: preto profundo */
-  --ares-bg-canvas: hsl(0 0% 2%);
-  --ares-bg-panel-top: hsl(0 0% 3%);
-  --ares-bg-panel-bottom: hsl(0 0% 1%);
+  /* Background: preto absoluto */
+  --ares-bg-canvas: hsl(0 0% 0%);
+  --ares-bg-panel-top: hsl(0 0% 1%);
+  --ares-bg-panel-bottom: hsl(0 0% 0%);
 
-  /* Surfaces: prata azulada — metálico frio mais pronunciado */
+  /* Surfaces: prata escura — distinguível do preto do fundo */
   --ares-surface-0: hsl(216 14% 11%);
   --ares-surface-1: hsl(216 12% 16%);
-  --ares-surface-2: hsl(216 10% 23%);
+  --ares-surface-2: hsl(216 10% 22%);
   --ares-surface-elevated: hsl(216 12% 16%);
-  --ares-surface-overlay: hsla(216 14% 5% / 0.95);
+  --ares-surface-overlay: hsla(216 14% 5% / 0.97);
 
-  /* Text: branco primary, prata azulada nos secundários */
+  /* Text: branco primary, prata aço nos pills (secondary), cinza neutro nos ícones */
   --ares-text-strong: hsl(0 0% 97%);
   --ares-text-primary: hsl(210 14% 91%);
-  --ares-text-secondary: hsl(216 14% 70%);
-  --ares-text-tertiary: hsl(216 12% 54%);
-  --ares-text-muted: hsl(216 10% 38%);
+  --ares-text-secondary: hsl(218 31% 57%);
+  --ares-text-tertiary: hsl(0 0% 50%);
+  --ares-text-muted: hsl(0 0% 36%);
 
-  /* Borders: prata azulada sutil */
-  --ares-border-soft: hsla(216 30% 100% / 0.09);
-  --ares-border-strong: hsla(216 30% 100% / 0.16);
+  /* Borders: prata aço sutil */
+  --ares-border-soft: hsla(218 40% 70% / 0.10);
+  --ares-border-strong: hsla(218 40% 70% / 0.18);
 
   /* Accent: roxo — cor secundária */
   --ares-accent: hsl(265 72% 63%);
@@ -58,18 +65,20 @@ html, body, #root {
   --ares-danger: hsl(0 81% 69%);
   --ares-danger-soft: hsla(0 81% 69% / 0.16);
 
-  --hud-font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-  --hud-font-size: 15px;
+  /* Tipografia: Cinzel (principal) + League Spartan (labels/meta) */
+  --hud-font-family: "Cinzel", "Segoe UI Variable Text", "Segoe UI", serif;
+  --hud-font-family-label: "League Spartan", "Segoe UI", system-ui, sans-serif;
+  --hud-font-size: 14px;
   --hud-font-weight: 400;
-  --hud-font-size-label: 11px;
-  --hud-font-size-meta: 12px;
-  --hud-font-size-title: 18px;
-  --hud-body-leading: 1.66;
-  --hud-body-tracking: -0.014em;
-  --hud-heading-tracking: -0.028em;
-  --hud-label-tracking: 0.075em;
-  --hud-muted-tracking: -0.01em;
-  --hud-input-tracking: -0.015em;
+  --hud-font-size-label: 10px;
+  --hud-font-size-meta: 11px;
+  --hud-font-size-title: 17px;
+  --hud-body-leading: 1.72;
+  --hud-body-tracking: 0.02em;
+  --hud-heading-tracking: 0.04em;
+  --hud-label-tracking: 0.12em;
+  --hud-muted-tracking: 0.06em;
+  --hud-input-tracking: 0.02em;
 
   --ares-radius-sm: 10px;
   --ares-radius-md: 14px;
@@ -87,7 +96,7 @@ html, body, #root {
   --ares-control-sm: 32px;
   --ares-control-md: 36px;
 
-  --ares-shadow-panel: 0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  --ares-shadow-panel: 0 16px 48px rgba(0,0,0,0.75), inset 0 1px 0 rgba(255,255,255,0.04);
   --ares-shadow-floating: 0 10px 28px rgba(0,0,0,0.38);
   --ares-transition-fast: 150ms ease-out;
   --ares-transition-panel: 220ms cubic-bezier(0.32, 0.72, 0, 1);
@@ -97,12 +106,24 @@ html, body, #root {
   color: var(--ares-text-primary);
 }
 
-.hud-typography,
-.hud-typography textarea,
+/* Cinzel herda para todo texto de corpo */
+.hud-typography {
+  font-family: var(--hud-font-family);
+  font-weight: var(--hud-font-weight);
+}
+
+/* League Spartan para elementos interativos pequenos: pills, inputs, labels */
+.hud-typography button,
 .hud-typography input,
-.hud-typography button {
-  font-family: inherit;
+.hud-typography textarea {
+  font-family: var(--hud-font-family-label);
   font-weight: inherit;
+}
+
+/* Classe utilitária explícita para labels e badges */
+.hud-label {
+  font-family: var(--hud-font-family-label) !important;
+  letter-spacing: var(--hud-label-tracking);
 }
 
 /* Allow text selection inside content areas */

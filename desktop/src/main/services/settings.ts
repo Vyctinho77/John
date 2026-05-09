@@ -32,8 +32,9 @@ const DEFAULT_CAPTURE_SCOPE: CaptureScopeSettings = {
 }
 
 const DEFAULT_TYPOGRAPHY: TypographySettings = {
-  fontFamily: 'system-sans',
-  fontSize: 15,
+  fontFamily: 'cinzel',
+  fontFamilySecondary: 'spartan',
+  fontSize: 14,
   fontWeight: 'regular'
 }
 
@@ -168,6 +169,7 @@ function normalizeStoredSettings(settings: Partial<StoredSettings>): StoredSetti
     },
     typography: {
       fontFamily: settings.typography?.fontFamily ?? DEFAULT_TYPOGRAPHY.fontFamily,
+      fontFamilySecondary: settings.typography?.fontFamilySecondary ?? DEFAULT_TYPOGRAPHY.fontFamilySecondary,
       fontSize:
         typeof settings.typography?.fontSize === 'number' && settings.typography.fontSize >= 12
           ? settings.typography.fontSize

@@ -39,9 +39,11 @@ import {
 export { GeneralSettingsPanel } from './HudGeneralSettingsPanel'
 
 const TYPOGRAPHY_FAMILY_OPTIONS: Array<{ id: TypographyFontFamily; label: string; sample: string }> = [
-  { id: 'system-sans', label: 'SF Pro / System Sans', sample: 'Apple-like, limpa e neutra' },
-  { id: 'system-serif', label: 'New York / Serif', sample: 'Mais editorial e refinada' },
-  { id: 'mono', label: 'SF Mono / Monospace', sample: 'Tecnica e utilitaria' }
+  { id: 'cinzel', label: 'Cinzel', sample: 'Grega espartana, clássica' },
+  { id: 'spartan', label: 'League Spartan', sample: 'Geométrica e marcial' },
+  { id: 'system-sans', label: 'System Sans', sample: 'Limpa e neutra' },
+  { id: 'system-serif', label: 'System Serif', sample: 'Editorial e refinada' },
+  { id: 'mono', label: 'Monospace', sample: 'Técnica e utilitária' }
 ]
 
 const TYPOGRAPHY_SIZE_OPTIONS = [13, 14, 15, 16, 18]
@@ -170,8 +172,12 @@ export function TypographySettingsPanel({
       <div className="mt-4">
         <SettingsRow label="Tamanho base" value={`${typography.fontSize}px`} />
         <SettingsRow
-          label="Família ativa"
-          value={TYPOGRAPHY_FAMILY_OPTIONS.find(option => option.id === typography.fontFamily)?.label || 'System Sans'}
+          label="Fonte principal"
+          value={TYPOGRAPHY_FAMILY_OPTIONS.find(option => option.id === typography.fontFamily)?.label || 'Cinzel'}
+        />
+        <SettingsRow
+          label="Fonte secundária"
+          value={TYPOGRAPHY_FAMILY_OPTIONS.find(option => option.id === typography.fontFamilySecondary)?.label || 'League Spartan'}
         />
         <SettingsRow
           label="Peso ativo"
@@ -182,7 +188,7 @@ export function TypographySettingsPanel({
 
       <div className="mt-5">
         <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
-          Família de fonte
+          Fonte principal — títulos e corpo
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
           {TYPOGRAPHY_FAMILY_OPTIONS.map(option => (
@@ -192,6 +198,23 @@ export function TypographySettingsPanel({
               secondaryLabel={option.sample}
               active={typography.fontFamily === option.id}
               onClick={() => onUpdateTypography({ fontFamily: option.id })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
+          Fonte secundária — labels, pills e inputs
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {TYPOGRAPHY_FAMILY_OPTIONS.map(option => (
+            <TypographyChoice
+              key={option.id}
+              label={option.label}
+              secondaryLabel={option.sample}
+              active={typography.fontFamilySecondary === option.id}
+              onClick={() => onUpdateTypography({ fontFamilySecondary: option.id })}
             />
           ))}
         </div>

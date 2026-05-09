@@ -52,7 +52,9 @@ function buildConversationSummary(existing: string | null, toCompress: Message[]
 const FONT_FAMILY_MAP = {
   'system-sans': '"Segoe UI Variable Text", "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif',
   'system-serif': '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Georgia Pro", Georgia, "Times New Roman", serif',
-  mono: '"SF Mono", "Cascadia Code", "Cascadia Mono", Consolas, monospace'
+  mono: '"SF Mono", "Cascadia Code", "Cascadia Mono", Consolas, monospace',
+  cinzel: '"Cinzel", "Trajan Pro", "Times New Roman", serif',
+  spartan: '"League Spartan", "Futura", "Century Gothic", system-ui, sans-serif'
 } as const
 
 const FONT_WEIGHT_MAP = {
@@ -87,6 +89,22 @@ const FONT_PROFILE_MAP = {
     labelTracking: '0.06em',
     mutedTracking: '-0.002em',
     inputTracking: '-0.008em'
+  },
+  cinzel: {
+    bodyLeading: 1.78,
+    bodyTracking: '0.03em',
+    headingTracking: '0.05em',
+    labelTracking: '0.12em',
+    mutedTracking: '0.02em',
+    inputTracking: '0.02em'
+  },
+  spartan: {
+    bodyLeading: 1.68,
+    bodyTracking: '0.01em',
+    headingTracking: '0.03em',
+    labelTracking: '0.10em',
+    mutedTracking: '0.01em',
+    inputTracking: '0.01em'
   }
 } as const
 
@@ -806,17 +824,19 @@ export function HUD() {
 
   const typography = settings?.typography
   const typographyProfile = typography ? FONT_PROFILE_MAP[typography.fontFamily] : null
+  const secondaryProfile = typography ? FONT_PROFILE_MAP[typography.fontFamilySecondary ?? 'spartan'] : null
   const hudTypographyStyle = typography
     ? {
         ['--hud-font-family' as string]: FONT_FAMILY_MAP[typography.fontFamily],
+        ['--hud-font-family-label' as string]: FONT_FAMILY_MAP[typography.fontFamilySecondary ?? 'spartan'],
         ['--hud-font-size' as string]: `${typography.fontSize}px`,
         ['--hud-font-weight' as string]: FONT_WEIGHT_MAP[typography.fontWeight],
         ['--hud-body-leading' as string]: typographyProfile?.bodyLeading,
         ['--hud-body-tracking' as string]: typographyProfile?.bodyTracking,
         ['--hud-heading-tracking' as string]: typographyProfile?.headingTracking,
-        ['--hud-label-tracking' as string]: typographyProfile?.labelTracking,
-        ['--hud-muted-tracking' as string]: typographyProfile?.mutedTracking,
-        ['--hud-input-tracking' as string]: typographyProfile?.inputTracking,
+        ['--hud-label-tracking' as string]: secondaryProfile?.labelTracking,
+        ['--hud-muted-tracking' as string]: secondaryProfile?.mutedTracking,
+        ['--hud-input-tracking' as string]: secondaryProfile?.inputTracking,
         fontFamily: `var(--hud-font-family)`,
         fontWeight: `var(--hud-font-weight)` as unknown as number
       }

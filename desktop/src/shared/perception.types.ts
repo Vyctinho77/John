@@ -411,12 +411,13 @@ export interface CaptureScopeSettings {
   blockedSourceKeywords: string[]
 }
 
-export type TypographyFontFamily = 'system-sans' | 'system-serif' | 'mono'
+export type TypographyFontFamily = 'system-sans' | 'system-serif' | 'mono' | 'cinzel' | 'spartan'
 
 export type TypographyFontWeight = 'light' | 'book' | 'regular' | 'medium' | 'bold'
 
 export interface TypographySettings {
   fontFamily: TypographyFontFamily
+  fontFamilySecondary: TypographyFontFamily
   fontSize: number
   fontWeight: TypographyFontWeight
 }

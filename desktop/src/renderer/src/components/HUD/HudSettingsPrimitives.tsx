@@ -361,7 +361,7 @@ export function StatusBadge({
 
   return (
     <span
-      className={className}
+      className={`hud-label ${className}`}
       style={{
         background: current.background,
         color: current.color,

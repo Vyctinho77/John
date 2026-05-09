@@ -3,6 +3,10 @@ module.exports = {
   content: ['./src/renderer/src/**/*.{js,ts,jsx,tsx}', './src/renderer/index.html'],
   theme: {
     extend: {
+      fontFamily: {
+        cinzel: ['"Cinzel"', '"Segoe UI Variable Text"', '"Segoe UI"', 'serif'],
+        spartan: ['"League Spartan"', '"Segoe UI"', 'system-ui', 'sans-serif']
+      },
       colors: {
         surface: {
           dark: '#151820',
