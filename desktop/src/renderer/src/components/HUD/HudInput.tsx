@@ -42,7 +42,7 @@ export function HudInput({
       className="flex items-center gap-0 rounded-full overflow-hidden"
       style={{
         minHeight: 56,
-        background: 'linear-gradient(180deg, rgba(4,4,6,0.985) 0%, rgba(2,2,4,0.985) 100%)',
+        background: 'var(--ares-bg-canvas)',
         border: '1px solid rgba(255,255,255,0.04)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.03), 0 10px 24px rgba(0,0,0,0.26)',
         opacity: disabled ? 0.45 : 1

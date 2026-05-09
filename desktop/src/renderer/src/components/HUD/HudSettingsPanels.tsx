@@ -1027,14 +1027,14 @@ export function DataSettingsPanel({
                 style={{
                   width: 36,
                   height: 36,
-                  background: 'linear-gradient(135deg, rgba(90,130,240,0.22), rgba(90,130,240,0.08))',
-                  border: '1px solid rgba(90,130,240,0.18)'
+                  background: 'linear-gradient(135deg, rgba(148,94,228,0.22), rgba(148,94,228,0.08))',
+                  border: '1px solid rgba(148,94,228,0.18)'
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="rgba(120,160,255,0.85)" strokeWidth="1.5" strokeLinejoin="round" />
-                  <path d="M12 22V12" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
-                  <path d="M21 7l-9 5-9-5" stroke="rgba(120,160,255,0.6)" strokeWidth="1.5" />
+                  <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="rgba(183,140,242,0.85)" strokeWidth="1.5" strokeLinejoin="round" />
+                  <path d="M12 22V12" stroke="rgba(183,140,242,0.60)" strokeWidth="1.5" />
+                  <path d="M21 7l-9 5-9-5" stroke="rgba(183,140,242,0.60)" strokeWidth="1.5" />
                 </svg>
               </div>
               <div>

@@ -1037,7 +1037,7 @@ export const HudExpanded = memo(function HudExpanded({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)' }}
+                style={{ color: active ? 'var(--ares-accent)' : 'var(--ares-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={

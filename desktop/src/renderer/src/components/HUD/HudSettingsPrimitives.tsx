@@ -1,28 +1,56 @@
+import { motion } from 'framer-motion'
 import type {
   HTMLAttributes,
   MouseEvent,
   ReactNode
 } from 'react'
 
+// Spring preset — snappy without bounce, feels physical
+const SPRING_SNAPPY = { type: 'spring', stiffness: 500, damping: 32, mass: 0.8 } as const
+const SPRING_LAYOUT = { type: 'spring', stiffness: 400, damping: 30 } as const
+
 export function Toggle({ on }: { on: boolean }) {
   return (
-    <div
-      className="w-10 h-6 rounded-full transition-colors duration-200 relative"
+    <motion.div
       style={{
+        width: 44,
+        height: 26,
+        borderRadius: 999,
+        padding: 3,
+        display: 'flex',
+        alignItems: 'center',
+        flexShrink: 0,
+        cursor: 'pointer',
+        // Track color — accent when on, surface when off
         background: on
-          ? 'color-mix(in srgb, var(--ares-surface-2) 85%, transparent)'
-          : 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
-        border: `1px solid ${on ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`
+          ? 'var(--ares-accent)'
+          : 'color-mix(in srgb, var(--ares-surface-2) 90%, transparent)',
+        border: `1px solid ${on
+          ? 'color-mix(in srgb, var(--ares-accent) 45%, transparent)'
+          : 'var(--ares-border-soft)'}`,
+        // Glow when active
+        boxShadow: on
+          ? '0 0 10px color-mix(in srgb, var(--ares-accent) 28%, transparent), inset 0 1px 0 rgba(255,255,255,0.10)'
+          : 'none'
       }}
+      animate={{
+        background: on ? 'var(--ares-accent)' : 'var(--ares-surface-1)',
+      }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
     >
-      <div
-        className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200"
+      <motion.div
         style={{
-          left: on ? 18 : 2,
-          background: on ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)'
+          width: 20,
+          height: 20,
+          borderRadius: '50%',
+          background: on ? '#fff' : 'hsl(0 0% 40%)',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.30), 0 0 0 0.5px rgba(0,0,0,0.08)',
+          flexShrink: 0
         }}
+        animate={{ x: on ? 18 : 0 }}
+        transition={SPRING_SNAPPY}
       />
-    </div>
+    </motion.div>
   )
 }
 
@@ -46,7 +74,8 @@ export function SettingsRow({
     ? {
         onClick,
         onMouseDown: (e: MouseEvent) => e.preventDefault(),
-        className: 'w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity duration-150'
+        // Subtle background highlight on hover — more intentional than opacity fade
+        className: 'w-full flex items-center justify-between text-left transition-colors duration-100 hover:bg-white/[0.035] active:bg-white/[0.06]'
       }
     : { className: 'w-full flex items-center justify-between' }
 
@@ -71,12 +100,24 @@ export function SettingsRow({
         <Toggle on={toggle} />
       ) : (
         <span
-          className="inline-flex items-center gap-1.5 text-[14px] py-4"
-          style={{ color: 'var(--ares-text-secondary)', fontSize: 'var(--hud-font-size, 15px)' }}
+          className="inline-flex items-center gap-1.5 py-4"
+          style={{
+            color: 'var(--ares-text-secondary)',
+            fontSize: 'var(--hud-font-size, 15px)',
+            // Chevron shifts 2px right on hover — subtle directional cue
+            transition: 'color 100ms ease'
+          }}
         >
           {value}
           {onClick && (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+              style={{ opacity: 0.5, flexShrink: 0 }}
+            >
               <path
                 d="M2.25 4.25L6 8L9.75 4.25"
                 stroke="currentColor"
@@ -106,16 +147,33 @@ export function SettingsNavItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150"
-      style={{
-        color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)',
-        background: active ? 'color-mix(in srgb, var(--ares-surface-2) 76%, transparent)' : 'transparent'
-      }}
+      className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
+      style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)' }}
     >
-      <span className="w-[20px] h-[20px] flex items-center justify-center flex-shrink-0 opacity-80">
+      {/* Sliding active pill — animates between nav items with layoutId */}
+      {active && (
+        <motion.div
+          layoutId="settings-nav-active-pill"
+          className="absolute inset-0 rounded-xl"
+          style={{ background: 'color-mix(in srgb, var(--ares-surface-2) 76%, transparent)' }}
+          transition={SPRING_LAYOUT}
+        />
+      )}
+      <span
+        className="relative z-10 w-[20px] h-[20px] flex items-center justify-center flex-shrink-0"
+        style={{
+          color: active ? 'var(--ares-accent)' : 'var(--ares-text-muted)',
+          transition: 'color 150ms ease'
+        }}
+      >
         {icon}
       </span>
-      <span className="text-[12px] leading-none whitespace-nowrap">{label}</span>
+      <span
+        className="relative z-10 text-[12px] leading-none whitespace-nowrap"
+        style={{ transition: 'color 150ms ease' }}
+      >
+        {label}
+      </span>
     </button>
   )
 }
@@ -132,24 +190,28 @@ export function TypographyChoice({
   onClick: () => void
 }) {
   return (
-    <button
+    <motion.button
       onClick={onClick}
-      className="px-3 py-2 rounded-2xl text-left transition-colors duration-150"
+      whileTap={{ scale: 0.95 }}
+      transition={SPRING_SNAPPY}
+      className="px-3 py-2 rounded-2xl text-left"
       style={{
-        background: active
-          ? 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
-          : 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
+        background: active ? 'var(--ares-surface-2)' : 'var(--ares-surface-1)',
         color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-secondary)',
-        border: `1px solid ${active ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`
+        border: `1px solid ${active ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`,
+        transition: 'background 150ms ease, color 150ms ease, border-color 150ms ease'
       }}
     >
       <div className="text-[12px] leading-none">{label}</div>
       {secondaryLabel && (
-        <div className="mt-1 text-[10px]" style={{ color: active ? 'var(--ares-text-secondary)' : 'var(--ares-text-tertiary)' }}>
+        <div
+          className="mt-1 text-[10px]"
+          style={{ color: active ? 'var(--ares-text-secondary)' : 'var(--ares-text-tertiary)' }}
+        >
           {secondaryLabel}
         </div>
       )}
-    </button>
+    </motion.button>
   )
 }
 
@@ -185,9 +247,7 @@ export function SettingsCard({
     <div
       className={className}
       style={{
-        background: elevated
-          ? 'color-mix(in srgb, var(--ares-surface-overlay) 96%, transparent)'
-          : 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
+        background: elevated ? 'var(--ares-surface-elevated)' : 'var(--ares-surface-1)',
         border: `1px solid ${elevated ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`,
         ...style
       }}
@@ -216,14 +276,12 @@ export function PillButton({
 }) {
   const palette = {
     neutral: {
-      background: active
-        ? 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
-        : 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
-      color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)',
+      background: active ? 'var(--ares-surface-2)' : 'var(--ares-surface-1)',
+      color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-secondary)',
       border: active ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'
     },
     strong: {
-      background: 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)',
+      background: 'var(--ares-surface-2)',
       color: 'var(--ares-text-strong)',
       border: 'var(--ares-border-strong)'
     },
@@ -247,21 +305,23 @@ export function PillButton({
   const current = palette[tone]
 
   return (
-    <button
+    <motion.button
       onMouseDown={onMouseDown}
       onClick={onClick}
       disabled={disabled}
       className={className}
+      whileTap={disabled ? undefined : { scale: 0.94 }}
+      transition={SPRING_SNAPPY}
       style={{
         background: current.background,
         color: current.color,
         border: `1px solid ${current.border}`,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.45 : 1,
         cursor: disabled ? 'default' : 'pointer'
       }}
     >
       {children}
-    </button>
+    </motion.button>
   )
 }
 
@@ -389,17 +449,19 @@ export function InlineEditableRow({
           </PillButton>
         </div>
       ) : (
-        <button
+        <motion.button
           onMouseDown={e => e.preventDefault()}
           onClick={onStartEdit}
-          className="inline-flex items-center gap-1.5 text-[14px] transition-opacity hover:opacity-70"
+          whileTap={{ scale: 0.96 }}
+          transition={SPRING_SNAPPY}
+          className="inline-flex items-center gap-1.5 text-[14px] transition-colors duration-100 hover:text-white/70"
           style={{ color: value ? 'var(--ares-text-secondary)' : 'var(--ares-text-muted)' }}
         >
           {value || 'definir nome'}
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M8.5 1.5L10.5 3.5L4 10H2V8L8.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-        </button>
+        </motion.button>
       )}
     </div>
   )

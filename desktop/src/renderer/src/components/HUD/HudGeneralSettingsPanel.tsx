@@ -309,7 +309,7 @@ export function GeneralSettingsPanel({
 
         <LibraryTile
           icon={
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ares-text-primary)' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ares-accent)' }}>
               <polyline points="2 12 6 8 10 14 14 9 18 13 22 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </svg>
           }

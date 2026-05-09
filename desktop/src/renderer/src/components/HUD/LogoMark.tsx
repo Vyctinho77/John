@@ -6,6 +6,7 @@ export function LogoMark({ className }: LogoMarkProps) {
   return (
     <svg
       className={className}
+      style={{ color: 'hsl(43 88% 56%)' }}
       width="28"
       height="24"
       viewBox="0 0 28 24"

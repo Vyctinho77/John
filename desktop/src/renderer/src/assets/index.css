@@ -25,23 +25,34 @@ html, body, #root {
 }
 
 .hud-typography {
-  --ares-bg-canvas: hsl(240 20% 3.5%);
-  --ares-bg-panel-top: hsl(240 20% 6%);
-  --ares-bg-panel-bottom: hsl(240 18% 3%);
-  --ares-surface-0: hsl(240 16% 9%);
-  --ares-surface-1: hsl(240 14% 12%);
-  --ares-surface-2: hsl(240 12% 16%);
-  --ares-surface-elevated: hsla(240 16% 12% / 0.88);
-  --ares-surface-overlay: hsla(240 18% 6% / 0.88);
-  --ares-text-strong: hsl(0 0% 95%);
-  --ares-text-primary: hsl(0 0% 88%);
-  --ares-text-secondary: hsl(0 0% 71%);
-  --ares-text-tertiary: hsl(0 0% 54%);
-  --ares-text-muted: hsl(0 0% 36%);
-  --ares-border-soft: hsla(0 0% 100% / 0.08);
-  --ares-border-strong: hsla(0 0% 100% / 0.14);
-  --ares-accent: hsl(222 87% 68%);
-  --ares-accent-soft: hsla(222 87% 68% / 0.14);
+  /* Background: preto profundo */
+  --ares-bg-canvas: hsl(0 0% 2%);
+  --ares-bg-panel-top: hsl(0 0% 3%);
+  --ares-bg-panel-bottom: hsl(0 0% 1%);
+
+  /* Surfaces: prata azulada — metálico frio mais pronunciado */
+  --ares-surface-0: hsl(216 14% 11%);
+  --ares-surface-1: hsl(216 12% 16%);
+  --ares-surface-2: hsl(216 10% 23%);
+  --ares-surface-elevated: hsl(216 12% 16%);
+  --ares-surface-overlay: hsla(216 14% 5% / 0.95);
+
+  /* Text: branco primary, prata azulada nos secundários */
+  --ares-text-strong: hsl(0 0% 97%);
+  --ares-text-primary: hsl(210 14% 91%);
+  --ares-text-secondary: hsl(216 14% 70%);
+  --ares-text-tertiary: hsl(216 12% 54%);
+  --ares-text-muted: hsl(216 10% 38%);
+
+  /* Borders: prata azulada sutil */
+  --ares-border-soft: hsla(216 30% 100% / 0.09);
+  --ares-border-strong: hsla(216 30% 100% / 0.16);
+
+  /* Accent: roxo — cor secundária */
+  --ares-accent: hsl(265 72% 63%);
+  --ares-accent-soft: hsla(265 72% 63% / 0.14);
+
+  /* Status: funcionais, sem mudança */
   --ares-success: hsl(145 64% 55%);
   --ares-success-soft: hsla(145 64% 55% / 0.16);
   --ares-danger: hsl(0 81% 69%);

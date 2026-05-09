@@ -832,7 +832,7 @@ function createSessionMemory(): SessionMemory {
     expires_at: now + config.sessionTtlMs,
     frame_count: 0,
     continuity_summary: 'No active continuity yet.',
-    incremental_summary: 'Waiting for the first stable observation.',
+    incremental_summary: '',
     probable_focus: 'unknown',
     current_intent: 'await more context',
     topic_candidates: [],
@@ -887,41 +887,17 @@ function updateSessionMemory(current: SessionMemory, semanticState: SemanticStat
 }
 
 function buildContinuitySummary(
-  entries: SessionMemoryEntry[],
-  semanticState: SemanticState
+  _entries: SessionMemoryEntry[],
+  _semanticState: SemanticState
 ): string {
-  if (entries.length <= 1) {
-    return `Session started around ${surfaceLabel(semanticState.surface_type)} with focus on ${semanticState.probable_user_focus}.`
-  }
-
-  const surfaces = new Set(entries.map(entry => entry.surface_type))
-  const lastChanges = entries.slice(-3).map(entry => entry.change_summary)
-  const stable = lastChanges.every(change => change === 'none' || change === 'minor')
-
-  if (surfaces.size === 1 && stable) {
-    return `The context remains on ${surfaceLabel(semanticState.surface_type)} and is refining the same line of attention: ${semanticState.probable_user_focus}.`
-  }
-
-  return `The session is tracking a transition toward ${semanticState.probable_user_focus}, with recent changes classified as ${semanticState.change_summary}.`
+  return ''
 }
 
 function buildIncrementalSummary(
-  previousEntry: SessionMemoryEntry | undefined,
-  semanticState: SemanticState
+  _previousEntry: SessionMemoryEntry | undefined,
+  _semanticState: SemanticState
 ): string {
-  if (!previousEntry) {
-    return `Initial observation: ${semanticState.visual_summary}`
-  }
-
-  if (semanticState.change_summary === 'none') {
-    return `The screen stayed semantically stable around ${semanticState.probable_user_focus}.`
-  }
-
-  if (semanticState.change_summary === 'minor') {
-    return `A small update happened: focus moved from ${previousEntry.probable_user_focus} to ${semanticState.probable_user_focus}.`
-  }
-
-  return `A larger shift happened from ${surfaceLabel(previousEntry.surface_type)} to ${surfaceLabel(semanticState.surface_type)}.`
+  return ''
 }
 
 function deriveTopicCandidates(

@@ -115,9 +115,9 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
         style={{
           width: '100vw',
           height: '100vh',
-          background: 'linear-gradient(180deg, var(--ares-bg-panel-top) 0%, var(--ares-bg-panel-bottom) 100%)',
-          backdropFilter: 'blur(24px) saturate(160%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+          background: 'var(--ares-bg-canvas)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
           borderRadius,
           boxShadow: attachedLeft ? '4px 0 32px rgba(0,0,0,0.6)' : '-4px 0 32px rgba(0,0,0,0.6)'
         }}
@@ -136,9 +136,7 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
     <motion.div
       className="relative overflow-hidden"
       style={{
-        background: 'linear-gradient(180deg, var(--ares-bg-panel-top) 0%, var(--ares-bg-panel-bottom) 100%)',
-        backdropFilter: 'blur(24px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(160%)',
+        background: 'var(--ares-surface-0)',
         boxShadow: 'var(--ares-shadow-panel)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'

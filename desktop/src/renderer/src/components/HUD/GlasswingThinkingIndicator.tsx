@@ -99,7 +99,7 @@ export function GlasswingThinkingIndicator({
       updatePoints()
 
       ctx.clearRect(0, 0, S, S)
-      ctx.fillStyle = emphasis === 'strong' ? '#0b0b0d' : '#080808'
+      ctx.fillStyle = emphasis === 'strong' ? '#080808' : '#050505'
       ctx.fillRect(0, 0, S, S)
 
       for (let y = 0; y < ROWS; y += 1) {

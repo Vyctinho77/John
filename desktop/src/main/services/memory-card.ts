@@ -291,7 +291,7 @@ function emptySessionMemory(): SessionMemory {
     expires_at: now,
     frame_count: 0,
     continuity_summary: 'No active continuity yet.',
-    incremental_summary: 'Waiting for the first stable observation.',
+    incremental_summary: '',
     probable_focus: 'unknown',
     current_intent: 'await more context',
     topic_candidates: [],

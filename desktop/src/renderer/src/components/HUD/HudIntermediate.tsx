@@ -107,7 +107,7 @@ export function HudIntermediate({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)' }}
+                style={{ color: active ? 'var(--ares-accent)' : 'var(--ares-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={
@@ -174,16 +174,7 @@ export function HudIntermediate({
         </div>
       )}
 
-      {!intermediateThought && !isStreaming && sessionMemory && (
-        <div className="flex-1 px-4 overflow-hidden">
-          <p className="text-[12px] leading-relaxed line-clamp-3 selectable"
-            style={{ color: 'rgba(255,255,255,0.58)', fontSize: 'var(--hud-font-size, 15px)' }}>
-            {sessionMemory.incremental_summary}
-          </p>
-        </div>
-      )}
-
-      {!intermediateThought && !isStreaming && !sessionMemory && <div className="flex-1" />}
+      {!intermediateThought && !isStreaming && <div className="flex-1" />}
 
       <div className="flex-shrink-0 px-4 pb-3.5 pt-3">
         <div

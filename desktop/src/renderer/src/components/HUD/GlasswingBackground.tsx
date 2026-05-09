@@ -150,7 +150,7 @@ export function GlasswingBackground({ agentState }: Props) {
                     : state === 'idle'       ? 0.12
                     :                          0
 
-      ctx.fillStyle = '#050507'
+      ctx.fillStyle = '#050505'
       ctx.fillRect(0, 0, W, H)
 
       for (let row = 0; row < ROWS; row++) {
