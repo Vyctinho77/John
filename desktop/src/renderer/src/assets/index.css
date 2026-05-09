@@ -37,12 +37,13 @@ html, body, #root {
   --ares-bg-panel-top: hsl(0 0% 1%);
   --ares-bg-panel-bottom: hsl(0 0% 0%);
 
-  /* Surfaces: prata escura — distinguível do preto do fundo */
-  --ares-surface-0: hsl(216 14% 11%);
-  --ares-surface-1: hsl(216 12% 16%);
-  --ares-surface-2: hsl(216 10% 22%);
-  --ares-surface-elevated: hsl(216 12% 16%);
-  --ares-surface-overlay: hsla(216 14% 5% / 0.97);
+  /* surface-0: preto puro — fundo do painel HUD */
+  --ares-surface-0: hsl(0 0% 0%);
+  /* surface-1/2: prata azulada — cards e elementos internos */
+  --ares-surface-1: hsl(216 14% 13%);
+  --ares-surface-2: hsl(216 12% 20%);
+  --ares-surface-elevated: hsl(216 14% 13%);
+  --ares-surface-overlay: hsla(0 0% 0% / 0.97);
 
   /* Text: branco primary, prata aço nos pills (secondary), cinza neutro nos ícones */
   --ares-text-strong: hsl(0 0% 97%);
