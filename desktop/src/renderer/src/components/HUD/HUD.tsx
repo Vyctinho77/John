@@ -737,6 +737,16 @@ export function HUD() {
             meta: buildTradingViewActionMeta(result)
           }
         ])
+      } else if (action.kind === 'market_autonomy') {
+        const result = await window.marketAutonomyAPI.executeAction(action.payload.action)
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: result.content,
+            meta: result
+          }
+        ])
       } else {
         const result = await window.vscodeAPI.executeAction(action.payload)
         setMessages(prev => [
@@ -938,6 +948,18 @@ export function HUD() {
               onQuickPrompt={value => setInputValue(value)}
               onExecuteAction={handleExecuteAction}
               pendingActionIds={pendingActionIds}
+              onBringMarketProposalToChat={() => {
+                void window.marketAutonomyAPI.getChatPrompt().then(response => {
+                  setMessages(prev => [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      content: response.content,
+                      meta: response
+                    }
+                  ])
+                })
+              }}
               onToggleTelemetry={() => {
                 if (!settings) return
                 void updateSettings({ telemetryOptIn: !settings.telemetryOptIn })

@@ -235,20 +235,25 @@ export function TypographySettingsPanel({
 export function MarketAutonomySettingsPanel({
   view,
   loading,
-  onRefresh
+  onRefresh,
+  onBringToChat
 }: {
   view: MarketAutonomyViewSnapshot | null
   loading: boolean
   onRefresh: () => void
+  onBringToChat: () => void
 }) {
   const snapshot = view?.snapshot ?? null
   const strategy = view?.strategy ?? null
+  const proposal = view?.proposal ?? null
   const risk = view?.riskDecision ?? null
   const intent = view?.executionIntent ?? null
   const idea = strategy?.idea ?? null
   const guards = view?.marketGuards ?? {
     hasHotNews: false,
     macroBlocked: false,
+    hotNewsCount: 0,
+    upcomingMacroEventCount: 0,
     hotNewsItems: [],
     upcomingMacroEvents: []
   }
@@ -268,6 +273,15 @@ export function MarketAutonomySettingsPanel({
           className="px-3 py-1.5 rounded-full text-[11px] whitespace-nowrap"
         >
           {loading ? 'atualizando...' : 'atualizar'}
+        </PillButton>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <PillButton
+          onMouseDown={e => { e.preventDefault(); onBringToChat() }}
+          tone="strong"
+          className="px-3 py-1.5 rounded-full text-[11px]"
+        >
+          trazer pro chat
         </PillButton>
       </div>
 
@@ -340,6 +354,73 @@ export function MarketAutonomySettingsPanel({
         {idea?.thesis && (
           <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.55 }}>
             {idea.thesis}
+          </p>
+        )}
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Proposta</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Leitura final pronta para aprovação humana.
+            </p>
+          </div>
+          <StatusBadge
+            tone={
+              proposal?.status === 'candidate'
+                ? 'success'
+                : proposal?.status === 'blocked'
+                  ? 'danger'
+                  : 'neutral'
+            }
+          >
+            {proposal?.status || 'no_trade'}
+          </StatusBadge>
+        </div>
+
+        <div className="mt-4">
+          <SettingsRow label="Estratégia" value={proposal?.strategyId || 'indisponível'} />
+          <SettingsRow label="Lado" value={proposal?.side || 'indisponível'} />
+          <SettingsRow
+            label="Entrada / stop / alvo"
+            value={
+              proposal
+                ? `${proposal.entryPrice ?? '-'} / ${proposal.stopLossPrice ?? '-'} / ${proposal.takeProfitPrice ?? '-'}`
+                : 'indisponível'
+            }
+          />
+          <SettingsRow
+            label="Quantidade / risco"
+            value={
+              proposal
+                ? `${proposal.quantity ?? '-'} / ${proposal.riskUsd != null ? `$${proposal.riskUsd.toFixed(2)}` : '-'}`
+                : 'indisponível'
+            }
+          />
+          <SettingsRow
+            label="Notional"
+            value={proposal?.notionalUsd != null ? `$${proposal.notionalUsd.toFixed(2)}` : 'indisponível'}
+            last={!proposal?.blockedBy.length}
+          />
+          {proposal?.blockedBy.length ? (
+            <SettingsRow
+              label="Bloqueios"
+              value={proposal.blockedBy.join(', ')}
+              muted
+              last
+            />
+          ) : null}
+        </div>
+
+        {proposal?.thesis && (
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.55 }}>
+            {proposal.thesis}
+          </p>
+        )}
+        {proposal?.invalidation && (
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.55 }}>
+            Invalidação: {proposal.invalidation}
           </p>
         )}
       </SettingsCard>

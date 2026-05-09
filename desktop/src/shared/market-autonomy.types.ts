@@ -103,6 +103,13 @@ export interface RiskDecision {
   }
 }
 
+export interface MarketGuardStatus {
+  hasHotNews: boolean
+  macroBlocked: boolean
+  hotNewsCount: number
+  upcomingMacroEventCount: number
+}
+
 export interface BrokerOrderRequest {
   symbol: string
   side: 'buy' | 'sell'

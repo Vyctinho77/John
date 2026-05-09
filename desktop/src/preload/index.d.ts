@@ -6,6 +6,7 @@ import type {
   ConnectorStatus,
   DataDeletionSummary,
   DiagnosticsSnapshot,
+  MarketAutonomyActionPayload,
   MacroCalendarSnapshot,
   MacroEvent,
   MarketNewsSnapshot,
@@ -96,6 +97,8 @@ declare global {
     }
     marketAutonomyAPI: {
       getView: () => Promise<MarketAutonomyViewSnapshot>
+      getChatPrompt: () => Promise<TutorResponse>
+      executeAction: (action: MarketAutonomyActionPayload['action']) => Promise<TutorResponse>
     }
     aiAPI: {
       getSettings: () => Promise<AISettingsSnapshot>

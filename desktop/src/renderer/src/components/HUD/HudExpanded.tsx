@@ -131,6 +131,7 @@ interface HudExpandedProps {
   onQuickPrompt: (value: string) => void
   onExecuteAction: (action: TutorAction) => void
   pendingActionIds: string[]
+  onBringMarketProposalToChat: () => void
   onToggleTelemetry: () => void
   onToggleAlwaysVisible: () => void
   onToggleMinimalMode: () => void
@@ -321,6 +322,7 @@ export const HudExpanded = memo(function HudExpanded({
   onQuickPrompt,
   onExecuteAction,
   pendingActionIds,
+  onBringMarketProposalToChat,
   onToggleTelemetry,
   onToggleAlwaysVisible,
   onToggleMinimalMode,
@@ -968,6 +970,7 @@ export const HudExpanded = memo(function HudExpanded({
               .then(setMarketAutonomyView)
               .finally(() => setMarketAutonomyLoading(false))
           }}
+          onBringToChat={onBringMarketProposalToChat}
         />
       )
     }

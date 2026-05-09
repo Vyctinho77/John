@@ -289,6 +289,10 @@ export type VSCodeActionPayload = {
   action: 'report_state' | 'read_code' | 'explain_diagnostics' | 'review_diff' | 'summarize_terminal'
 }
 
+export type MarketAutonomyActionPayload = {
+  action: 'refresh_proposal' | 'approve_paper_trade' | 'reject_trade'
+}
+
 export type TutorAction = {
   id: string
   label: string
@@ -304,6 +308,11 @@ export type TutorAction = {
   label: string
   kind: 'vscode'
   payload: VSCodeActionPayload
+} | {
+  id: string
+  label: string
+  kind: 'market_autonomy'
+  payload: MarketAutonomyActionPayload
 }
 
 export interface SpotifyCommandResult {

@@ -77,6 +77,8 @@ import { resolveMarketAutonomyPolicy } from './services/risk-policy'
 import { PaperBroker } from './services/brokers/paper-broker'
 import { marketStateStore } from './services/market-state-store'
 import { listTradeAuditRecords } from './services/trade-audit-log'
+import { buildTradeCopilotProposal } from './services/trade-copilot'
+import { buildMarketAutonomyChatResponse } from './services/market-autonomy-chat'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
 
@@ -862,6 +864,15 @@ ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewS
   const newsSnapshot = newsService.getSnapshot()
   const hotNewsItems = [...newsSnapshot.hotItems].slice(0, 4)
   const upcomingMacroEvents = calendarService.getUpcoming(policy.blockNearMacroEventsMin * 60 * 1000).slice(0, 4)
+  const proposal = result.snapshot
+    ? buildTradeCopilotProposal({
+        snapshot: result.snapshot,
+        idea: result.strategy?.idea ?? null,
+        riskDecision: result.riskDecision,
+        executionIntent: result.executionIntent,
+        marketGuards: result.marketGuards
+      })
+    : null
 
   return {
     snapshot: result.snapshot,
@@ -887,11 +898,30 @@ ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewS
             : null
         }
       : null,
+    proposal: proposal
+      ? {
+          status: proposal.status,
+          symbol: proposal.symbol,
+          timeframe: proposal.timeframe,
+          marketRegime: proposal.marketRegime,
+          strategyId: proposal.strategyId,
+          side: proposal.side,
+          confidence: proposal.confidence,
+          entryPrice: proposal.entryPrice,
+          stopLossPrice: proposal.stopLossPrice,
+          takeProfitPrice: proposal.takeProfitPrice,
+          quantity: proposal.quantity,
+          notionalUsd: proposal.notionalUsd,
+          riskUsd: proposal.riskUsd,
+          thesis: proposal.thesis,
+          invalidation: proposal.invalidation,
+          blockedBy: [...proposal.blockedBy]
+        }
+      : null,
     riskDecision: result.riskDecision,
     executionIntent: result.executionIntent,
     marketGuards: {
-      hasHotNews: hotNewsItems.length > 0,
-      macroBlocked: upcomingMacroEvents.length > 0,
+      ...result.marketGuards,
       hotNewsItems,
       upcomingMacroEvents
     },
@@ -900,6 +930,137 @@ ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewS
     recentAuditTrail: listTradeAuditRecords().slice(-6).reverse()
   }
 })
+
+ipcMain.handle('market-autonomy:get-chat-prompt', async (): Promise<import('../shared/perception.types').TutorResponse> => {
+  const policy = resolveMarketAutonomyPolicy('copilot')
+  const broker = new PaperBroker()
+  const result = await evaluateCurrentMarketRun({
+    policy,
+    broker,
+    executeTrade: false
+  })
+
+  if (!result.snapshot) {
+    return {
+      domain: 'market',
+      mode: 'direct',
+      content: 'Ainda não tenho snapshot válido para montar uma proposta de trade agora.',
+      provider: 'market-autonomy-local',
+      model: 'market-autonomy-local',
+      uncertainty: 0.34,
+      should_ask_confirmation: false,
+      needs_visual_confirmation: false,
+      suggested_follow_ups: ['Atualizar leitura'],
+      warning: 'snapshot indisponível',
+      actions: [{
+        id: 'market-autonomy:refresh_proposal',
+        label: 'Atualizar leitura',
+        kind: 'market_autonomy',
+        payload: { action: 'refresh_proposal' }
+      }]
+    }
+  }
+
+  const proposal = buildTradeCopilotProposal({
+    snapshot: result.snapshot,
+    idea: result.strategy?.idea ?? null,
+    riskDecision: result.riskDecision,
+    executionIntent: result.executionIntent,
+    marketGuards: result.marketGuards
+  })
+
+  return buildMarketAutonomyChatResponse(proposal)
+})
+
+ipcMain.handle(
+  'market-autonomy:execute-action',
+  async (_e, action: import('../shared/perception.types').MarketAutonomyActionPayload['action']) => {
+    const policy = resolveMarketAutonomyPolicy('copilot')
+    const broker = new PaperBroker()
+
+    if (action === 'reject_trade') {
+      return {
+        domain: 'market',
+        mode: 'direct',
+        content: 'Proposta rejeitada. Posso atualizar a leitura quando quiser.',
+        provider: 'market-autonomy-local',
+        model: 'market-autonomy-local',
+        uncertainty: 0,
+        should_ask_confirmation: false,
+        needs_visual_confirmation: false,
+        suggested_follow_ups: ['Atualizar leitura'],
+        warning: null,
+        actions: [{
+          id: 'market-autonomy:refresh_proposal',
+          label: 'Atualizar leitura',
+          kind: 'market_autonomy',
+          payload: { action: 'refresh_proposal' }
+        }]
+      } satisfies import('../shared/perception.types').TutorResponse
+    }
+
+    const result = await evaluateCurrentMarketRun({
+      policy,
+      broker,
+      executeTrade: action === 'approve_paper_trade'
+    })
+
+    if (!result.snapshot) {
+      return {
+        domain: 'market',
+        mode: 'direct',
+        content: 'Não consegui montar uma proposta válida agora porque o snapshot do mercado está indisponível.',
+        provider: 'market-autonomy-local',
+        model: 'market-autonomy-local',
+        uncertainty: 0.32,
+        should_ask_confirmation: false,
+        needs_visual_confirmation: false,
+        suggested_follow_ups: ['Atualizar leitura'],
+        warning: 'snapshot indisponível',
+        actions: [{
+          id: 'market-autonomy:refresh_proposal',
+          label: 'Atualizar leitura',
+          kind: 'market_autonomy',
+          payload: { action: 'refresh_proposal' }
+        }]
+      } satisfies import('../shared/perception.types').TutorResponse
+    }
+
+    if (action === 'approve_paper_trade') {
+      const executed = Boolean(result.simulation?.executed)
+      return {
+        domain: 'market',
+        mode: 'direct',
+        content: executed
+          ? 'Trade aprovado no paper e enviado para a simulação local.'
+          : `A aprovação foi tentada, mas a execução não aconteceu. Motivo: ${result.riskDecision?.reason ?? 'sem decisão'}.`,
+        provider: 'market-autonomy-local',
+        model: 'market-autonomy-local',
+        uncertainty: executed ? 0.04 : 0.12,
+        should_ask_confirmation: false,
+        needs_visual_confirmation: false,
+        suggested_follow_ups: ['Atualizar leitura'],
+        warning: executed ? null : 'execução não confirmada',
+        actions: [{
+          id: 'market-autonomy:refresh_proposal',
+          label: 'Atualizar leitura',
+          kind: 'market_autonomy',
+          payload: { action: 'refresh_proposal' }
+        }]
+      } satisfies import('../shared/perception.types').TutorResponse
+    }
+
+    const proposal = buildTradeCopilotProposal({
+      snapshot: result.snapshot,
+      idea: result.strategy?.idea ?? null,
+      riskDecision: result.riskDecision,
+      executionIntent: result.executionIntent,
+      marketGuards: result.marketGuards
+    })
+
+    return buildMarketAutonomyChatResponse(proposal)
+  }
+)
 
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 

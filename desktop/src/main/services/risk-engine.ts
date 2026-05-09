@@ -1,4 +1,5 @@
 import type {
+  MarketGuardStatus,
   MarketAutonomyPolicy,
   PositionState,
   RiskDecision,
@@ -13,6 +14,7 @@ export interface RiskContext {
   tradesExecutedThisSession: number
   cooldownUntil: number | null
   currentTimeframe?: string | null
+  marketGuards?: MarketGuardStatus
   now?: number
 }
 
@@ -67,6 +69,14 @@ export function evaluateTradeRisk(
 
   if (Math.abs(context.dailyRealizedPnlUsd) >= context.policy.maxDailyLossUsd && context.dailyRealizedPnlUsd < 0) {
     violations.push('max_daily_loss_reached')
+  }
+
+  if (context.marketGuards?.hasHotNews) {
+    violations.push('hot_news_guard_active')
+  }
+
+  if (context.marketGuards?.macroBlocked) {
+    violations.push('macro_event_guard_active')
   }
 
   if (context.policy.requireStopLoss && !idea.stopLoss) {

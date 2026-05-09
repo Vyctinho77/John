@@ -1,5 +1,6 @@
 import type {
   ExecutionIntent,
+  MarketGuardStatus,
   MarketAutonomyPolicy,
   MarketSnapshot,
   RiskDecision
@@ -11,11 +12,13 @@ import {
   type BuildMarketSnapshotOptions
 } from './market-data'
 import { marketStateStore } from './market-state-store'
+import { newsService } from './news-service'
 import { recordDiagnosticEvent } from './observability'
 import { evaluateTradeRisk } from './risk-engine'
 import { generateTradeIdea, type StrategyEngineResult } from './strategy-engine'
 import { simulateTradeRun, type SimulatedTradeRunResult } from './trade-supervisor'
 import { tradingViewService } from './tradingview'
+import { calendarService } from './calendar-service'
 
 export interface EvaluateMarketRunOptions {
   policy: MarketAutonomyPolicy
@@ -33,6 +36,7 @@ export interface MarketAutonomyRunResult {
   strategy: StrategyEngineResult | null
   riskDecision: RiskDecision | null
   executionIntent: ExecutionIntent | null
+  marketGuards: MarketGuardStatus
   simulation: SimulatedTradeRunResult | null
 }
 
@@ -67,12 +71,14 @@ export async function evaluateCurrentMarketRun(
       strategy: null,
       riskDecision: null,
       executionIntent: null,
+      marketGuards: emptyMarketGuards(),
       simulation: null
     }
   }
 
   const snapshot = snapshotEnvelope.snapshot
   marketStateStore.setSnapshot(snapshot)
+  const marketGuards = resolveMarketGuards(options.policy)
 
   const strategy = generateTradeIdea(snapshot, options.policy)
   if (!strategy.idea) {
@@ -82,6 +88,7 @@ export async function evaluateCurrentMarketRun(
       strategy,
       riskDecision: null,
       executionIntent: null,
+      marketGuards,
       simulation: null
     }
   }
@@ -93,7 +100,8 @@ export async function evaluateCurrentMarketRun(
     dailyRealizedPnlUsd: options.dailyRealizedPnlUsd ?? 0,
     tradesExecutedThisSession: options.tradesExecutedThisSession ?? 0,
     cooldownUntil: options.cooldownUntil ?? null,
-    currentTimeframe: snapshot.timeframe
+    currentTimeframe: snapshot.timeframe,
+    marketGuards
   })
 
   const executionIntent = buildExecutionIntent(
@@ -124,6 +132,8 @@ export async function evaluateCurrentMarketRun(
       strategyId: strategy.strategyId,
       strategyEligible: strategy.eligible,
       riskAllowed: riskDecision.allowed,
+      hotNewsGuard: marketGuards.hasHotNews,
+      macroGuard: marketGuards.macroBlocked,
       executed: Boolean(simulation?.executed)
     }
   })
@@ -134,6 +144,30 @@ export async function evaluateCurrentMarketRun(
     strategy,
     riskDecision,
     executionIntent,
+    marketGuards,
     simulation
+  }
+}
+
+function resolveMarketGuards(
+  policy: MarketAutonomyPolicy
+): MarketGuardStatus {
+  const hotNewsCount = newsService.getSnapshot().hotItems.length
+  const upcomingMacroEventCount = calendarService.getUpcoming(policy.blockNearMacroEventsMin * 60 * 1000).length
+
+  return {
+    hasHotNews: hotNewsCount > 0,
+    macroBlocked: upcomingMacroEventCount > 0,
+    hotNewsCount,
+    upcomingMacroEventCount
+  }
+}
+
+function emptyMarketGuards(): MarketGuardStatus {
+  return {
+    hasHotNews: false,
+    macroBlocked: false,
+    hotNewsCount: 0,
+    upcomingMacroEventCount: 0
   }
 }

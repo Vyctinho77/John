@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AppSettings,
   ConnectorStatus,
+  MarketAutonomyActionPayload,
   SpotifyActionPayload,
   VSCodeActionPayload,
   VSCodeCommandResult,
@@ -126,7 +127,10 @@ const settingsAPI = {
 }
 
 const marketAutonomyAPI = {
-  getView: (): Promise<MarketAutonomyViewSnapshot> => ipcRenderer.invoke('market-autonomy:get-view')
+  getView: (): Promise<MarketAutonomyViewSnapshot> => ipcRenderer.invoke('market-autonomy:get-view'),
+  getChatPrompt: (): Promise<import('../shared/perception.types').TutorResponse> => ipcRenderer.invoke('market-autonomy:get-chat-prompt'),
+  executeAction: (action: MarketAutonomyActionPayload['action']): Promise<import('../shared/perception.types').TutorResponse> =>
+    ipcRenderer.invoke('market-autonomy:execute-action', action)
 }
 
 const aiAPI = {
