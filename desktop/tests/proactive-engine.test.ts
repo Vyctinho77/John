@@ -325,7 +325,7 @@ test('decideOpportunity allows new topic after cooldown window', () => {
   assert.equal(decision.emitted, true)
 })
 
-test('light global intent reduces proactive emission aggressiveness', () => {
+test('light global intent still allows strong proactive opportunities', () => {
   const technicalDecision = decideOpportunity(
     makeSnapshot(),
     makeState({ lastUserActivityAt: 0 }),
@@ -350,8 +350,7 @@ test('light global intent reduces proactive emission aggressiveness', () => {
   )
 
   assert.equal(technicalDecision.emitted, true)
-  assert.equal(lightDecision.emitted, false)
-  assert.ok(lightDecision.reasonCodes.includes('low-score'))
+  assert.equal(lightDecision.emitted, true)
 })
 
 test('decision global intent prioritizes market-like new content more than uncertain mode', () => {

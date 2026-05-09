@@ -112,10 +112,10 @@ test('buildRemoteSystemPrompt contains personality modules in fixed order', () =
 
   assert.ok(personaIndex >= 0)
   assert.ok(executiveIndex > personaIndex)
-  assert.ok(strategistIndex > executiveIndex)
-  assert.ok(professorIndex > strategistIndex)
+  assert.ok(professorIndex > executiveIndex)
   assert.ok(modeIndex > professorIndex)
   assert.ok(safetyIndex > modeIndex)
+  assert.ok(strategistIndex > safetyIndex)
 })
 
 test('buildRemoteSystemPrompt adapts uncertainty and tone directives', () => {

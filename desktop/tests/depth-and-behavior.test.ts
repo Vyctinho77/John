@@ -153,7 +153,7 @@ test('calibrateDepth: applies explicit style signal on neutral prompt', () => {
 test('calibrateDepth: keeps profile defaults on neutral prompt without pattern', () => {
   const cal = calibrateDepth(makeDepthSignal('o que está acontecendo?', {}, null))
   assert.equal(cal.effective_level, 'beginner')
-  assert.equal(cal.effective_style, 'step_by_step')
+  assert.equal(cal.effective_style, 'direct')
   assert.equal(cal.effective_tone, 'didactic')
 })
 

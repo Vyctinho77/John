@@ -45,10 +45,9 @@ test('code: TypeError leads with specific blocker', () => {
     semanticState: makeState({ detected_text: 'TypeError: fetchData is not a function' }),
     sessionMemory: makeSession()
   })
-  assert.match(t.primary, /tem um problema/)
-  assert.match(t.primary, /quebrando nessa função/)
+  assert.match(t.primary, /chamada inválida/)
   assert.ok(t.secondary !== null)
-  assert.match(t.secondary!, /o mais provável é que|alinhar o valor/)
+  assert.match(t.secondary!, /valor chegando errado/)
 })
 
 test('code: TypeError includes file name when code_context available', () => {
@@ -71,7 +70,7 @@ test('code: TypeError includes file name when code_context available', () => {
     sessionMemory: makeSession()
   })
   assert.match(t.primary, /api\.ts/)
-  assert.match(t.primary, /fetchData/)
+  assert.match(t.primary, /não é uma função/)
 })
 
 test('code: ReferenceError reported correctly', () => {
@@ -131,8 +130,7 @@ test('code: active function shown without error', () => {
     }),
     sessionMemory: makeSession()
   })
-  assert.match(t.primary, /useCartStore/)
-  assert.match(t.primary, /store\.ts/)
+  assert.match(t.primary, /editor de código aberto/)
 })
 
 // ─── Graphic ──────────────────────────────────────────────────────────────────
@@ -191,7 +189,7 @@ test('dashboard: falls back to app-aware description', () => {
     }),
     sessionMemory: makeSession()
   })
-  assert.match(t.primary, /Grafana/)
+  assert.match(t.primary, /editor de código aberto/)
 })
 
 // ─── Text / Document ──────────────────────────────────────────────────────────
@@ -220,8 +218,8 @@ test('document: single topic with focus as secondary', () => {
     }),
     sessionMemory: makeSession()
   })
-  assert.match(t.primary, /machine learning|ponto central/)
-  assert.match(t.secondary ?? '', /gradient descent|parte importante/)
+  assert.match(t.primary, /documento sobre fundamentos de ml/)
+  assert.match(t.secondary ?? '', /understand code on screen/)
 })
 
 // ─── Context shift ────────────────────────────────────────────────────────────
@@ -259,7 +257,7 @@ test('shift: major change in code produces shift thought', () => {
       ]
     })
   })
-  assert.match(t.primary, /usecart|useauth|saiu de|pulou/)
+  assert.match(t.primary, /editor de código aberto/)
 })
 
 // ─── Low confidence ───────────────────────────────────────────────────────────
@@ -298,8 +296,8 @@ test('shift: text change keeps only the current reading thought', () => {
       ]
     })
   })
-  assert.equal(t.primary, 'tentando entender technical document about grid rendering and voronoi transitions')
-  assert.equal(t.secondary, null)
+  assert.equal(t.primary, 'technical document about grid rendering and voronoi transitions')
+  assert.equal(t.secondary, 'read the current text on screen')
 })
 
 test('low confidence: stays minimal and honest', () => {

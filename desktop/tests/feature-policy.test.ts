@@ -14,7 +14,7 @@ test('stableBucket is deterministic', () => {
   assert.ok(first >= 0 && first < 100)
 })
 
-test('voice mode stays effectively disabled while rollout is zero', () => {
+test('voice mode is effective when requested after full rollout', () => {
   const flags = resolveEffectiveFeatureFlags('install-a', {
     passiveSuggestions: true,
     advancedPerception: true,
@@ -22,7 +22,7 @@ test('voice mode stays effectively disabled while rollout is zero', () => {
     crashReporting: true
   })
 
-  assert.equal(flags.voiceMode, false)
+  assert.equal(flags.voiceMode, true)
 })
 
 test('feature policy snapshot preserves requested and effective states', () => {
@@ -34,6 +34,6 @@ test('feature policy snapshot preserves requested and effective states', () => {
   })
 
   assert.equal(snapshot.passiveSuggestions.requested, true)
-  assert.equal(snapshot.voiceMode.effective, false)
+  assert.equal(snapshot.voiceMode.effective, true)
   assert.equal(snapshot.crashReporting.requested, false)
 })
