@@ -4,12 +4,12 @@
  * Text-to-speech via ElevenLabs HTTP streaming endpoint.
  * Returns a Buffer containing MP3 audio for the given text.
  *
- * Voice: John (rySoiRs1IqQdRPeYbkYd) — created by the user.
+ * Voice: Ares (rySoiRs1IqQdRPeYbkYd) — created by the user.
  * Model: eleven_turbo_v2_5 — low-latency, high quality.
  */
 
 const ELEVEN_BASE       = 'https://api.elevenlabs.io/v1'
-const JOHN_VOICE_ID     = 'rySoiRs1IqQdRPeYbkYd'
+const ARES_VOICE_ID     = 'rySoiRs1IqQdRPeYbkYd'
 const ELEVEN_MODEL      = 'eleven_turbo_v2_5'
 const OUTPUT_FORMAT     = 'mp3_44100_128'
 const REQUEST_TIMEOUT   = 20_000
@@ -43,7 +43,7 @@ export async function speakWithElevenLabs(text: string, apiKey: string): Promise
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT)
 
   try {
-    const url = `${ELEVEN_BASE}/text-to-speech/${JOHN_VOICE_ID}/stream?output_format=${OUTPUT_FORMAT}&optimize_streaming_latency=2`
+    const url = `${ELEVEN_BASE}/text-to-speech/${ARES_VOICE_ID}/stream?output_format=${OUTPUT_FORMAT}&optimize_streaming_latency=2`
 
     const res = await fetch(url, {
       method:  'POST',

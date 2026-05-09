@@ -1,7 +1,7 @@
 {
-  "name": "john-desktop",
+  "name": "ares-desktop",
   "version": "0.1.0",
-  "description": "John — resident desktop HUD tutor agent",
+  "description": "Ares — resident desktop HUD tutor agent",
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

@@ -17,7 +17,7 @@ interface ConversationFile {
 }
 
 // ─── Config ───────────────────────────────────────────────────────
-const FILE_PATH  = join(app.getPath('userData'), 'john-conversation.json')
+const FILE_PATH  = join(app.getPath('userData'), 'ares-conversation.json')
 const MAX_STORED = 40                        // messages saved to disk
 const TTL_MS     = 48 * 60 * 60 * 1000      // 48 hours
 

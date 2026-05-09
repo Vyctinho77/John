@@ -80,10 +80,10 @@ export const HudCompact = memo(function HudCompact({
           if (!wasDragged()) onExpandFull()
         }}
         className="w-10 h-full flex-shrink-0 flex items-center justify-center relative"
-        style={{ color: 'var(--john-text-secondary)' }}
+        style={{ color: 'var(--ares-text-secondary)' }}
         aria-label="Abrir painel completo"
       >
-        <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
+        <SendIcon className="w-[var(--ares-icon-lg)] h-auto" />
       </button>
     </div>
   )

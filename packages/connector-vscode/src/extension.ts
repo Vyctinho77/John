@@ -8,8 +8,8 @@ export function activate(ctx: vscode.ExtensionContext): void {
   connector.connect()
 
   ctx.subscriptions.push(
-    vscode.commands.registerCommand('john.connect', () => connector?.connect()),
-    vscode.commands.registerCommand('john.disconnect', () => connector?.disconnect()),
+    vscode.commands.registerCommand('ares.connect', () => connector?.connect()),
+    vscode.commands.registerCommand('ares.disconnect', () => connector?.disconnect()),
     { dispose: () => connector?.disconnect() }
   )
 }

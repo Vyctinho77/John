@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Este documento descreve como dar ao John capacidade operacional em mercado sem transformar a execucao em um bloco opaco dirigido apenas por LLM.
+Este documento descreve como dar ao Ares capacidade operacional em mercado sem transformar a execucao em um bloco opaco dirigido apenas por LLM.
 
 A meta nao e "fazer trade sozinho" logo de cara.
 
@@ -40,7 +40,7 @@ Toda ordem precisa passar por:
 
 ### Nivel 0 - Read Only
 
-O John:
+O Ares:
 
 - le mercado
 - resume contexto
@@ -50,7 +50,7 @@ O John:
 
 ### Nivel 1 - Trade Copilot
 
-O John:
+O Ares:
 
 - gera uma proposta de operacao
 - sugere entrada, stop, alvo e tamanho
@@ -63,7 +63,7 @@ Execucao:
 
 ### Nivel 2 - Guarded Paper Execution
 
-O John:
+O Ares:
 
 - pode enviar ordens em ambiente de paper trading
 - opera apenas dentro de policy rigida
@@ -91,7 +91,7 @@ So deve existir depois de:
 
 ### Nivel 4 - Semi-Autonomous Strategy Operator
 
-O John:
+O Ares:
 
 - opera mais de um setup ou ativo
 - ajusta parametros dentro de faixa permitida
@@ -420,7 +420,7 @@ Essa policy deve ficar separada do LLM e ser versionada.
 
 ## UX recomendada
 
-O John precisa expor claramente em que nivel de autonomia esta.
+O Ares precisa expor claramente em que nivel de autonomia esta.
 
 Elementos recomendados:
 
@@ -478,7 +478,7 @@ Chaos cases minimos:
 
 Objetivo:
 
-- John ler mercado sem executar
+- Ares ler mercado sem executar
 
 Entregas:
 
@@ -489,7 +489,7 @@ Entregas:
 
 Criterio de pronto:
 
-- John consegue dizer:
+- Ares consegue dizer:
   - qual ativo
   - qual timeframe
   - qual setup
@@ -500,7 +500,7 @@ Criterio de pronto:
 
 Objetivo:
 
-- John propor operacoes, mas sem autonomia de envio
+- Ares propor operacoes, mas sem autonomia de envio
 
 Entregas:
 
@@ -601,7 +601,7 @@ Se o sistema nao for confiavel em `paper_auto`, ele tambem nao sera confiavel co
 
 ## Recomendacao objetiva
 
-O primeiro alvo correto para o John e:
+O primeiro alvo correto para o Ares e:
 
 `Trade Copilot + Risk Engine + Paper Broker`
 

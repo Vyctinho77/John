@@ -11,7 +11,7 @@ import { FloatingFormCard, PillButton, SectionTitle, SettingsRow } from './HudSe
 import { SpotifyBanner } from './SpotifyBanner'
 
 const LIBRARY_LABEL_STYLE = {
-  color: 'var(--john-text-secondary)',
+  color: 'var(--ares-text-secondary)',
   letterSpacing: 'var(--hud-muted-tracking, -0.01em)'
 } as const
 
@@ -56,8 +56,8 @@ function LibraryTile({
         className="transition-opacity duration-150 hover:opacity-80 active:opacity-50 disabled:opacity-50 disabled:cursor-default"
         style={{
           ...LIBRARY_ACTION_BUTTON_STYLE,
-          background: active ? 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)' : 'var(--john-text-primary)',
-          color: active ? 'var(--john-text-secondary)' : 'var(--john-surface-0)'
+          background: active ? 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)' : 'var(--ares-text-primary)',
+          color: active ? 'var(--ares-text-secondary)' : 'var(--ares-surface-0)'
         }}
       >
         {actionLabel}
@@ -100,8 +100,8 @@ function FloatingInputCard({
         }}
         className="w-full bg-transparent outline-none text-[11px] mb-3"
         style={{
-          color: 'var(--john-text-primary)',
-          border: '1px solid var(--john-border-strong)',
+          color: 'var(--ares-text-primary)',
+          border: '1px solid var(--ares-border-strong)',
           borderRadius: 6,
           padding: '5px 8px',
           caretColor: 'white'
@@ -219,7 +219,7 @@ export function GeneralSettingsPanel({
       </div>
 
       {sessionMemory?.continuity_summary && (
-        <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
+        <p className="mt-4 text-[11px]" style={{ color: 'var(--ares-text-secondary)' }}>
           {sessionMemory.continuity_summary}
         </p>
       )}
@@ -239,7 +239,7 @@ export function GeneralSettingsPanel({
           onAction={onVSCodeAction}
         >
           {!vscodeConnected && vscodeStatus?.message && (
-            <span className="text-center text-[9px]" style={{ color: 'var(--john-text-muted)', lineHeight: 1.3, maxWidth: 120 }}>
+            <span className="text-center text-[9px]" style={{ color: 'var(--ares-text-muted)', lineHeight: 1.3, maxWidth: 120 }}>
               bridge indisponível
             </span>
           )}
@@ -260,7 +260,7 @@ export function GeneralSettingsPanel({
 
         <LibraryTile
           icon={
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--john-text-primary)' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ares-text-primary)' }}>
               <path d="M15.8654 8.2789c0 1.3541 -1.0978 2.4519 -2.452 2.4519 -1.354 0 -2.4519 -1.0978 -2.4519 -2.452 0 -1.354 1.0978 -2.4518 2.452 -2.4518 1.3541 0 2.4519 1.0977 2.4519 2.4519zM9.75 6H0v4.9038h4.8462v7.2692H9.75Zm8.5962 0H24l-5.1058 12.173h-5.6538z" fill="currentColor" />
             </svg>
           }
@@ -272,34 +272,34 @@ export function GeneralSettingsPanel({
         >
           {tradingViewState?.symbol && (
             <div className="text-center leading-tight" style={{ maxWidth: 120 }}>
-              <span className="block text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              <span className="block text-[10px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                 {tradingViewState.symbol}
                 {tradingViewState.timeframe ? ` · ${tradingViewState.timeframe}` : ''}
               </span>
               {tradingViewState.currentPrice && (
-                <span className="block text-[10px]" style={{ color: 'var(--john-text-secondary)' }}>
+                <span className="block text-[10px]" style={{ color: 'var(--ares-text-secondary)' }}>
                   {tradingViewState.currentPrice}
                   {tradingViewState.priceChange ? ` · ${tradingViewState.priceChange}` : ''}
                 </span>
               )}
               {(tradingViewState.recentHigh || tradingViewState.recentLow) && (
-                <span className="block text-[9px]" style={{ color: 'var(--john-text-muted)' }}>
+                <span className="block text-[9px]" style={{ color: 'var(--ares-text-muted)' }}>
                   H {tradingViewState.recentHigh ?? '?'} · L {tradingViewState.recentLow ?? '?'}
                 </span>
               )}
               {tradingViewState.ohlc.close && (
-                <span className="block text-[9px]" style={{ color: 'var(--john-text-muted)' }}>
+                <span className="block text-[9px]" style={{ color: 'var(--ares-text-muted)' }}>
                   {tradingViewState.crosshairActive ? 'vela sob o mouse' : 'última vela'}
                   {tradingViewState.hoveredCandleTime ? ` · ${tradingViewState.hoveredCandleTime}` : ''}
                 </span>
               )}
               {tradingViewState.candleStructure && (
-                <span className="block text-[9px]" style={{ color: 'var(--john-text-muted)' }}>
+                <span className="block text-[9px]" style={{ color: 'var(--ares-text-muted)' }}>
                   {tradingViewState.candleStructure}
                 </span>
               )}
               {tradingViewState.rangeState !== 'unknown' && (
-                <span className="block text-[9px]" style={{ color: 'var(--john-text-muted)' }}>
+                <span className="block text-[9px]" style={{ color: 'var(--ares-text-muted)' }}>
                   range {tradingViewState.rangeState}
                 </span>
               )}
@@ -309,7 +309,7 @@ export function GeneralSettingsPanel({
 
         <LibraryTile
           icon={
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--john-text-primary)' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ color: 'var(--ares-text-primary)' }}>
               <polyline points="2 12 6 8 10 14 14 9 18 13 22 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" />
             </svg>
           }
@@ -320,8 +320,8 @@ export function GeneralSettingsPanel({
           onAction={onOpenTickerCard}
         >
           {tickerQuote && (
-            <span className="text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
-              {tickerQuote.price} <span style={{ color: tickerQuote.positive ? 'var(--john-success)' : 'var(--john-danger)' }}>{tickerQuote.change}</span>
+            <span className="text-[10px]" style={{ color: 'var(--ares-text-tertiary)' }}>
+              {tickerQuote.price} <span style={{ color: tickerQuote.positive ? 'var(--ares-success)' : 'var(--ares-danger)' }}>{tickerQuote.change}</span>
             </span>
           )}
         </LibraryTile>
@@ -333,7 +333,7 @@ export function GeneralSettingsPanel({
           description={
             <>
               developer.spotify.com → crie um app → Redirect URI:{' '}
-              <span style={{ color: 'var(--john-text-secondary)' }}>http://127.0.0.1:42002/callback</span>
+              <span style={{ color: 'var(--ares-text-secondary)' }}>http://127.0.0.1:42002/callback</span>
             </>
           }
           value={spotifyClientIdDraft}
@@ -350,10 +350,10 @@ export function GeneralSettingsPanel({
           title="Símbolo do ativo"
           description={
             <>
-              Ações: <span style={{ color: 'var(--john-text-secondary)' }}>AAPL · PETR4.SA</span>
-              {' · '}Cripto: <span style={{ color: 'var(--john-text-secondary)' }}>BTC-USD · ETH-USD</span>
-              {' · '}Commodities: <span style={{ color: 'var(--john-text-secondary)' }}>GC=F (ouro) · CL=F (petróleo) · SI=F (prata) · NG=F (gás)</span>
-              {' · '}Índices: <span style={{ color: 'var(--john-text-secondary)' }}>^GSPC · ^BVSP</span>
+              Ações: <span style={{ color: 'var(--ares-text-secondary)' }}>AAPL · PETR4.SA</span>
+              {' · '}Cripto: <span style={{ color: 'var(--ares-text-secondary)' }}>BTC-USD · ETH-USD</span>
+              {' · '}Commodities: <span style={{ color: 'var(--ares-text-secondary)' }}>GC=F (ouro) · CL=F (petróleo) · SI=F (prata) · NG=F (gás)</span>
+              {' · '}Índices: <span style={{ color: 'var(--ares-text-secondary)' }}>^GSPC · ^BVSP</span>
             </>
           }
           value={tickerDraft}
@@ -377,7 +377,7 @@ export function GeneralSettingsPanel({
       )}
 
       {vscodeInstallMsg && (
-        <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
+        <p className="mt-3 text-[11px]" style={{ color: 'var(--ares-text-secondary)' }}>
           {vscodeInstallMsg}
         </p>
       )}

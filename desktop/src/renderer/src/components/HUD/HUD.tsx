@@ -38,7 +38,7 @@ const CONVO_SUMMARIZE_AT = 18   // trigger compression when messages exceed this
 /** Compresses older messages into a rolling text block (no AI call needed). */
 function buildConversationSummary(existing: string | null, toCompress: Message[]): string {
   const lines = toCompress.map(m => {
-    const speaker = m.role === 'user' ? 'Victor' : 'John'
+    const speaker = m.role === 'user' ? 'Victor' : 'Ares'
     const text    = m.content.length > 180 ? m.content.slice(0, 180) + '…' : m.content
     return `${speaker}: ${text}`
   })
@@ -1010,7 +1010,7 @@ export function HUD() {
                 })
               }}
               onTestVoice={async () => {
-                const base64 = await window.elevenLabsAPI.speak('Olá, sou o John. Tudo certo por aqui.')
+                const base64 = await window.elevenLabsAPI.speak('Olá, sou o Ares. Tudo certo por aqui.')
                 currentAudioRef.current?.pause()
                 const audio = new Audio(`data:audio/mpeg;base64,${base64}`)
                 currentAudioRef.current = audio

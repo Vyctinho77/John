@@ -35,16 +35,16 @@ export function TutorActionChips({
             disabled={pending}
             style={{
               padding: compact ? '6px 9px' : '7px 11px',
-              borderRadius: 'var(--john-radius-pill)',
-              border: '1px solid var(--john-border-strong)',
+              borderRadius: 'var(--ares-radius-pill)',
+              border: '1px solid var(--ares-border-strong)',
               background: pending
-                ? 'color-mix(in srgb, var(--john-surface-2) 92%, var(--john-text-strong) 8%)'
-                : 'color-mix(in srgb, var(--john-surface-1) 82%, transparent)',
-              color: pending ? 'var(--john-text-strong)' : 'var(--john-text-secondary)',
+                ? 'color-mix(in srgb, var(--ares-surface-2) 92%, var(--ares-text-strong) 8%)'
+                : 'color-mix(in srgb, var(--ares-surface-1) 82%, transparent)',
+              color: pending ? 'var(--ares-text-strong)' : 'var(--ares-text-secondary)',
               fontSize: compact ? 11 : 12,
               lineHeight: 1.2,
               letterSpacing: 'var(--hud-muted-tracking, -0.01em)',
-              transition: 'opacity var(--john-transition-fast), background var(--john-transition-fast), border-color var(--john-transition-fast), color var(--john-transition-fast)',
+              transition: 'opacity var(--ares-transition-fast), background var(--ares-transition-fast), border-color var(--ares-transition-fast), color var(--ares-transition-fast)',
               opacity: pending ? 0.9 : 1
             }}
           >

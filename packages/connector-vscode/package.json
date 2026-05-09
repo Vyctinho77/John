@@ -1,9 +1,9 @@
 {
-  "name": "john-connector-vscode",
-  "displayName": "John Connector",
-  "description": "Connects VS Code to John — seu tutor de IA residente",
+  "name": "ares-connector-vscode",
+  "displayName": "Ares Connector",
+  "description": "Connects VS Code to Ares — seu tutor de IA residente",
   "version": "0.1.0",
-  "publisher": "john-ai",
+  "publisher": "ares-ai",
   "engines": { "vscode": "^1.74.0" },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
@@ -11,19 +11,19 @@
   "contributes": {
     "commands": [
       {
-        "command": "john.connect",
-        "title": "John: Conectar ao HUD"
+        "command": "ares.connect",
+        "title": "Ares: Conectar ao HUD"
       },
       {
-        "command": "john.disconnect",
-        "title": "John: Desconectar"
+        "command": "ares.disconnect",
+        "title": "Ares: Desconectar"
       }
     ]
   },
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --platform=node --format=cjs --sourcemap",
     "watch": "npm run build -- --watch",
-    "package": "npm run build && npx @vscode/vsce package --no-dependencies -o john-connector.vsix"
+    "package": "npm run build && npx @vscode/vsce package --no-dependencies -o ares-connector.vsix"
   },
   "dependencies": {
     "ws": "^8.18.0"

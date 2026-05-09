@@ -199,8 +199,8 @@ export function buildSemanticStateFromVision(
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-const VISION_SYSTEM_PROMPT = `You are the visual perception engine of a desktop tutor agent named John.
-You receive a screenshot of the user's screen and must analyze it to help John understand what the user is seeing and doing.
+const VISION_SYSTEM_PROMPT = `You are the visual perception engine of a desktop tutor agent named Ares.
+You receive a screenshot of the user's screen and must analyze it to help Ares understand what the user is seeing and doing.
 
 Respond ONLY with a single JSON object — no markdown fences, no explanation, no extra text.
 
@@ -246,7 +246,7 @@ Rules:
 - app_identifier: identify the application if possible (e.g. "VS Code", "Chrome", "Excel", "TradingView", "JetBrains IDE", "Vim", "Sublime Text").
 - emotional_signal: infer from visible cues (error messages, repeated attempts, fast scrolling = frustrated; long pause on one spot = focused; many tabs/windows = exploring).
 - is_sensitive: true if you see passwords, banking info, medical data, or confidential legal content. Be conservative.
-- pedagogical_topics: topics John could teach about based on what's visible. Use Portuguese (pt-BR).
+- pedagogical_topics: topics Ares could teach about based on what's visible. Use Portuguese (pt-BR).
 - Keep detected_text focused on the CONTENT area, not browser chrome or window titles.
 - uncertainty: 0 = fully confident, 1 = very uncertain. Raise if screen is blurry, mostly empty, or hard to interpret.
 - change_summary can be null if you have no previous frame to compare.

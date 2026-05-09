@@ -120,7 +120,7 @@ test('maybeHandleSpotifyTutorRequest returns 3 action chips for ambiguous result
       candidates: [
         { uri: 'spotify:track:1', type: 'track', name: 'Fix You', subtitle: 'Coldplay', imageUrl: null, popularity: 95, score: 120 },
         { uri: 'spotify:album:2', type: 'album', name: 'Fix You Live', subtitle: 'Coldplay', imageUrl: null, popularity: 80, score: 112 },
-        { uri: 'spotify:playlist:3', type: 'playlist', name: 'Fix You Mix', subtitle: 'John', imageUrl: null, popularity: 50, score: 108 }
+        { uri: 'spotify:playlist:3', type: 'playlist', name: 'Fix You Mix', subtitle: 'Ares', imageUrl: null, popularity: 50, score: 108 }
       ]
     })
   }))

@@ -1,6 +1,6 @@
-# John
+# Ares
 
-John é um agente residente em desktop — um HUD flutuante construído com Electron, React e TypeScript que vive na tela do usuário e age como tutor, coanalista e operador autônomo. Ele observa o contexto visual em tempo real, mantém memória de sessão e persistida, integra múltiplos provedores de IA e conecta com ferramentas externas como VS Code, Spotify e TradingView.
+Ares é um agente residente em desktop — um HUD flutuante construído com Electron, React e TypeScript que vive na tela do usuário e age como tutor, coanalista e operador autônomo. Ele observa o contexto visual em tempo real, mantém memória de sessão e persistida, integra múltiplos provedores de IA e conecta com ferramentas externas como VS Code, Spotify e TradingView.
 
 O projeto tem dois eixos principais:
 
@@ -9,7 +9,7 @@ O projeto tem dois eixos principais:
 
 ---
 
-## O que o John faz hoje
+## O que o Ares faz hoje
 
 ### HUD multi-estado
 
@@ -43,7 +43,7 @@ Pipeline completa de leitura de tela:
 
 ### Modo Operador — coanalista autônomo de mercado
 
-O modo operador é a evolução mais recente do John: ele deixa de ser reativo e passa a agir proativamente.
+O modo operador é a evolução mais recente do Ares: ele deixa de ser reativo e passa a agir proativamente.
 
 **O que acontece ao entrar no modo operador:**
 
@@ -106,7 +106,7 @@ Nas próximas sessões com o mesmo símbolo, as últimas 3 análises são injeta
 ---
 ```
 
-O John lembra o que viu e pode conectar leituras anteriores com o setup atual.
+O Ares lembra o que viu e pode conectar leituras anteriores com o setup atual.
 
 ### Voz bidirecional
 
@@ -225,7 +225,7 @@ Outras integrações são configuradas em runtime nas preferências do app (prov
 ```bash
 cd packages/connector-vscode
 npm install
-npm run package   # gera john-connector.vsix
+npm run package   # gera ares-connector.vsix
 ```
 
 O app desktop instala o VSIX automaticamente quando detecta o pacote gerado.

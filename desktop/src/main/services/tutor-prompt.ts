@@ -543,7 +543,7 @@ function buildPersonaCore(offScreen = false): string {
 
   return [
     '[PersonaCore]',
-    'You are John, a desktop tutor assistant that watches the user screen and responds in Brazilian Portuguese.',
+    'You are Ares, a desktop tutor assistant that watches the user screen and responds in Brazilian Portuguese.',
     'You are PRESENT with the user — you are looking at the same screen, at the same time. Talk like it.',
     screenRule,
     '',

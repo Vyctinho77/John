@@ -187,12 +187,12 @@ export function HudSidebar({
                 style={{
                   fontSize: 11,
                   fontWeight: 500,
-                  color: 'var(--john-text-muted)',
+                  color: 'var(--ares-text-muted)',
                   letterSpacing: 'var(--hud-label-tracking, 0.075em)',
                   userSelect: 'none'
                 }}
               >
-                JOHN
+                ARES
               </span>
             </div>
 
@@ -236,7 +236,7 @@ export function HudSidebar({
             {messages.length === 0 && (
               <div
                 style={{
-                  color: 'var(--john-text-muted)',
+                  color: 'var(--ares-text-muted)',
                   fontSize: 13,
                   textAlign: 'center',
                   marginTop: 48,
@@ -244,7 +244,7 @@ export function HudSidebar({
                   letterSpacing: 'var(--hud-muted-tracking, -0.01em)'
                 }}
               >
-                John está aqui.
+                Ares está aqui.
                 <br />
                 Pergunte o que quiser.
               </div>
@@ -261,15 +261,15 @@ export function HudSidebar({
 
             {isStreaming && streamingContent && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <Label>JOHN</Label>
-                <div style={{ color: 'var(--john-text-primary)', maxWidth: '100%' }}>
+                <Label>ARES</Label>
+                <div style={{ color: 'var(--ares-text-primary)', maxWidth: '100%' }}>
                   <MessageBody content={streamingContent} compact streaming />
                   <span
                     style={{
                       display: 'inline-block',
                       width: 5,
                       height: 13,
-                      background: 'var(--john-text-secondary)',
+                      background: 'var(--ares-text-secondary)',
                       marginLeft: 2,
                       borderRadius: 1,
                       verticalAlign: 'text-bottom',
@@ -302,7 +302,7 @@ export function HudSidebar({
                   ref={inputRef}
                   className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
                   style={{
-                    color: 'var(--john-text-primary)',
+                    color: 'var(--ares-text-primary)',
                     fontSize: 'var(--hud-font-size, 15px)',
                     lineHeight: 'var(--hud-body-leading, 1.66)',
                     letterSpacing: 'var(--hud-input-tracking, -0.015em)',
@@ -310,7 +310,7 @@ export function HudSidebar({
                     maxHeight: 96,
                     opacity: isStreaming ? 0.45 : 1
                   }}
-                  placeholder="Pergunte ao John..."
+                  placeholder="Pergunte ao Ares..."
                   rows={1}
                   value={inputValue}
                   disabled={isStreaming}
@@ -332,12 +332,12 @@ export function HudSidebar({
                   className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150"
                   style={{
                     color: inputValue.trim() && !isStreaming
-                      ? 'var(--john-text-primary)'
-                      : 'var(--john-text-muted)'
+                      ? 'var(--ares-text-primary)'
+                      : 'var(--ares-text-muted)'
                   }}
                   aria-label="Enviar"
                 >
-                  <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
+                  <SendIcon className="w-[var(--ares-icon-lg)] h-auto" />
                 </button>
               </div>
             </div>
@@ -357,9 +357,9 @@ export function HudSidebar({
 function sidebarIconButtonStyle(): CSSProperties {
   return {
     background: 'transparent',
-    border: '1px solid var(--john-border-soft)',
+    border: '1px solid var(--ares-border-soft)',
     borderRadius: 7,
-    color: 'var(--john-text-muted)',
+    color: 'var(--ares-text-muted)',
     cursor: 'pointer',
     fontSize: 14,
     lineHeight: 1,
@@ -370,16 +370,16 @@ function sidebarIconButtonStyle(): CSSProperties {
 
 function handleSidebarIconHover(e: ReactMouseEvent<HTMLButtonElement>) {
   const b = e.currentTarget
-  b.style.background = 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
-  b.style.color = 'var(--john-text-secondary)'
-  b.style.borderColor = 'var(--john-border-strong)'
+  b.style.background = 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
+  b.style.color = 'var(--ares-text-secondary)'
+  b.style.borderColor = 'var(--ares-border-strong)'
 }
 
 function handleSidebarIconLeave(e: ReactMouseEvent<HTMLButtonElement>) {
   const b = e.currentTarget
   b.style.background = 'transparent'
-  b.style.color = 'var(--john-text-muted)'
-  b.style.borderColor = 'var(--john-border-soft)'
+  b.style.color = 'var(--ares-text-muted)'
+  b.style.borderColor = 'var(--ares-border-soft)'
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -389,7 +389,7 @@ function Label({ children }: { children: React.ReactNode }) {
         fontSize: 9,
         fontWeight: 600,
         letterSpacing: 'var(--hud-label-tracking, 0.075em)',
-        color: 'var(--john-text-muted)'
+        color: 'var(--ares-text-muted)'
       }}
     >
       {children}
@@ -417,15 +417,15 @@ function MessageBubble({
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Label>{isUser ? 'VOCÊ' : 'JOHN'}</Label>
+        <Label>{isUser ? 'VOCÊ' : 'ARES'}</Label>
         {!isUser ? <ResponseSourceBadge meta={message.meta} compact /> : null}
       </div>
       <div
         style={{
-          background: isUser ? 'color-mix(in srgb, var(--john-surface-2) 76%, transparent)' : 'transparent',
+          background: isUser ? 'color-mix(in srgb, var(--ares-surface-2) 76%, transparent)' : 'transparent',
           borderRadius: isUser ? '10px 10px 3px 10px' : '10px 10px 10px 3px',
           padding: isUser ? '7px 11px' : '0',
-          color: isUser ? 'var(--john-text-secondary)' : 'var(--john-text-primary)',
+          color: isUser ? 'var(--ares-text-secondary)' : 'var(--ares-text-primary)',
           maxWidth: '100%'
         }}
       >

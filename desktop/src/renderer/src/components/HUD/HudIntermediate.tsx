@@ -107,13 +107,13 @@ export function HudIntermediate({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'var(--john-text-strong)' : 'var(--john-text-muted)' }}
+                style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={
-                  stage === 1 ? 'w-[var(--john-icon-md)] h-auto' :
-                  stage === 2 ? 'w-[var(--john-icon-lg)] h-auto' :
-                  'w-[var(--john-icon-sm)] h-auto'
+                  stage === 1 ? 'w-[var(--ares-icon-md)] h-auto' :
+                  stage === 2 ? 'w-[var(--ares-icon-lg)] h-auto' :
+                  'w-[var(--ares-icon-sm)] h-auto'
                 } />
               </button>
             )
@@ -162,9 +162,9 @@ export function HudIntermediate({
                 onClick={e => { e.stopPropagation(); onShowStage3() }}
                 className="mt-3 self-start text-[12px] px-2.5 py-1 rounded-full transition-opacity duration-150 hover:opacity-80"
                 style={{
-                  color: 'var(--john-text-secondary)',
-                  background: 'color-mix(in srgb, var(--john-surface-1) 80%, transparent)',
-                  border: '1px solid var(--john-border-soft)'
+                  color: 'var(--ares-text-secondary)',
+                  background: 'color-mix(in srgb, var(--ares-surface-1) 80%, transparent)',
+                  border: '1px solid var(--ares-border-soft)'
                 }}
               >
                 ver resposta completa
@@ -187,7 +187,7 @@ export function HudIntermediate({
 
       <div className="flex-shrink-0 px-4 pb-3.5 pt-3">
         <div
-          className={`pt-3${isStreaming ? ' john-stream-pulse' : ''}`}
+          className={`pt-3${isStreaming ? ' ares-stream-pulse' : ''}`}
           style={{ borderTop: '1px solid rgba(255,255,255,0.42)', transition: 'border-color 0.3s ease' }}
         >
           <div className="flex items-end gap-3">
@@ -195,7 +195,7 @@ export function HudIntermediate({
               ref={inputRef}
               className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
               style={{
-                color: 'var(--john-text-primary)',
+                color: 'var(--ares-text-primary)',
                 fontSize: 'var(--hud-font-size, 15px)',
                 lineHeight: 'var(--hud-body-leading, 1.66)',
                 letterSpacing: 'var(--hud-input-tracking, -0.015em)',
@@ -217,12 +217,12 @@ export function HudIntermediate({
                 onMouseDown={e => { e.preventDefault(); toggleMic() }}
                 disabled={isStreaming}
                 className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
-                style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
+                style={{ color: isListening ? 'var(--ares-danger)' : 'var(--ares-text-muted)' }}
                 aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
               >
                 {isListening && (
                   <span className="absolute inset-0 rounded-full"
-                    style={{ background: 'var(--john-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }} />
+                    style={{ background: 'var(--ares-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }} />
                 )}
                 <MicIconSm />
               </button>
@@ -233,11 +233,11 @@ export function HudIntermediate({
               disabled={isStreaming || !inputValue.trim()}
               className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150"
               style={{
-                color: inputValue.trim() && !isStreaming ? 'var(--john-text-primary)' : 'var(--john-text-muted)'
+                color: inputValue.trim() && !isStreaming ? 'var(--ares-text-primary)' : 'var(--ares-text-muted)'
               }}
               aria-label="Enviar"
             >
-              <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
+              <SendIcon className="w-[var(--ares-icon-lg)] h-auto" />
             </button>
           </div>
         </div>

@@ -10,16 +10,16 @@ export function Toggle({ on }: { on: boolean }) {
       className="w-10 h-6 rounded-full transition-colors duration-200 relative"
       style={{
         background: on
-          ? 'color-mix(in srgb, var(--john-surface-2) 85%, transparent)'
-          : 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
-        border: `1px solid ${on ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`
+          ? 'color-mix(in srgb, var(--ares-surface-2) 85%, transparent)'
+          : 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
+        border: `1px solid ${on ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`
       }}
     >
       <div
         className="absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200"
         style={{
           left: on ? 18 : 2,
-          background: on ? 'var(--john-text-strong)' : 'var(--john-text-muted)'
+          background: on ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)'
         }}
       />
     </div>
@@ -55,13 +55,13 @@ export function SettingsRow({
       {...(wrapperProps as HTMLAttributes<HTMLElement>)}
       style={{
         minHeight: 52,
-        borderBottom: last ? 'none' : '1px solid var(--john-border-soft)'
+        borderBottom: last ? 'none' : '1px solid var(--ares-border-soft)'
       }}
     >
       <span
         className="py-4 text-[14px] text-left"
         style={{
-          color: muted ? 'var(--john-text-tertiary)' : 'var(--john-text-primary)',
+          color: muted ? 'var(--ares-text-tertiary)' : 'var(--ares-text-primary)',
           fontSize: 'var(--hud-font-size, 15px)'
         }}
       >
@@ -72,7 +72,7 @@ export function SettingsRow({
       ) : (
         <span
           className="inline-flex items-center gap-1.5 text-[14px] py-4"
-          style={{ color: 'var(--john-text-secondary)', fontSize: 'var(--hud-font-size, 15px)' }}
+          style={{ color: 'var(--ares-text-secondary)', fontSize: 'var(--hud-font-size, 15px)' }}
         >
           {value}
           {onClick && (
@@ -108,8 +108,8 @@ export function SettingsNavItem({
       onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors duration-150"
       style={{
-        color: active ? 'var(--john-text-strong)' : 'var(--john-text-tertiary)',
-        background: active ? 'color-mix(in srgb, var(--john-surface-2) 76%, transparent)' : 'transparent'
+        color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)',
+        background: active ? 'color-mix(in srgb, var(--ares-surface-2) 76%, transparent)' : 'transparent'
       }}
     >
       <span className="w-[20px] h-[20px] flex items-center justify-center flex-shrink-0 opacity-80">
@@ -137,15 +137,15 @@ export function TypographyChoice({
       className="px-3 py-2 rounded-2xl text-left transition-colors duration-150"
       style={{
         background: active
-          ? 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
-          : 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
-        color: active ? 'var(--john-text-strong)' : 'var(--john-text-secondary)',
-        border: `1px solid ${active ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`
+          ? 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
+          : 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
+        color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-secondary)',
+        border: `1px solid ${active ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`
       }}
     >
       <div className="text-[12px] leading-none">{label}</div>
       {secondaryLabel && (
-        <div className="mt-1 text-[10px]" style={{ color: active ? 'var(--john-text-secondary)' : 'var(--john-text-tertiary)' }}>
+        <div className="mt-1 text-[10px]" style={{ color: active ? 'var(--ares-text-secondary)' : 'var(--ares-text-tertiary)' }}>
           {secondaryLabel}
         </div>
       )}
@@ -163,7 +163,7 @@ export function SectionTitle({
   return (
     <p
       className={className}
-      style={{ color: 'var(--john-text-strong)', letterSpacing: 'var(--hud-heading-tracking, -0.028em)' }}
+      style={{ color: 'var(--ares-text-strong)', letterSpacing: 'var(--hud-heading-tracking, -0.028em)' }}
     >
       {children}
     </p>
@@ -186,9 +186,9 @@ export function SettingsCard({
       className={className}
       style={{
         background: elevated
-          ? 'color-mix(in srgb, var(--john-surface-overlay) 96%, transparent)'
-          : 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
-        border: `1px solid ${elevated ? 'var(--john-border-strong)' : 'var(--john-border-soft)'}`,
+          ? 'color-mix(in srgb, var(--ares-surface-overlay) 96%, transparent)'
+          : 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
+        border: `1px solid ${elevated ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`,
         ...style
       }}
     >
@@ -217,30 +217,30 @@ export function PillButton({
   const palette = {
     neutral: {
       background: active
-        ? 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
-        : 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
-      color: active ? 'var(--john-text-strong)' : 'var(--john-text-tertiary)',
-      border: active ? 'var(--john-border-strong)' : 'var(--john-border-soft)'
+        ? 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
+        : 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
+      color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)',
+      border: active ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'
     },
     strong: {
-      background: 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)',
-      color: 'var(--john-text-strong)',
-      border: 'var(--john-border-strong)'
+      background: 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)',
+      color: 'var(--ares-text-strong)',
+      border: 'var(--ares-border-strong)'
     },
     danger: {
-      background: 'color-mix(in srgb, var(--john-danger-soft) 60%, transparent)',
-      color: 'var(--john-danger)',
-      border: 'color-mix(in srgb, var(--john-danger) 40%, transparent)'
+      background: 'color-mix(in srgb, var(--ares-danger-soft) 60%, transparent)',
+      color: 'var(--ares-danger)',
+      border: 'color-mix(in srgb, var(--ares-danger) 40%, transparent)'
     },
     accent: {
-      background: 'color-mix(in srgb, var(--john-accent-soft) 60%, transparent)',
-      color: 'var(--john-accent)',
-      border: 'color-mix(in srgb, var(--john-accent) 35%, transparent)'
+      background: 'color-mix(in srgb, var(--ares-accent-soft) 60%, transparent)',
+      color: 'var(--ares-accent)',
+      border: 'color-mix(in srgb, var(--ares-accent) 35%, transparent)'
     },
     success: {
-      background: 'color-mix(in srgb, var(--john-success-soft) 60%, transparent)',
-      color: 'var(--john-success)',
-      border: 'color-mix(in srgb, var(--john-success) 35%, transparent)'
+      background: 'color-mix(in srgb, var(--ares-success-soft) 60%, transparent)',
+      color: 'var(--ares-success)',
+      border: 'color-mix(in srgb, var(--ares-success) 35%, transparent)'
     }
   } as const
 
@@ -276,24 +276,24 @@ export function StatusBadge({
 }) {
   const palette = {
     neutral: {
-      background: 'color-mix(in srgb, var(--john-surface-1) 76%, transparent)',
-      color: 'var(--john-text-secondary)',
-      border: 'var(--john-border-soft)'
+      background: 'color-mix(in srgb, var(--ares-surface-1) 76%, transparent)',
+      color: 'var(--ares-text-secondary)',
+      border: 'var(--ares-border-soft)'
     },
     accent: {
-      background: 'var(--john-accent-soft)',
-      color: 'var(--john-accent)',
-      border: 'color-mix(in srgb, var(--john-accent) 18%, transparent)'
+      background: 'var(--ares-accent-soft)',
+      color: 'var(--ares-accent)',
+      border: 'color-mix(in srgb, var(--ares-accent) 18%, transparent)'
     },
     success: {
-      background: 'var(--john-success-soft)',
-      color: 'var(--john-success)',
-      border: 'color-mix(in srgb, var(--john-success) 18%, transparent)'
+      background: 'var(--ares-success-soft)',
+      color: 'var(--ares-success)',
+      border: 'color-mix(in srgb, var(--ares-success) 18%, transparent)'
     },
     danger: {
-      background: 'color-mix(in srgb, var(--john-danger-soft) 60%, transparent)',
-      color: 'var(--john-danger)',
-      border: 'color-mix(in srgb, var(--john-danger) 40%, transparent)'
+      background: 'color-mix(in srgb, var(--ares-danger-soft) 60%, transparent)',
+      color: 'var(--ares-danger)',
+      border: 'color-mix(in srgb, var(--ares-danger) 40%, transparent)'
     }
   } as const
 
@@ -323,7 +323,7 @@ export function SettingsActionStrip({
   return (
     <div
       className={className}
-      style={{ borderTop: '1px solid var(--john-border-soft)' }}
+      style={{ borderTop: '1px solid var(--ares-border-soft)' }}
     >
       {children}
     </div>
@@ -354,9 +354,9 @@ export function InlineEditableRow({
   return (
     <div
       className="flex items-center justify-between gap-4"
-      style={{ minHeight: 52, borderBottom: '1px solid var(--john-border-soft)' }}
+      style={{ minHeight: 52, borderBottom: '1px solid var(--ares-border-soft)' }}
     >
-      <span className="text-[14px]" style={{ color: 'var(--john-text-primary)' }}>
+      <span className="text-[14px]" style={{ color: 'var(--ares-text-primary)' }}>
         {label}
       </span>
       {editing ? (
@@ -372,8 +372,8 @@ export function InlineEditableRow({
             placeholder={placeholder}
             className="bg-transparent outline-none text-[14px]"
             style={{
-              color: 'var(--john-text-primary)',
-              borderBottom: '1px solid var(--john-border-strong)',
+              color: 'var(--ares-text-primary)',
+              borderBottom: '1px solid var(--ares-border-strong)',
               minWidth: 0,
               width: 140,
               direction: 'ltr'
@@ -393,7 +393,7 @@ export function InlineEditableRow({
           onMouseDown={e => e.preventDefault()}
           onClick={onStartEdit}
           className="inline-flex items-center gap-1.5 text-[14px] transition-opacity hover:opacity-70"
-          style={{ color: value ? 'var(--john-text-secondary)' : 'var(--john-text-muted)' }}
+          style={{ color: value ? 'var(--ares-text-secondary)' : 'var(--ares-text-muted)' }}
         >
           {value || 'definir nome'}
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -415,11 +415,11 @@ export function FloatingFormCard({
   children: ReactNode
 }) {
   return (
-    <SettingsCard className="john-accordion-open mt-3 rounded-[10px] p-4" elevated>
-      <p className="text-[12px] font-medium mb-1" style={{ color: 'var(--john-text-primary)' }}>
+    <SettingsCard className="ares-accordion-open mt-3 rounded-[10px] p-4" elevated>
+      <p className="text-[12px] font-medium mb-1" style={{ color: 'var(--ares-text-primary)' }}>
         {title}
       </p>
-      <p className="text-[10px] mb-3" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
+      <p className="text-[10px] mb-3" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.5 }}>
         {description}
       </p>
       {children}

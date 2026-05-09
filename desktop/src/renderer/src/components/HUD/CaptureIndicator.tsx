@@ -15,7 +15,7 @@ export function CaptureIndicator({ isCapturing, isPrivate, onTogglePrivate }: Ca
     >
       {isPrivate ? (
         // Eye-off icon
-        <svg width="var(--john-icon-sm)" height="var(--john-icon-sm)" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--john-text-muted)' }}>
+        <svg width="var(--ares-icon-sm)" height="var(--ares-icon-sm)" viewBox="0 0 14 14" fill="none" style={{ color: 'var(--ares-text-muted)' }}>
           <path d="M2 2L12 12M5.5 5.64A2 2 0 0 0 8.36 8.5M3.17 3.77A6.8 6.8 0 0 0 1 7s2.25 4 6 4a6 6 0 0 0 2.83-.72M6 3.07A6 6 0 0 1 7 3c3.75 0 6 4 6 4a7.1 7.1 0 0 1-1.17 1.66"
             stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
         </svg>
@@ -27,13 +27,13 @@ export function CaptureIndicator({ isCapturing, isPrivate, onTogglePrivate }: Ca
               <span
                 className="absolute inline-flex h-full w-full rounded-full"
                 style={{
-                  background: 'var(--john-success-soft)',
+                  background: 'var(--ares-success-soft)',
                   animation: 'capture-pulse 1.2s ease-out infinite'
                 }}
               />
             )}
             <span className="relative inline-flex rounded-full h-2 w-2"
-              style={{ background: isCapturing ? 'var(--john-success)' : 'var(--john-text-muted)' }} />
+              style={{ background: isCapturing ? 'var(--ares-success)' : 'var(--ares-text-muted)' }} />
           </span>
           <style>{`
             @keyframes capture-pulse {

@@ -245,7 +245,7 @@ function DiaryEntry({ entry }: { entry: OperatorAnalysis }) {
       }}
     >
       <div className="mb-2 flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
-        <span className="text-[9px]" style={{ color: 'var(--john-text-muted)' }}>
+        <span className="text-[9px]" style={{ color: 'var(--ares-text-muted)' }}>
           {dateStr} {timeStr}
         </span>
         {entry.timeframe ? (
@@ -253,7 +253,7 @@ function DiaryEntry({ entry }: { entry: OperatorAnalysis }) {
             className="rounded-full px-1.5 py-0.5 text-[9px]"
             style={{
               background: 'rgba(255,255,255,0.06)',
-              color: 'var(--john-text-secondary)'
+              color: 'var(--ares-text-secondary)'
             }}
           >
             {entry.timeframe}
@@ -264,7 +264,7 @@ function DiaryEntry({ entry }: { entry: OperatorAnalysis }) {
       <p
         className="text-[11px]"
         style={{
-          color: 'var(--john-text-secondary)',
+          color: 'var(--ares-text-secondary)',
           lineHeight: 1.55,
           display: '-webkit-box',
           WebkitLineClamp: expanded || isShort ? undefined : 4,
@@ -279,7 +279,7 @@ function DiaryEntry({ entry }: { entry: OperatorAnalysis }) {
         <button
           onClick={() => setExpanded(value => !value)}
           className="mt-2 text-[9.5px] transition-opacity hover:opacity-70"
-          style={{ color: 'var(--john-text-muted)' }}
+          style={{ color: 'var(--ares-text-muted)' }}
         >
           {expanded ? 'menos' : 'mais'}
         </button>
@@ -508,17 +508,17 @@ export function HudOperator({
                   className="rounded-full px-2 py-1"
                   style={{
                     background: 'rgba(255,255,255,0.06)',
-                    color: 'var(--john-text-secondary)'
+                    color: 'var(--ares-text-secondary)'
                   }}
                 >
                   {TF[tf] ?? tf}
                 </span>
               ) : null}
               {price ? (
-                <span style={{ color: 'var(--john-text-primary)' }}>{price}</span>
+                <span style={{ color: 'var(--ares-text-primary)' }}>{price}</span>
               ) : null}
               {change && positive !== null ? (
-                <span style={{ color: positive ? 'var(--john-success)' : 'var(--john-danger)' }}>
+                <span style={{ color: positive ? 'var(--ares-success)' : 'var(--ares-danger)' }}>
                   {change}
                 </span>
               ) : null}
@@ -575,7 +575,7 @@ export function HudOperator({
                 className="rounded-full px-3 py-1 text-[10px] transition-opacity hover:opacity-80 disabled:opacity-35"
                 style={{
                   border: '1px solid rgba(255,255,255,0.12)',
-                  color: 'var(--john-text-secondary)'
+                  color: 'var(--ares-text-secondary)'
                 }}
               >
                 {isAnalyzing ? 'Analisando' : 'Analisar'}
@@ -597,16 +597,16 @@ export function HudOperator({
               <span className="relative flex h-1.5 w-1.5">
                 <span
                   className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
-                  style={{ background: 'var(--john-text-muted)' }}
+                  style={{ background: 'var(--ares-text-muted)' }}
                 />
                 <span
                   className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                  style={{ background: 'var(--john-text-muted)' }}
+                  style={{ background: 'var(--ares-text-muted)' }}
                 />
               </span>
               <span
                 className="text-[11px]"
-                style={{ color: 'var(--john-text-muted)', letterSpacing: '0.02em' }}
+                style={{ color: 'var(--ares-text-muted)', letterSpacing: '0.02em' }}
               >
                 Modo autônomo ativado
               </span>
@@ -708,7 +708,7 @@ export function HudOperator({
                         <div className="flex flex-1 items-end justify-center pb-4">
                           <span
                             className="text-center text-[11px]"
-                            style={{ color: 'var(--john-text-muted)', lineHeight: 1.6 }}
+                            style={{ color: 'var(--ares-text-muted)', lineHeight: 1.6 }}
                           >
                             Observando o mercado.
                           </span>
@@ -725,7 +725,7 @@ export function HudOperator({
                               className="max-w-[90%] rounded-2xl rounded-br-sm px-3 py-2 text-[12px]"
                               style={{
                                 background: 'rgba(255,255,255,0.06)',
-                                color: 'var(--john-text-primary)',
+                                color: 'var(--ares-text-primary)',
                                 lineHeight: 1.55
                               }}
                             >
@@ -738,16 +738,16 @@ export function HudOperator({
                                   <span className="relative flex h-1.5 w-1.5">
                                     <span
                                       className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-40"
-                                      style={{ background: 'var(--john-success)' }}
+                                      style={{ background: 'var(--ares-success)' }}
                                     />
                                     <span
                                       className="relative inline-flex h-1.5 w-1.5 rounded-full"
-                                      style={{ background: 'var(--john-success)' }}
+                                      style={{ background: 'var(--ares-success)' }}
                                     />
                                   </span>
                                   <span
                                     className="text-[9px] uppercase"
-                                    style={{ color: 'var(--john-success)', letterSpacing: '0.14em' }}
+                                    style={{ color: 'var(--ares-success)', letterSpacing: '0.14em' }}
                                   >
                                     auto
                                   </span>
@@ -777,7 +777,7 @@ export function HudOperator({
                                     key={item}
                                     className="h-1 w-1 rounded-full animate-bounce"
                                     style={{
-                                      background: 'var(--john-text-muted)',
+                                      background: 'var(--ares-text-muted)',
                                       animationDelay: `${item * 0.15}s`
                                     }}
                                   />
@@ -791,7 +791,7 @@ export function HudOperator({
 
                     <div className="mt-3 flex-shrink-0">
                       <div
-                        className={isStreaming ? 'john-stream-pulse' : undefined}
+                        className={isStreaming ? 'ares-stream-pulse' : undefined}
                         style={{
                           borderTop: '1px solid rgba(255,255,255,0.28)',
                           paddingTop: 12
@@ -810,10 +810,10 @@ export function HudOperator({
                             onKeyDown={handleKey}
                             onFocus={onInputFocus}
                             onBlur={onInputBlur}
-                            placeholder="Fale com john"
+                            placeholder="Fale com ares"
                             className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto"
                             style={{
-                              color: 'var(--john-text-secondary)',
+                              color: 'var(--ares-text-secondary)',
                               fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
                               lineHeight: 'var(--hud-body-leading, 1.66)',
                               letterSpacing: 'var(--hud-input-tracking, -0.015em)',
@@ -829,13 +829,13 @@ export function HudOperator({
                               onClick={toggleMic}
                               disabled={isStreaming}
                               className="relative mb-0.5 flex h-[22px] w-[22px] flex-shrink-0 items-center justify-center transition-opacity duration-150 disabled:opacity-30 hover:opacity-70"
-                              style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
+                              style={{ color: isListening ? 'var(--ares-danger)' : 'var(--ares-text-muted)' }}
                               aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
                             >
                               {isListening ? (
                                 <span
                                   className="absolute inset-0 rounded-full animate-ping opacity-30"
-                                  style={{ background: 'var(--john-danger)' }}
+                                  style={{ background: 'var(--ares-danger)' }}
                                 />
                               ) : null}
                               <MicIcon className="relative h-[16px] w-[16px]" />
@@ -849,7 +849,7 @@ export function HudOperator({
                             }}
                             disabled={isStreaming || !inputValue.trim()}
                             className="mb-0.5 flex-shrink-0 transition-opacity duration-150 disabled:opacity-30 hover:opacity-70"
-                            style={{ color: 'var(--john-text-primary)' }}
+                            style={{ color: 'var(--ares-text-primary)' }}
                             aria-label="Enviar"
                           >
                             <SendIcon className="h-[18px] w-[18px]" />
@@ -863,7 +863,7 @@ export function HudOperator({
                     <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-none">
                       {diaryLoading ? (
                         <div className="flex h-full items-center justify-center">
-                          <span className="text-[11px]" style={{ color: 'var(--john-text-muted)' }}>
+                          <span className="text-[11px]" style={{ color: 'var(--ares-text-muted)' }}>
                             Carregando…
                           </span>
                         </div>
@@ -871,7 +871,7 @@ export function HudOperator({
                         <div className="flex h-full items-center justify-center">
                           <span
                             className="text-center text-[11px]"
-                            style={{ color: 'var(--john-text-muted)', lineHeight: 1.6 }}
+                            style={{ color: 'var(--ares-text-muted)', lineHeight: 1.6 }}
                           >
                             Nenhuma análise salva ainda.
                           </span>
@@ -890,7 +890,7 @@ export function HudOperator({
                           setActiveTab('chat')
                         }}
                         className="text-[10px] transition-opacity hover:opacity-70"
-                        style={{ color: 'var(--john-text-secondary)' }}
+                        style={{ color: 'var(--ares-text-secondary)' }}
                       >
                         Voltar ao chat
                       </button>
@@ -903,7 +903,7 @@ export function HudOperator({
                             setDiaryEntries([])
                           }}
                           className="text-[10px] transition-opacity hover:opacity-70"
-                          style={{ color: 'var(--john-danger)' }}
+                          style={{ color: 'var(--ares-danger)' }}
                         >
                           Limpar
                         </button>

@@ -128,7 +128,7 @@ function isUsefulWindowSource(source: Electron.DesktopCapturerSource): boolean {
   if (!source.name) return false
 
   const name = source.name.toLowerCase()
-  if (name.includes('john')) return false
+  if (name.includes('ares')) return false
   if (name === 'task switcher' || name === 'alt-tab' || name === 'program manager') return false
 
   const image = source.thumbnail
@@ -159,7 +159,7 @@ export async function getWindowSources(): Promise<CaptureSource[]> {
     })
 
     return sources
-      .filter(source => source.name && !source.name.toLowerCase().includes('john'))
+      .filter(source => source.name && !source.name.toLowerCase().includes('ares'))
       .map(source => {
         const scopeState = evaluateCaptureSource(
           { id: source.id, name: source.name },

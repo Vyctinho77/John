@@ -2,7 +2,7 @@
 
 ## Contexto
 
-O John faz chamadas LLM contínuas em background — Vision a cada frame capturado, Global Intent após cada análise semântica, e Tutor por demanda. Sem otimização, o custo estimado chegava a:
+O Ares faz chamadas LLM contínuas em background — Vision a cada frame capturado, Global Intent após cada análise semântica, e Tutor por demanda. Sem otimização, o custo estimado chegava a:
 
 | Serviço        | Tokens/dia (estimativa) | Característica                        |
 |----------------|------------------------|---------------------------------------|
@@ -269,7 +269,7 @@ As docs da Anthropic sugerem:
 - múltiplos documentos em estrutura canônica
 - grounding em trechos relevantes antes da resposta final
 
-Aplicando ao John:
+Aplicando ao Ares:
 
 - OCR, análises anteriores, memória e contexto de mercado devem entrar em blocos bem delimitados
 - evitar um "textão corrido" misturando fontes diferentes

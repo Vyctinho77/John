@@ -144,7 +144,7 @@ export function NotificationsSettingsPanel({
             )}
           </div>
           {voiceTestError && (
-            <p className="text-[12px] pb-2" style={{ color: 'var(--john-danger)' }}>
+            <p className="text-[12px] pb-2" style={{ color: 'var(--ares-danger)' }}>
               {voiceTestError}
             </p>
           )}
@@ -181,7 +181,7 @@ export function TypographySettingsPanel({
       </div>
 
       <div className="mt-5">
-        <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
           Família de fonte
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -198,7 +198,7 @@ export function TypographySettingsPanel({
       </div>
 
       <div className="mt-5">
-        <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
           Tamanho da fonte
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -214,7 +214,7 @@ export function TypographySettingsPanel({
       </div>
 
       <div className="mt-5">
-        <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+        <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
           Peso
         </p>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -275,7 +275,7 @@ export function MarketAutonomySettingsPanel({
       <div className="flex items-start justify-between gap-4">
         <div>
           <SectionTitle className="mb-1 text-[18px]">Mercado</SectionTitle>
-          <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
+          <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.5 }}>
             Snapshot, setup, risco e intenção de execução do pipeline local de autonomia.
           </p>
         </div>
@@ -301,7 +301,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Trava local</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Estado operacional para paper e automação local.
             </p>
           </div>
@@ -328,7 +328,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Policy ativa</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Escopo configurável do copilot local.
             </p>
           </div>
@@ -366,7 +366,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Snapshot</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Estado consolidado do mercado a partir do TradingView atual.
             </p>
           </div>
@@ -400,7 +400,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Setup</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Resultado atual do strategy engine.
             </p>
           </div>
@@ -429,7 +429,7 @@ export function MarketAutonomySettingsPanel({
         </div>
 
         {idea?.thesis && (
-          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.55 }}>
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.55 }}>
             {idea.thesis}
           </p>
         )}
@@ -439,7 +439,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Proposta</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Leitura final pronta para aprovação humana.
             </p>
           </div>
@@ -491,12 +491,12 @@ export function MarketAutonomySettingsPanel({
         </div>
 
         {proposal?.thesis && (
-          <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.55 }}>
+          <p className="mt-4 text-[11px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.55 }}>
             {proposal.thesis}
           </p>
         )}
         {proposal?.invalidation && (
-          <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.55 }}>
+          <p className="mt-2 text-[11px]" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.55 }}>
             Invalidação: {proposal.invalidation}
           </p>
         )}
@@ -506,7 +506,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Risco</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Decisão da policy e sizing sugerido.
             </p>
           </div>
@@ -537,7 +537,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Guards de mercado</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Bloqueios e alertas contextuais por notícia quente e macro próximo.
             </p>
           </div>
@@ -565,11 +565,11 @@ export function MarketAutonomySettingsPanel({
                 key={item.link}
                 className="rounded-[14px] px-3 py-2"
                 style={{
-                  background: 'color-mix(in srgb, var(--john-danger-soft) 26%, var(--john-surface-1))',
-                  border: '1px solid color-mix(in srgb, var(--john-danger) 24%, transparent)'
+                  background: 'color-mix(in srgb, var(--ares-danger-soft) 26%, var(--ares-surface-1))',
+                  border: '1px solid color-mix(in srgb, var(--ares-danger) 24%, transparent)'
                 }}
               >
-                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)', lineHeight: 1.45 }}>
+                <p className="text-[11px]" style={{ color: 'var(--ares-text-primary)', lineHeight: 1.45 }}>
                   {item.title}
                 </p>
               </div>
@@ -584,14 +584,14 @@ export function MarketAutonomySettingsPanel({
                 key={`${event.title}-${event.timestamp}`}
                 className="rounded-[14px] px-3 py-2"
                 style={{
-                  background: 'color-mix(in srgb, var(--john-accent-soft) 24%, var(--john-surface-1))',
-                  border: '1px solid color-mix(in srgb, var(--john-accent) 22%, transparent)'
+                  background: 'color-mix(in srgb, var(--ares-accent-soft) 24%, var(--ares-surface-1))',
+                  border: '1px solid color-mix(in srgb, var(--ares-accent) 22%, transparent)'
                 }}
               >
-                <p className="text-[11px]" style={{ color: 'var(--john-text-primary)', lineHeight: 1.45 }}>
+                <p className="text-[11px]" style={{ color: 'var(--ares-text-primary)', lineHeight: 1.45 }}>
                   [{event.impact}] {event.country} {event.title}
                 </p>
-                <p className="mt-1 text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                <p className="mt-1 text-[10px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                   {new Date(event.timestamp).toLocaleString('pt-BR')}
                 </p>
               </div>
@@ -604,7 +604,7 @@ export function MarketAutonomySettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Paper</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Conta, posições e ordens abertas no broker simulado.
             </p>
           </div>
@@ -678,15 +678,15 @@ export function MarketAutonomySettingsPanel({
                 key={record.id}
                 className="rounded-[14px] px-3 py-2"
                 style={{
-                  background: 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
-                  border: '1px solid var(--john-border-soft)'
+                  background: 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
+                  border: '1px solid var(--ares-border-soft)'
                 }}
               >
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px]" style={{ color: 'var(--john-text-primary)' }}>
+                  <span className="text-[11px]" style={{ color: 'var(--ares-text-primary)' }}>
                     {record.phase}
                   </span>
-                  <span className="text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                  <span className="text-[10px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                     {new Date(record.createdAt).toLocaleTimeString('pt-BR', {
                       hour: '2-digit',
                       minute: '2-digit',
@@ -694,7 +694,7 @@ export function MarketAutonomySettingsPanel({
                     })}
                   </span>
                 </div>
-                <p className="mt-1 text-[10px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.45 }}>
+                <p className="mt-1 text-[10px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.45 }}>
                   {Object.entries(record.payload)
                     .slice(0, 4)
                     .map(([key, value]) => `${key}: ${String(value)}`)
@@ -704,7 +704,7 @@ export function MarketAutonomySettingsPanel({
             ))}
           </div>
         ) : (
-          <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+          <p className="mt-3 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
             Nenhum evento registrado ainda.
           </p>
         )}
@@ -867,9 +867,9 @@ export function DataSettingsPanel({
         className="mt-4 rounded-[16px] overflow-hidden"
         style={{
           background: screenshotMode
-            ? 'color-mix(in srgb, var(--john-accent-soft) 36%, var(--john-surface-1))'
-            : 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
-          border: `1px solid ${screenshotMode ? 'var(--john-accent)' : 'var(--john-border-soft)'}`,
+            ? 'color-mix(in srgb, var(--ares-accent-soft) 36%, var(--ares-surface-1))'
+            : 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
+          border: `1px solid ${screenshotMode ? 'var(--ares-accent)' : 'var(--ares-border-soft)'}`,
           transition: 'background 0.3s, border-color 0.3s'
         }}
       >
@@ -880,18 +880,18 @@ export function DataSettingsPanel({
         >
           <div className="flex items-center gap-3">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke={screenshotMode ? 'var(--john-accent)' : 'var(--john-text-secondary)'} strokeWidth="1.5" />
-              <circle cx="12" cy="12" r="3" stroke={screenshotMode ? 'var(--john-accent)' : 'var(--john-text-secondary)'} strokeWidth="1.5" />
-              <path d="M15 5V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v1" stroke={screenshotMode ? 'var(--john-accent)' : 'var(--john-text-secondary)'} strokeWidth="1.5" />
+              <rect x="3" y="5" width="18" height="14" rx="2.5" stroke={screenshotMode ? 'var(--ares-accent)' : 'var(--ares-text-secondary)'} strokeWidth="1.5" />
+              <circle cx="12" cy="12" r="3" stroke={screenshotMode ? 'var(--ares-accent)' : 'var(--ares-text-secondary)'} strokeWidth="1.5" />
+              <path d="M15 5V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v1" stroke={screenshotMode ? 'var(--ares-accent)' : 'var(--ares-text-secondary)'} strokeWidth="1.5" />
             </svg>
             <div>
               <span
                 className="text-[13px] font-medium"
-                style={{ color: screenshotMode ? 'var(--john-accent)' : 'var(--john-text-primary)' }}
+                style={{ color: screenshotMode ? 'var(--ares-accent)' : 'var(--ares-text-primary)' }}
               >
                 Modo screenshot
               </span>
-              <p className="text-[10px] mt-0.5" style={{ color: 'var(--john-text-tertiary)' }}>
+              <p className="text-[10px] mt-0.5" style={{ color: 'var(--ares-text-tertiary)' }}>
                 {screenshotMode ? 'Captura pausada · restaura em 30s' : 'Torna o HUD visivel em prints'}
               </p>
             </div>
@@ -910,7 +910,7 @@ export function DataSettingsPanel({
       >
         <div
           className="px-5 pt-5 pb-4"
-          style={{ borderBottom: '1px solid var(--john-border-soft)' }}
+          style={{ borderBottom: '1px solid var(--ares-border-soft)' }}
         >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -931,7 +931,7 @@ export function DataSettingsPanel({
               </div>
               <div>
                 <SectionTitle className="text-[15px]">Memory Card</SectionTitle>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--john-text-tertiary)' }}>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--ares-text-tertiary)' }}>
                   Perfil + memória persistida
                 </p>
               </div>
@@ -956,10 +956,10 @@ export function DataSettingsPanel({
           <SettingsCard className="mx-4 mt-3 rounded-[14px] p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-[12px] font-medium" style={{ color: 'var(--john-text-primary)' }}>
+                <p className="text-[12px] font-medium" style={{ color: 'var(--ares-text-primary)' }}>
                   Embeddings
                 </p>
-                <p className="mt-0.5 text-[10px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                <p className="mt-0.5 text-[10px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                   {memoryEmbeddingStatus.embedding_model}
                 </p>
               </div>
@@ -986,7 +986,7 @@ export function DataSettingsPanel({
                 last={!memoryEmbeddingStatus.error}
               />
               {memoryEmbeddingStatus.error ? (
-                <p className="mt-2 text-[11px]" style={{ color: 'var(--john-danger)', lineHeight: 1.45 }}>
+                <p className="mt-2 text-[11px]" style={{ color: 'var(--ares-danger)', lineHeight: 1.45 }}>
                   {memoryEmbeddingStatus.error}
                 </p>
               ) : null}
@@ -1046,10 +1046,10 @@ export function DataSettingsPanel({
           <SettingsCard className="mx-4 mb-4 rounded-[14px] p-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-[13px] font-medium" style={{ color: 'var(--john-text-primary)' }}>
+                <p className="text-[13px] font-medium" style={{ color: 'var(--ares-text-primary)' }}>
                   {memoryImportPreview.file_name}
                 </p>
-                <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                   {memoryImportPreview.summary.profile_summary}
                 </p>
               </div>
@@ -1061,7 +1061,7 @@ export function DataSettingsPanel({
               </StatusBadge>
             </div>
 
-            <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.5 }}>
+            <p className="mt-3 text-[11px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.5 }}>
               {memoryImportPreview.summary.impact_summary}
             </p>
 
@@ -1070,7 +1070,7 @@ export function DataSettingsPanel({
               className="mt-3 w-full flex items-center justify-between gap-4"
               style={{ minHeight: 40 }}
             >
-              <span className="text-[12px]" style={{ color: 'var(--john-text-primary)' }}>
+              <span className="text-[12px]" style={{ color: 'var(--ares-text-primary)' }}>
                 Aplicar perfil do cartão
               </span>
               <Toggle on={memoryIncludeProfile} />
@@ -1094,7 +1094,7 @@ export function DataSettingsPanel({
         )}
 
         {memoryFeedback && (
-          <p className="mx-5 mb-4 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
+          <p className="mx-5 mb-4 text-[11px]" style={{ color: 'var(--ares-text-secondary)' }}>
             {memoryFeedback}
           </p>
         )}
@@ -1102,7 +1102,7 @@ export function DataSettingsPanel({
 
       {semanticState?.capture_policy === 'blocked-sensitive' && (
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
+          <p className="text-[11px]" style={{ color: 'var(--ares-text-secondary)' }}>
             Captura pausada: {semanticState.sensitivity_reason || 'superficie sensivel'}
           </p>
           <PillButton
@@ -1118,7 +1118,7 @@ export function DataSettingsPanel({
 
       {sources.length > 0 && (
         <>
-          <p className="mt-5 mb-2 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+          <p className="mt-5 mb-2 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
             Janelas disponíveis
           </p>
           <div className="flex gap-2 flex-wrap">
@@ -1222,7 +1222,7 @@ export function APISettingsPanel({
 }) {
   if (!aiSettings || !selectedProvider) {
     return (
-      <p className="mt-4 text-[13px]" style={{ color: 'var(--john-text-secondary)' }}>
+      <p className="mt-4 text-[13px]" style={{ color: 'var(--ares-text-secondary)' }}>
         Carregando provedores...
       </p>
     )
@@ -1249,10 +1249,10 @@ export function APISettingsPanel({
       <SettingsCard className="mt-5 rounded-[22px] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[15px]" style={{ color: 'var(--john-text-strong)' }}>
+            <p className="text-[15px]" style={{ color: 'var(--ares-text-strong)' }}>
               {selectedProvider.label}
             </p>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               {selectedProvider.capabilities.localOnly
                 ? 'projeto local e fallback privado'
                 : 'sua chave fica salva apenas neste dispositivo'}
@@ -1266,7 +1266,7 @@ export function APISettingsPanel({
         <div className="mt-4 flex flex-col gap-3">
           {!selectedProvider.capabilities.localOnly && (
             <label className="flex flex-col gap-2">
-              <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              <span className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                 API key
               </span>
               <input
@@ -1275,15 +1275,15 @@ export function APISettingsPanel({
                 placeholder={selectedProvider.hasKey ? '••••••••••••••••' : 'cole sua chave aqui'}
                 className="bg-transparent outline-none rounded-xl px-3 h-10"
                 style={{
-                  color: 'var(--john-text-primary)',
-                  border: '1px solid var(--john-border-strong)'
+                  color: 'var(--ares-text-primary)',
+                  border: '1px solid var(--ares-border-strong)'
                 }}
               />
             </label>
           )}
 
           <label className="flex flex-col gap-2">
-            <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <span className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Base URL
             </span>
             <input
@@ -1291,8 +1291,8 @@ export function APISettingsPanel({
               onChange={e => onUpdateProviderDraft({ baseUrl: e.target.value })}
               className="bg-transparent outline-none rounded-xl px-3 h-10"
               style={{
-                color: 'var(--john-text-primary)',
-                border: '1px solid var(--john-border-strong)'
+                color: 'var(--ares-text-primary)',
+                border: '1px solid var(--ares-border-strong)'
               }}
             />
           </label>
@@ -1331,7 +1331,7 @@ export function APISettingsPanel({
         </div>
 
         {apiFeedback && (
-          <p className="mt-3 text-[11px]" style={{ color: 'var(--john-text-secondary)' }}>
+          <p className="mt-3 text-[11px]" style={{ color: 'var(--ares-text-secondary)' }}>
             {apiFeedback}
           </p>
         )}
@@ -1341,7 +1341,7 @@ export function APISettingsPanel({
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Custo diário</SectionTitle>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
               Defina um teto diário em dólar para uso de API.
             </p>
           </div>
@@ -1356,42 +1356,42 @@ export function APISettingsPanel({
             style={{
               background:
                 costAlert.level === 'blocked'
-                  ? 'color-mix(in srgb, var(--john-danger-soft) 60%, var(--john-surface-1))'
+                  ? 'color-mix(in srgb, var(--ares-danger-soft) 60%, var(--ares-surface-1))'
                   : costAlert.level === 'danger'
-                    ? 'color-mix(in srgb, var(--john-danger-soft) 40%, var(--john-surface-1))'
-                    : 'color-mix(in srgb, var(--john-surface-1) 72%, transparent)',
+                    ? 'color-mix(in srgb, var(--ares-danger-soft) 40%, var(--ares-surface-1))'
+                    : 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
               border:
                 costAlert.level === 'blocked'
-                  ? '1px solid var(--john-danger)'
+                  ? '1px solid var(--ares-danger)'
                   : costAlert.level === 'danger'
-                    ? '1px solid color-mix(in srgb, var(--john-danger) 60%, transparent)'
-                    : '1px solid var(--john-border-soft)'
+                    ? '1px solid color-mix(in srgb, var(--ares-danger) 60%, transparent)'
+                    : '1px solid var(--ares-border-soft)'
             }}
           >
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px]" style={{ color: 'var(--john-text-primary)' }}>
+              <p className="text-[11px]" style={{ color: 'var(--ares-text-primary)' }}>
                 Atenção de custo
               </p>
               <StatusBadge className="px-2 py-1 rounded-full text-[10px]" tone="neutral">
                 {costAlert.label}
               </StatusBadge>
             </div>
-            <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-secondary)', lineHeight: 1.45 }}>
+            <p className="mt-2 text-[11px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.45 }}>
               {costAlert.message}
             </p>
           </div>
         )}
 
         <div className="mt-4 flex flex-col gap-2">
-          <span className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+          <span className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
             Teto diário em USD
           </span>
           <div className="flex items-center gap-2">
             <div
               className="flex items-center rounded-xl px-3 h-10 flex-1"
-              style={{ border: '1px solid var(--john-border-strong)' }}
+              style={{ border: '1px solid var(--ares-border-strong)' }}
             >
-              <span className="text-[12px] mr-2" style={{ color: 'var(--john-text-tertiary)' }}>$</span>
+              <span className="text-[12px] mr-2" style={{ color: 'var(--ares-text-tertiary)' }}>$</span>
               <input
                 value={dailyCostDraft}
                 onChange={e => onDailyCostDraftChange(e.target.value)}
@@ -1410,14 +1410,14 @@ export function APISettingsPanel({
                 inputMode="decimal"
                 placeholder="ex: 2.50"
                 className="bg-transparent outline-none w-full text-[13px]"
-                style={{ color: 'var(--john-text-primary)' }}
+                style={{ color: 'var(--ares-text-primary)' }}
               />
             </div>
             <PillButton onMouseDown={e => { e.preventDefault(); onResetDailyCostLimit() }} className="flex-shrink-0">
               sem limite
             </PillButton>
           </div>
-          <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.45 }}>
+          <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.45 }}>
             Esse valor fica salvo na configuração do app e pode ser usado como teto operacional para chamadas remotas.
           </p>
           {aiCosts && (
@@ -1448,18 +1448,18 @@ export function APISettingsPanel({
 
       <SettingsCard className="mt-4 rounded-[22px] p-4">
         <SectionTitle className="text-[15px]">ChatGPT (Codex OAuth)</SectionTitle>
-        <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)', lineHeight: 1.5 }}>
-          Use sua assinatura ChatGPT Plus/Pro sem API key. John vai priorizar esse provider quando estiver conectado.
+        <p className="mt-1 text-[11px]" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.5 }}>
+          Use sua assinatura ChatGPT Plus/Pro sem API key. Ares vai priorizar esse provider quando estiver conectado.
         </p>
 
         <div className="mt-4">
           {codexStatus.authenticated ? (
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="text-[13px]" style={{ color: 'var(--john-text-primary)' }}>
+                <p className="text-[13px]" style={{ color: 'var(--ares-text-primary)' }}>
                   {codexStatus.email}
                 </p>
-                <p className="text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+                <p className="text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
                   plano: {codexStatus.planType}
                 </p>
               </div>
@@ -1478,7 +1478,7 @@ export function APISettingsPanel({
                 {codexLoading ? 'abrindo browser...' : 'conectar com ChatGPT'}
               </PillButton>
               {codexError && (
-                <p className="text-[11px]" style={{ color: 'var(--john-danger)' }}>
+                <p className="text-[11px]" style={{ color: 'var(--ares-danger)' }}>
                   {codexError}
                 </p>
               )}
@@ -1542,7 +1542,7 @@ export function APISettingsPanel({
           ))}
         </div>
 
-        <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+        <p className="mt-4 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
           Trilha por feature
         </p>
         <div className="mt-2">
@@ -1576,7 +1576,7 @@ export function APISettingsPanel({
       </div>
 
       {diagnostics && privacy && (
-        <p className="mt-4 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+        <p className="mt-4 text-[11px]" style={{ color: 'var(--ares-text-tertiary)' }}>
           storage seguro: {aiSettings.secureStorageAvailable ? 'sim' : 'modo básico'} | traces:{' '}
           {diagnostics.performance.traceCount} | consentimentos: {privacy.consentTrail.length}
           {lastDeletion ? ' | limpeza registrada' : ''}
@@ -1584,7 +1584,7 @@ export function APISettingsPanel({
       )}
 
       {diagnostics?.latestTutorDebug && (
-        <p className="mt-2 text-[11px]" style={{ color: 'var(--john-text-muted)' }}>
+        <p className="mt-2 text-[11px]" style={{ color: 'var(--ares-text-muted)' }}>
           ultima resposta: {diagnostics.latestTutorDebug.dominantContextSource} via {diagnostics.latestTutorDebug.model}
           {diagnostics.latestTutorDebug.latencyMs !== null ? ` | ${diagnostics.latestTutorDebug.latencyMs} ms` : ''}
           {diagnostics.latestTutorDebug.screenAgeMs !== null ? ` | frame ${diagnostics.latestTutorDebug.screenAgeMs} ms` : ''}

@@ -530,7 +530,7 @@ ipcMain.handle('memory:select-import-card', async () => {
     title: 'Importar memory card',
     properties: ['openFile'] as Array<'openFile'>,
     filters: [
-      { name: 'John Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] },
+      { name: 'Ares Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] },
       { name: 'Todos os arquivos', extensions: ['*'] }
     ]
   }
@@ -545,8 +545,8 @@ ipcMain.handle('memory:export-card', async () => {
   const summary = await getMemorySummary()
   const options = {
     title: 'Exportar memory card',
-    defaultPath: `${summary.owner_name || 'john-memory'}-${new Date(summary.updated_at).toISOString().slice(0, 10)}${MEMORY_CARD_EXTENSION}`,
-    filters: [{ name: 'John Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] }]
+    defaultPath: `${summary.owner_name || 'ares-memory'}-${new Date(summary.updated_at).toISOString().slice(0, 10)}${MEMORY_CARD_EXTENSION}`,
+    filters: [{ name: 'Ares Memory Card', extensions: [MEMORY_CARD_EXTENSION.replace('.', '')] }]
   }
   const result = hudWindow
     ? await dialog.showSaveDialog(hudWindow, options)
@@ -1132,7 +1132,7 @@ ipcMain.handle('spotify:set-repeat',  (_e, s: string)  => spotifyService.setRepe
 ipcMain.handle('spotify:execute-action', (_e, payload) => spotifyService.executeAction(payload))
 ipcMain.handle('spotify:disconnect',  () => spotifyService.disconnect())
 
-const EXTENSION_ID = 'john-ai.john-connector-vscode'
+const EXTENSION_ID = 'ares-ai.ares-connector-vscode'
 
 function isExtensionInstalled(): boolean {
   try {
@@ -1198,8 +1198,8 @@ ipcMain.handle('bridge:install-vscode-connector', async (): Promise<{ ok: boolea
     return { ok: true, message: 'Extensão já instalada. Recarregue o VS Code: Ctrl+Shift+P → "Reload Window".' }
   }
 
-  const devPath  = join(__dirname, '../../../packages/connector-vscode/john-connector.vsix')
-  const prodPath = join(process.resourcesPath ?? '', 'john-connector.vsix')
+  const devPath  = join(__dirname, '../../../packages/connector-vscode/ares-connector.vsix')
+  const prodPath = join(process.resourcesPath ?? '', 'ares-connector.vsix')
   const vsixPath = existsSync(devPath) ? devPath : existsSync(prodPath) ? prodPath : null
 
   if (!vsixPath) {
@@ -1216,7 +1216,7 @@ ipcMain.handle('bridge:install-vscode-connector', async (): Promise<{ ok: boolea
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.john.desktop')
+  electronApp.setAppUserModelId('com.ares.desktop')
   void installCrashHandlers()
   app.on('browser-window-created', (_, w) => optimizer.watchWindowShortcuts(w))
   void createHudWindow().then(() => applyWindowSettings())

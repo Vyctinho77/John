@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-A integracao com Spotify no John faz duas coisas:
+A integracao com Spotify no Ares faz duas coisas:
 
 - mantem estado de playback ao vivo no main process
 - executa comandos locais de controle e reproducao sem depender do tutor geral quando a intencao e clara
@@ -36,12 +36,12 @@ O fluxo:
 2. o HUD chama `spotify:start-auth`
 3. o main abre a autorizacao do Spotify no browser
 4. o callback local recebe o `code`
-5. o main troca por tokens e persiste em `john-spotify-tokens.json`
+5. o main troca por tokens e persiste em `ares-spotify-tokens.json`
 
 Os tokens ficam em:
 
 ```txt
-app.getPath('userData')/john-spotify-tokens.json
+app.getPath('userData')/ares-spotify-tokens.json
 ```
 
 ## Estado mantido pelo serviço
@@ -225,4 +225,4 @@ Mensagens sao convertidas para respostas curtas e acionaveis no tutor local.
 
 ## Resumo
 
-Hoje a integracao do Spotify no John ja e conversacional, local e de baixa latencia. O LLM entra como apoio de classificacao quando necessario, mas a execucao real continua acontecendo no main process.
+Hoje a integracao do Spotify no Ares ja e conversacional, local e de baixa latencia. O LLM entra como apoio de classificacao quando necessario, mas a execucao real continua acontecendo no main process.

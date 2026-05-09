@@ -23,7 +23,7 @@ import {
 import { getUserProfile, setUserProfile } from './user-profile'
 
 const MEMORY_CARD_SCHEMA_VERSION = 1 as const
-export const MEMORY_CARD_EXTENSION = '.john-memory'
+export const MEMORY_CARD_EXTENSION = '.ares-memory'
 
 let cachedSnapshot: PersistedMemorySnapshot | null = null
 

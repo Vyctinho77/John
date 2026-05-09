@@ -111,7 +111,7 @@ export function buildSummary(snapshot: PersistedMemorySnapshot): MemoryCardSumma
 
   return {
     card_id: snapshot.card_id,
-    owner_name: snapshot.owner_name || profile.display_name || 'John user',
+    owner_name: snapshot.owner_name || profile.display_name || 'Ares user',
     created_at: snapshot.created_at,
     updated_at: snapshot.updated_at,
     item_count: activeItems.length,

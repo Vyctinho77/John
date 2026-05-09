@@ -66,9 +66,9 @@ export function ChatSidebar({
       className="absolute inset-y-0 left-0 z-20 flex flex-col overflow-hidden"
       style={{
         width: open ? OPEN_WIDTH : COLLAPSED_WIDTH,
-        transition: 'width var(--john-transition-panel)',
-        background: open ? 'color-mix(in srgb, var(--john-surface-overlay) 96%, transparent)' : 'transparent',
-        borderRight: open ? '1px solid var(--john-border-strong)' : 'none',
+        transition: 'width var(--ares-transition-panel)',
+        background: open ? 'color-mix(in srgb, var(--ares-surface-overlay) 96%, transparent)' : 'transparent',
+        borderRight: open ? '1px solid var(--ares-border-strong)' : 'none',
         pointerEvents: open ? 'auto' : 'none'
       }}
     >
@@ -88,8 +88,8 @@ export function ChatSidebar({
                 style={{
                   width: 18,
                   height: 18,
-                  borderRadius: 'var(--john-radius-sm)',
-                  color: 'var(--john-text-secondary)',
+                  borderRadius: 'var(--ares-radius-sm)',
+                  color: 'var(--ares-text-secondary)',
                   background: 'transparent'
                 }}
                 title="Recolher sidebar"
@@ -113,7 +113,7 @@ export function ChatSidebar({
                 className="transition-opacity hover:opacity-80 active:opacity-50"
                 style={{
                   fontSize: 12,
-                  color: 'var(--john-text-primary)',
+                  color: 'var(--ares-text-primary)',
                   letterSpacing: 'var(--hud-muted-tracking, -0.01em)',
                   background: 'transparent'
                 }}
@@ -131,8 +131,8 @@ export function ChatSidebar({
               style={{
                 width: 20,
                 height: 20,
-                color: 'var(--john-text-tertiary)',
-                borderRadius: 'var(--john-radius-sm)',
+                color: 'var(--ares-text-tertiary)',
+                borderRadius: 'var(--ares-radius-sm)',
                 background: 'transparent'
               }}
               title="Novo chat"
@@ -176,14 +176,14 @@ export function ChatSidebar({
                       }}
                       onMouseDown={e => e.stopPropagation()}
                       className="flex-1 bg-transparent outline-none text-[12px]"
-                      style={{ color: 'var(--john-text-primary)', caretColor: 'white' }}
+                      style={{ color: 'var(--ares-text-primary)', caretColor: 'white' }}
                     />
                   ) : (
                     <>
                       <span
                         className="flex-1 truncate select-none text-[12px]"
                         style={{
-                          color: isActive ? 'var(--john-text-primary)' : 'var(--john-text-secondary)',
+                          color: isActive ? 'var(--ares-text-primary)' : 'var(--ares-text-secondary)',
                           letterSpacing: 'var(--hud-muted-tracking, -0.01em)'
                         }}
                         onMouseEnter={() => setHoveredTitleId(meta.id)}
@@ -200,7 +200,7 @@ export function ChatSidebar({
                           className="absolute inset-y-0 right-0 text-[10px] transition-opacity duration-150"
                           onMouseEnter={() => setHoveredTitleId(meta.id)}
                           onMouseLeave={() => setHoveredTitleId(current => (current === meta.id ? null : current))}
-                          style={{ color: 'var(--john-text-muted)' }}
+                          style={{ color: 'var(--ares-text-muted)' }}
                           aria-hidden={showActions}
                         >
                           <span style={{ opacity: showActions ? 0 : 1 }}>{timeLabel(meta.updatedAt)}</span>

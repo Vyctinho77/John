@@ -1,8 +1,8 @@
-# John Codex OAuth
+# Ares Codex OAuth
 
 ## Objetivo
 
-O Codex OAuth permite que o John use a sessao autenticada da conta ChatGPT do usuario para chamadas de texto, geracao de titulos e refinamentos internos, sem exigir API key da OpenAI para esses fluxos.
+O Codex OAuth permite que o Ares use a sessao autenticada da conta ChatGPT do usuario para chamadas de texto, geracao de titulos e refinamentos internos, sem exigir API key da OpenAI para esses fluxos.
 
 Hoje ele e usado principalmente para:
 

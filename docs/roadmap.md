@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Este roadmap organiza os proximos blocos de evolucao do John por impacto x esforco.
+Este roadmap organiza os proximos blocos de evolucao do Ares por impacto x esforco.
 
 A prioridade atual nao e adicionar mais features aleatorias. E melhorar:
 
@@ -22,7 +22,7 @@ A prioridade atual nao e adicionar mais features aleatorias. E melhorar:
 
 ### Objetivo
 
-Fazer o John explicar melhor de onde veio cada resposta e reduzir erros por contexto velho.
+Fazer o Ares explicar melhor de onde veio cada resposta e reduzir erros por contexto velho.
 
 ### Status atual
 
@@ -157,7 +157,7 @@ Ainda aberto nesta sprint:
 
 ### Objetivo
 
-Unificar a experiencia de acao real do John, para ele agir mais e inventar menos.
+Unificar a experiencia de acao real do Ares, para ele agir mais e inventar menos.
 
 ### Entregas
 
@@ -283,9 +283,9 @@ Itens que podem entrar em qualquer sprint quando fizer sentido:
 
 Vamos considerar esse roadmap bem executado quando:
 
-- o John errar menos por confusao de fonte
+- o Ares errar menos por confusao de fonte
 - o TradingView responder com mais seguranca tecnica
-- a HUD explicar melhor o que o John viu e fez
+- a HUD explicar melhor o que o Ares viu e fez
 - o custo por sessao cair sem piorar a experiencia
 
 ## Ordem de execucao recomendada

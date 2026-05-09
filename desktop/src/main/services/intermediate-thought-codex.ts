@@ -71,7 +71,7 @@ async function requestCodexThought(
         {
           role: 'system',
           content: [
-            'Você escreve o pensamento interno do estágio 2 do John.',
+            'Você escreve o pensamento interno do estágio 2 do Ares.',
             'Responda apenas JSON válido, sem markdown e sem comentários.',
             'Use este formato: {"primary":"...","secondary":"..."}',
             'Regras:',

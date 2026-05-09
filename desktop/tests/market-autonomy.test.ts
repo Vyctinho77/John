@@ -88,9 +88,9 @@ function makeIdea(overrides: Partial<TradeIdea> = {}): TradeIdea {
 }
 
 test.beforeEach(() => {
-  const dir = mkdtempSync(join(tmpdir(), 'john-market-autonomy-'))
-  process.env.JOHN_TRADE_AUDIT_PATH = join(dir, 'trade-audit-records.json')
-  process.env.JOHN_MARKET_POLICY_PATH = join(dir, 'market-autonomy-policy.json')
+  const dir = mkdtempSync(join(tmpdir(), 'ares-market-autonomy-'))
+  process.env.ARES_TRADE_AUDIT_PATH = join(dir, 'trade-audit-records.json')
+  process.env.ARES_MARKET_POLICY_PATH = join(dir, 'market-autonomy-policy.json')
   resetTradeAuditCacheForTests()
   resetMarketAutonomyPolicyCacheForTests()
   clearTradeAuditRecords()

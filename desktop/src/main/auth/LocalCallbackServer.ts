@@ -15,7 +15,7 @@ export function waitForCallback(expectedState: string): Promise<string> {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(`
         <html><body style="font-family:sans-serif;text-align:center;padding:40px;background:#0a0a0a;color:#fff">
-          <h2>${error || !stateOk ? 'Erro na autenticação' : 'John conectado!'}</h2>
+          <h2>${error || !stateOk ? 'Erro na autenticação' : 'Ares conectado!'}</h2>
           <p>Pode fechar esta janela.</p>
           <script>window.close()</script>
         </body></html>

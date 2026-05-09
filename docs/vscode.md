@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-O conector do VS Code e a integracao externa mais madura do John. Ele roda como extensao dentro do editor, se conecta ao bridge local do app por WebSocket e publica contexto estruturado do workspace e do ponto atual de edicao.
+O conector do VS Code e a integracao externa mais madura do Ares. Ele roda como extensao dentro do editor, se conecta ao bridge local do app por WebSocket e publica contexto estruturado do workspace e do ponto atual de edicao.
 
 Hoje ele alimenta principalmente:
 
@@ -42,7 +42,7 @@ O app instala a extensao a partir de um VSIX empacotado no proprio repositorio.
 Arquivo:
 
 ```txt
-packages/connector-vscode/john-connector.vsix
+packages/connector-vscode/ares-connector.vsix
 ```
 
 Fluxo atual no main:
@@ -89,10 +89,10 @@ O `sessionId` enviado usa `vscode.env.sessionId`.
 
 A extensao registra dois comandos:
 
-- `john.connect`
-- `john.disconnect`
+- `ares.connect`
+- `ares.disconnect`
 
-Eles servem para reconectar ou desligar manualmente o conector sem depender da UI do John.
+Eles servem para reconectar ou desligar manualmente o conector sem depender da UI do Ares.
 
 ## O que a extensao coleta
 
@@ -121,7 +121,7 @@ Detalhes:
 - manda a selecao atual, se houver
 - manda um recorte de codigo de aproximadamente `+-20` linhas ao redor do cursor
 
-Esse recorte e o insumo mais importante para o John responder sobre o ponto exato do codigo.
+Esse recorte e o insumo mais importante para o Ares responder sobre o ponto exato do codigo.
 
 ## Diagnosticos
 
@@ -186,7 +186,7 @@ Formato:
 }
 ```
 
-## Payload enviado para o John
+## Payload enviado para o Ares
 
 O conector envia um `AppContext` com:
 
@@ -235,7 +235,7 @@ Esse bloco inclui:
 - trecho de codigo ao redor do cursor
 - ultimo output do terminal
 
-O prompt tambem injeta um `CodeVoice` proprio quando a superficie detectada e codigo. Isso faz o John:
+O prompt tambem injeta um `CodeVoice` proprio quando a superficie detectada e codigo. Isso faz o Ares:
 
 - falar como par de programacao
 - referenciar linha, funcao e variavel de forma concreta
@@ -288,7 +288,7 @@ Quando o conector entra, o HUD recebe `bridge:status-update` e atualiza o card.
 - o conector olha principalmente o editor ativo, nao o workspace inteiro
 - o Git usa apenas o primeiro repositorio retornado pela API
 - o terminal e um buffer curto, nao um historico completo
-- nao existe execucao remota de edicao de codigo pelo John nesse conector
+- nao existe execucao remota de edicao de codigo pelo Ares nesse conector
 - a unica acao recebida hoje pela extensao e `openFile`
 
 ## Build e empacotamento
@@ -304,14 +304,14 @@ npm run package
 O `package` gera:
 
 ```txt
-packages/connector-vscode/john-connector.vsix
+packages/connector-vscode/ares-connector.vsix
 ```
 
 Esse artefato e o que o app instala quando o usuario conecta o VS Code pela Biblioteca.
 
 ## Resumo
 
-Hoje o VS Code e o conector que mais da contexto estrutural para o John.
+Hoje o VS Code e o conector que mais da contexto estrutural para o Ares.
 
 Ele ja entrega o bastante para:
 

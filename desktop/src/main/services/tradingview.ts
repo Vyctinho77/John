@@ -83,7 +83,7 @@ const EMPTY_STATE: TradingViewConnectorState = {
 
 const OBSERVER_SCRIPT = String.raw`
 (() => {
-  const bridge = window.__johnTradingViewBridge || (window.__johnTradingViewBridge = {
+  const bridge = window.__aresTradingViewBridge || (window.__aresTradingViewBridge = {
     installed: false,
     lastChartPointerAt: 0,
     lastOhlcSignature: '',

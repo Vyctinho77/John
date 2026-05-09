@@ -106,8 +106,8 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
   if (isSidebar) {
     const attachedLeft = sidebarSide === 'left'
     const borderRadius = attachedLeft
-      ? '0 var(--john-radius-md) var(--john-radius-md) 0'
-      : 'var(--john-radius-md) 0 0 var(--john-radius-md)'
+      ? '0 var(--ares-radius-md) var(--ares-radius-md) 0'
+      : 'var(--ares-radius-md) 0 0 var(--ares-radius-md)'
 
     return (
       <div
@@ -115,7 +115,7 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
         style={{
           width: '100vw',
           height: '100vh',
-          background: 'linear-gradient(180deg, var(--john-bg-panel-top) 0%, var(--john-bg-panel-bottom) 100%)',
+          background: 'linear-gradient(180deg, var(--ares-bg-panel-top) 0%, var(--ares-bg-panel-bottom) 100%)',
           backdropFilter: 'blur(24px) saturate(160%)',
           WebkitBackdropFilter: 'blur(24px) saturate(160%)',
           borderRadius,
@@ -136,10 +136,10 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
     <motion.div
       className="relative overflow-hidden"
       style={{
-        background: 'linear-gradient(180deg, var(--john-bg-panel-top) 0%, var(--john-bg-panel-bottom) 100%)',
+        background: 'linear-gradient(180deg, var(--ares-bg-panel-top) 0%, var(--ares-bg-panel-bottom) 100%)',
         backdropFilter: 'blur(24px) saturate(160%)',
         WebkitBackdropFilter: 'blur(24px) saturate(160%)',
-        boxShadow: 'var(--john-shadow-panel)',
+        boxShadow: 'var(--ares-shadow-panel)',
         clipPath: `inset(0 round ${radius}px)`,
         willChange: 'width, height, border-radius'
       }}

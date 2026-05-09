@@ -1,4 +1,4 @@
-﻿import {
+import {
   memo,
   useEffect,
   useLayoutEffect,
@@ -533,7 +533,7 @@ export const HudExpanded = memo(function HudExpanded({
 
     if (!name) {
       return {
-        label: surface !== 'unknown' ? `Vejo que você está num ${labelSurface(surface)}.` : 'John.',
+        label: surface !== 'unknown' ? `Vejo que você está num ${labelSurface(surface)}.` : 'Ares.',
         cta: 'Como posso ajudar?',
         subtitle
       }
@@ -744,7 +744,7 @@ export const HudExpanded = memo(function HudExpanded({
   const renderAPISettings = () => {
     if (!settings) {
       return (
-        <p className="mt-4 text-[13px]" style={{ color: 'var(--john-text-secondary)' }}>
+        <p className="mt-4 text-[13px]" style={{ color: 'var(--ares-text-secondary)' }}>
           Configurações indisponíveis.
         </p>
       )
@@ -1032,13 +1032,13 @@ export const HudExpanded = memo(function HudExpanded({
                 key={stage}
                 onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onPress() }}
                 className="flex items-center justify-center transition-opacity duration-150 min-w-[28px] min-h-[28px]"
-                style={{ color: active ? 'var(--john-text-strong)' : 'var(--john-text-muted)' }}
+                style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-muted)' }}
                 aria-label={label}
               >
                 <Icon className={
-                  stage === 1 ? 'w-[var(--john-icon-md)] h-auto' :
-                  stage === 2 ? 'w-[var(--john-icon-lg)] h-auto' :
-                  'w-[var(--john-icon-sm)] h-auto'
+                  stage === 1 ? 'w-[var(--ares-icon-md)] h-auto' :
+                  stage === 2 ? 'w-[var(--ares-icon-lg)] h-auto' :
+                  'w-[var(--ares-icon-sm)] h-auto'
                 } />
               </button>
             )
@@ -1063,18 +1063,18 @@ export const HudExpanded = memo(function HudExpanded({
           >
             <span style={{
               width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
-              background: tickerQuote.positive ? 'var(--john-success)' : 'var(--john-danger)'
+              background: tickerQuote.positive ? 'var(--ares-success)' : 'var(--ares-danger)'
             }} />
             <span style={{
               fontSize: 11.5, fontWeight: 500,
-              color: 'var(--john-text-secondary)',
+              color: 'var(--ares-text-secondary)',
               letterSpacing: '0.03em'
             }}>
               {tickerQuote.symbol}
             </span>
             <span style={{
               fontSize: 11.5, fontWeight: 500,
-              color: 'var(--john-text-primary)',
+              color: 'var(--ares-text-primary)',
               letterSpacing: '-0.01em'
             }}>
               {tickerQuote.price}
@@ -1082,7 +1082,7 @@ export const HudExpanded = memo(function HudExpanded({
             <span style={{
               fontSize: 10.5, fontWeight: 500,
               letterSpacing: '0.005em',
-              color: tickerQuote.positive ? 'var(--john-success)' : 'var(--john-danger)'
+              color: tickerQuote.positive ? 'var(--ares-success)' : 'var(--ares-danger)'
             }}>
               {tickerQuote.change}
             </span>
@@ -1099,7 +1099,7 @@ export const HudExpanded = memo(function HudExpanded({
           <button
             onMouseDown={e => { e.preventDefault(); onEnterOperator() }}
             className="w-7 h-7 flex items-center justify-center transition-opacity duration-150 hover:opacity-80"
-            style={{ color: 'var(--john-text-secondary)' }}
+            style={{ color: 'var(--ares-text-secondary)' }}
             aria-label="Modo autônomo"
             title="Modo autônomo"
           >
@@ -1122,7 +1122,7 @@ export const HudExpanded = memo(function HudExpanded({
             })
           }}
           className="w-7 h-7 flex items-center justify-center transition-opacity duration-150"
-          style={{ color: settingsOpen ? 'var(--john-text-strong)' : 'var(--john-text-secondary)' }}
+          style={{ color: settingsOpen ? 'var(--ares-text-strong)' : 'var(--ares-text-secondary)' }}
           aria-label="Configurações"
         >
           <motion.span
@@ -1141,7 +1141,7 @@ export const HudExpanded = memo(function HudExpanded({
             <p
               className="text-[13px]"
               style={{
-                color: 'var(--john-text-muted)',
+                color: 'var(--ares-text-muted)',
                 letterSpacing: '-0.01em',
                 fontSize: 'calc(var(--hud-font-size, 15px) - 2px)'
               }}
@@ -1151,7 +1151,7 @@ export const HudExpanded = memo(function HudExpanded({
             <p
               className="text-[20px] font-medium mt-1"
               style={{
-                color: 'var(--john-text-strong)',
+                color: 'var(--ares-text-strong)',
                 letterSpacing: '-0.02em',
                 fontSize: 'calc(var(--hud-font-size, 15px) + 5px)'
               }}
@@ -1162,7 +1162,7 @@ export const HudExpanded = memo(function HudExpanded({
               <p
                 className="text-[12px] mt-2"
                 style={{
-                  color: 'var(--john-text-tertiary)',
+                  color: 'var(--ares-text-tertiary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 3px)'
                 }}
               >
@@ -1178,21 +1178,21 @@ export const HudExpanded = memo(function HudExpanded({
                 onMouseDown={e => { e.preventDefault(); onQuickPrompt(text) }}
                 className="flex items-center gap-2 px-3.5 py-2 rounded-full transition-all duration-150"
                 style={{
-                  background: 'color-mix(in srgb, var(--john-surface-1) 76%, transparent)',
-                  border: '1px solid var(--john-border-strong)',
-                  color: 'var(--john-text-secondary)',
+                  background: 'color-mix(in srgb, var(--ares-surface-1) 76%, transparent)',
+                  border: '1px solid var(--ares-border-strong)',
+                  color: 'var(--ares-text-secondary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 2px)',
                   letterSpacing: '0.003em'
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = 'color-mix(in srgb, var(--john-surface-2) 82%, transparent)'
-                  e.currentTarget.style.borderColor = 'var(--john-border-strong)'
-                  e.currentTarget.style.color = 'var(--john-text-strong)'
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--ares-surface-2) 82%, transparent)'
+                  e.currentTarget.style.borderColor = 'var(--ares-border-strong)'
+                  e.currentTarget.style.color = 'var(--ares-text-strong)'
                 }}
                 onMouseLeave={e => {
-                  e.currentTarget.style.background = 'color-mix(in srgb, var(--john-surface-1) 76%, transparent)'
-                  e.currentTarget.style.borderColor = 'var(--john-border-strong)'
-                  e.currentTarget.style.color = 'var(--john-text-secondary)'
+                  e.currentTarget.style.background = 'color-mix(in srgb, var(--ares-surface-1) 76%, transparent)'
+                  e.currentTarget.style.borderColor = 'var(--ares-border-strong)'
+                  e.currentTarget.style.color = 'var(--ares-text-secondary)'
                 }}
               >
                 <Icon size={12} strokeWidth={1.8} style={{ flexShrink: 0, opacity: 0.7 }} aria-hidden="true" />
@@ -1207,7 +1207,7 @@ export const HudExpanded = memo(function HudExpanded({
             <div className="h-full flex">
               <aside
                 className="w-[200px] flex-shrink-0 px-3 pt-5 pb-6"
-                        style={{ borderRight: '1px solid var(--john-border-soft)' }}
+                        style={{ borderRight: '1px solid var(--ares-border-soft)' }}
               >
                 <button
                   onMouseDown={e => {
@@ -1215,7 +1215,7 @@ export const HudExpanded = memo(function HudExpanded({
                     setSettingsOpen(false)
                   }}
                   className="w-8 h-8 flex items-center justify-center mb-5 rounded-lg transition-colors duration-150"
-                  style={{ color: 'var(--john-text-primary)' }}
+                  style={{ color: 'var(--ares-text-primary)' }}
                   aria-label="Voltar"
                 >
                   <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1296,9 +1296,9 @@ export const HudExpanded = memo(function HudExpanded({
                       <span
                         className="inline-flex leading-relaxed px-4 py-2 selectable"
                         style={{
-                          background: 'color-mix(in srgb, var(--john-surface-1) 68%, transparent)',
-                          color: 'var(--john-text-strong)',
-                          border: '1px solid var(--john-border-strong)',
+                          background: 'color-mix(in srgb, var(--ares-surface-1) 68%, transparent)',
+                          color: 'var(--ares-text-strong)',
+                          border: '1px solid var(--ares-border-strong)',
                           borderRadius: '14px',
                           boxShadow: '0 0 0 1px rgba(0,0,0,0.08) inset',
                           width: 'fit-content',
@@ -1336,7 +1336,7 @@ export const HudExpanded = memo(function HudExpanded({
                   <MessageBody content={streamingContent} streaming />
                   <motion.span
                     className="inline-block w-0.5 h-3.5 ml-0.5 align-middle"
-                    style={{ background: 'var(--john-text-primary)' }}
+                    style={{ background: 'var(--ares-text-primary)' }}
                     animate={{ opacity: [1, 0] }}
                     transition={{ duration: 0.55, repeat: Infinity }}
                   />
@@ -1353,7 +1353,7 @@ export const HudExpanded = memo(function HudExpanded({
             <button
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); setChatSidebarOpen(prev => !prev) }}
               className="flex items-center justify-center w-6 h-6 transition-opacity duration-150 hover:opacity-100"
-              style={{ color: chatSidebarOpen ? 'var(--john-text-secondary)' : 'var(--john-text-muted)' }}
+              style={{ color: chatSidebarOpen ? 'var(--ares-text-secondary)' : 'var(--ares-text-muted)' }}
               aria-label="Histórico de chats"
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
@@ -1365,15 +1365,15 @@ export const HudExpanded = memo(function HudExpanded({
             </button>
           </div>
           <div
-            className={isStreaming ? 'john-stream-pulse' : undefined}
-            style={{ borderTop: '1px solid var(--john-border-strong)', paddingTop: 14, paddingLeft: 10, paddingRight: 6, transition: 'border-color 0.3s ease' }}
+            className={isStreaming ? 'ares-stream-pulse' : undefined}
+            style={{ borderTop: '1px solid var(--ares-border-strong)', paddingTop: 14, paddingLeft: 10, paddingRight: 6, transition: 'border-color 0.3s ease' }}
           >
             <div className="flex items-end gap-3">
               <textarea
                 ref={inputRef}
                 className="flex-1 resize-none bg-transparent outline-none scrollbar-none overflow-y-auto selectable"
                 style={{
-                  color: 'var(--john-text-secondary)',
+                  color: 'var(--ares-text-secondary)',
                   fontSize: 'calc(var(--hud-font-size, 15px) - 1px)',
                   lineHeight: 'var(--hud-body-leading, 1.66)',
                   letterSpacing: 'var(--hud-input-tracking, -0.015em)',
@@ -1398,13 +1398,13 @@ export const HudExpanded = memo(function HudExpanded({
                   onMouseDown={e => { e.preventDefault(); toggleMic() }}
                   disabled={isStreaming}
                   className="w-8 h-8 flex items-center justify-center flex-shrink-0 transition-opacity duration-150 relative"
-                  style={{ color: isListening ? 'var(--john-danger)' : 'var(--john-text-muted)' }}
+                  style={{ color: isListening ? 'var(--ares-danger)' : 'var(--ares-text-muted)' }}
                   aria-label={isListening ? 'Parar gravação' : 'Gravar voz'}
                 >
                   {isListening && (
                     <span
                       className="absolute inset-0 rounded-full"
-                      style={{ background: 'var(--john-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }}
+                      style={{ background: 'var(--ares-danger-soft)', animation: 'capture-pulse 1.2s ease-out infinite' }}
                     />
                   )}
                   <MicIcon className="w-[18px] h-auto relative" />
@@ -1421,12 +1421,12 @@ export const HudExpanded = memo(function HudExpanded({
                 style={{
                   color:
                     inputValue.trim() && !isStreaming
-                      ? 'var(--john-text-secondary)'
-                      : 'var(--john-text-muted)'
+                      ? 'var(--ares-text-secondary)'
+                      : 'var(--ares-text-muted)'
                 }}
                 aria-label="Enviar"
               >
-                <SendIcon className="w-[var(--john-icon-lg)] h-auto" />
+                <SendIcon className="w-[var(--ares-icon-lg)] h-auto" />
               </button>
             </div>
           </div>
@@ -1441,7 +1441,7 @@ export const HudExpanded = memo(function HudExpanded({
                     onQuickPrompt(action)
                   }}
                   className="text-[11px] transition-colors duration-150"
-                  style={{ color: 'var(--john-text-muted)' }}
+                  style={{ color: 'var(--ares-text-muted)' }}
                 >
                   {action}
                 </button>

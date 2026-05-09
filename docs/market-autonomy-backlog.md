@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Este backlog traduz o roadmap de autonomia operacional em mercado para um plano técnico implementável dentro do repositório atual do John.
+Este backlog traduz o roadmap de autonomia operacional em mercado para um plano técnico implementável dentro do repositório atual do Ares.
 
 O foco inicial continua sendo fundação determinística, simulação local, read-only de mercado e trade copilot. Live trading segue fora do escopo imediato.
 

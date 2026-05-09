@@ -31,7 +31,7 @@ interface ChatsFile {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const FILE_PATH         = join(app.getPath('userData'), 'john-chats.json')
+const FILE_PATH         = join(app.getPath('userData'), 'ares-chats.json')
 const MAX_CHATS         = 30
 const MAX_MESSAGES      = 40
 

@@ -2,14 +2,14 @@
 
 ## Visao geral
 
-A integracao com TradingView no John usa o site oficial do TradingView aberto dentro do app, com sessao isolada do Electron e um conector local que observa o `BrowserView` para extrair estado do grafico.
+A integracao com TradingView no Ares usa o site oficial do TradingView aberto dentro do app, com sessao isolada do Electron e um conector local que observa o `BrowserView` para extrair estado do grafico.
 
 O objetivo do v1 e:
 
 - ler o contexto estrutural do TradingView com alta confianca
 - permitir navegacao leve por simbolo e timeframe
 - combinar DOM observavel com screenshot/OCR
-- manter o John em modo read-only, sem ordens nem automacao de trade
+- manter o Ares em modo read-only, sem ordens nem automacao de trade
 
 ## Arquivos principais
 
@@ -349,7 +349,7 @@ Isso reduz custo de integracao e aproveita a sessao real do usuario.
 
 ## Resumo
 
-Hoje o John ja consegue:
+Hoje o Ares ja consegue:
 
 - perceber que o TradingView esta aberto
 - identificar simbolo e timeframe

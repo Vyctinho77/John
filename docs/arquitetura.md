@@ -1,8 +1,8 @@
-# Arquitetura John
+# Arquitetura Ares
 
 ## Visao geral
 
-O John e um app Electron com HUD residente que combina quatro fontes de contexto:
+O Ares e um app Electron com HUD residente que combina quatro fontes de contexto:
 
 - conectores estruturados ao vivo, como `vscode`, `spotify` e `tradingview`
 - screenshot da tela atual
@@ -202,7 +202,7 @@ Ainda falta consolidar:
 
 ## Direcao tecnica recomendada
 
-Os proximos ganhos grandes do John estao em quatro frentes:
+Os proximos ganhos grandes do Ares estao em quatro frentes:
 
 1. observabilidade e confianca por fonte
 2. TradingView mais preciso
@@ -230,5 +230,5 @@ Essa ordem vem antes de qualquer refactor maior porque melhora ao mesmo tempo:
 - `docs/vscode.md`
 - `docs/spotify.md`
 - `docs/tradingview.md`
-- `docs/john-codex-oauth.md`
+- `docs/ares-codex-oauth.md`
 - `docs/roadmap.md`

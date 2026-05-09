@@ -69,7 +69,7 @@ class SpotifyApiError extends Error {
 const REDIRECT_URI = 'http://127.0.0.1:42002/callback'
 const AUTH_CALLBACK_PORT = 42002
 const SCOPES = 'user-read-playback-state user-modify-playback-state'
-const TOKEN_FILE = () => join(app.getPath('userData'), 'john-spotify-tokens.json')
+const TOKEN_FILE = () => join(app.getPath('userData'), 'ares-spotify-tokens.json')
 const POLL_PLAYING_MS = 5_000
 const POLL_PAUSED_MS = 15_000
 const SEARCH_CACHE_TTL_MS = 8_000

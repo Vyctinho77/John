@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-A Biblioteca e a area do HUD que expoe conectores e integrações ao vivo do John. Hoje ela nao e um monorepo de conectores separados. Ela e uma superficie do app Electron que mostra o estado real de integracoes implementadas no processo main.
+A Biblioteca e a area do HUD que expoe conectores e integrações ao vivo do Ares. Hoje ela nao e um monorepo de conectores separados. Ela e uma superficie do app Electron que mostra o estado real de integracoes implementadas no processo main.
 
 No momento, a Biblioteca concentra:
 
@@ -74,7 +74,7 @@ Campos relevantes:
 - `TutorAction`
 - `TutorResponse.actions`
 
-Isso permite que o John:
+Isso permite que o Ares:
 
 - responda a partir do estado dos conectores
 - execute acoes locais sem passar pelo fluxo normal do tutor
@@ -205,7 +205,7 @@ O roteador em `desktop/src/main/services/tradingview-command-router.ts` intercep
 
 - `docs/arquitetura.md`
 - `docs/roadmap.md`
-- `docs/john-codex-oauth.md`
+- `docs/ares-codex-oauth.md`
 - `docs/vscode.md`
 - `docs/spotify.md`
 - `docs/tradingview.md`

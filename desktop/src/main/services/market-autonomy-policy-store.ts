@@ -83,7 +83,7 @@ function loadPolicyIfNeeded(): void {
 }
 
 function getPolicyStoragePath(): string {
-  return process.env.JOHN_MARKET_POLICY_PATH ?? getLocalUserDataPath('market-autonomy-policy.json')
+  return process.env.ARES_MARKET_POLICY_PATH ?? getLocalUserDataPath('market-autonomy-policy.json')
 }
 
 function normalizeStringList(value: unknown, fallback: string[]): string[] {

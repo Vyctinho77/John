@@ -62,7 +62,7 @@ function executeVSCodeIntent(
   if (!data) {
     return {
       ok: false,
-      message: 'O VS Code não está conectado ao John agora.',
+      message: 'O VS Code não está conectado ao Ares agora.',
       state: null,
       errorCode: 'not_connected'
     }

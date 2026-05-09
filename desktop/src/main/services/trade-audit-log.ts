@@ -77,7 +77,7 @@ function persistTradeAuditRecords(): void {
 }
 
 function getTradeAuditStoragePath(): string {
-  return process.env.JOHN_TRADE_AUDIT_PATH ?? getLocalUserDataPath('trade-audit-records.json')
+  return process.env.ARES_TRADE_AUDIT_PATH ?? getLocalUserDataPath('trade-audit-records.json')
 }
 
 function isTradeAuditRecord(value: unknown): value is TradeAuditRecord {
