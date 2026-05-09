@@ -257,6 +257,18 @@ export function MarketAutonomySettingsPanel({
     hotNewsItems: [],
     upcomingMacroEvents: []
   }
+  const policy = view?.policy ?? null
+  const killSwitch = view?.killSwitch ?? null
+
+  const updatePolicy = (patch: Parameters<typeof window.marketAutonomyAPI.setPolicy>[0]) => {
+    void window.marketAutonomyAPI.setPolicy(patch).then(() => onRefresh()).catch(() => {})
+  }
+
+  const toggleKillSwitch = (enabled: boolean) => {
+    void window.marketAutonomyAPI.setKillSwitch({ enabled, reason: enabled ? 'manual' : null })
+      .then(() => onRefresh())
+      .catch(() => {})
+  }
 
   return (
     <>
@@ -286,6 +298,71 @@ export function MarketAutonomySettingsPanel({
       </div>
 
       <SettingsCard className="mt-5 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Trava local</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Estado operacional para paper e automação local.
+            </p>
+          </div>
+          <StatusBadge tone={killSwitch?.enabled ? 'danger' : 'success'}>
+            {killSwitch?.enabled ? 'blocked' : 'enabled'}
+          </StatusBadge>
+        </div>
+        <div className="mt-4">
+          <SettingsRow label="Kill switch" value={killSwitch?.enabled ? 'ativo' : 'desligado'} />
+          <SettingsRow label="Motivo" value={killSwitch?.reason || 'nenhum'} last />
+        </div>
+        <div className="mt-3 flex gap-2">
+          <PillButton
+            onMouseDown={e => { e.preventDefault(); toggleKillSwitch(!killSwitch?.enabled) }}
+            tone={killSwitch?.enabled ? 'strong' : 'danger'}
+            className="px-3 py-1.5 rounded-full text-[11px]"
+          >
+            {killSwitch?.enabled ? 'desativar trava' : 'ativar trava'}
+          </PillButton>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Policy ativa</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Escopo configurável do copilot local.
+            </p>
+          </div>
+          <StatusBadge tone={policy?.mode === 'copilot' ? 'success' : 'neutral'}>
+            {policy?.mode || 'copilot'}
+          </StatusBadge>
+        </div>
+        <div className="mt-4">
+          <SettingsRow label="Modo" value={policy?.mode || 'copilot'} onClick={() => updatePolicy({ mode: policy?.mode === 'read_only' ? 'copilot' : 'read_only' })} />
+          <SettingsRow label="Símbolo" value={policy?.allowedSymbols[0] || 'BTCUSDT'} onClick={() => {
+            const next = window.prompt('Símbolo permitido', policy?.allowedSymbols[0] || 'BTCUSDT')
+            if (next) updatePolicy({ allowedSymbols: [next] })
+          }} />
+          <SettingsRow label="Timeframe" value={policy?.allowedTimeframes[0] || '5m'} onClick={() => {
+            const next = window.prompt('Timeframe permitido', policy?.allowedTimeframes[0] || '5m')
+            if (next) updatePolicy({ allowedTimeframes: [next] })
+          }} />
+          <SettingsRow label="Risco por trade" value={`$${(policy?.maxRiskPerTradeUsd ?? 25).toFixed(2)}`} onClick={() => {
+            const next = Number(window.prompt('Risco máximo por trade', String(policy?.maxRiskPerTradeUsd ?? 25)))
+            if (Number.isFinite(next)) updatePolicy({ maxRiskPerTradeUsd: next })
+          }} />
+          <SettingsRow label="Perda diária" value={`$${(policy?.maxDailyLossUsd ?? 75).toFixed(2)}`} onClick={() => {
+            const next = Number(window.prompt('Perda diária máxima', String(policy?.maxDailyLossUsd ?? 75)))
+            if (Number.isFinite(next)) updatePolicy({ maxDailyLossUsd: next })
+          }} />
+          <SettingsRow label="Trades/sessão" value={String(policy?.maxTradesPerSession ?? 5)} onClick={() => {
+            const next = Number(window.prompt('Trades por sessão', String(policy?.maxTradesPerSession ?? 5)))
+            if (Number.isFinite(next)) updatePolicy({ maxTradesPerSession: next })
+          }} />
+          <SettingsRow label="Resetar default" value="" muted onClick={() => { void window.marketAutonomyAPI.resetPolicy().then(() => onRefresh()).catch(() => {}) }} last />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-[15px]">Snapshot</SectionTitle>
@@ -521,6 +598,43 @@ export function MarketAutonomySettingsPanel({
             ))}
           </div>
         )}
+      </SettingsCard>
+
+      <SettingsCard className="mt-4 rounded-[22px] p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <SectionTitle className="text-[15px]">Paper</SectionTitle>
+            <p className="mt-1 text-[11px]" style={{ color: 'var(--john-text-tertiary)' }}>
+              Conta, posições e ordens abertas no broker simulado.
+            </p>
+          </div>
+          <StatusBadge tone={view?.openPositions.length ? 'success' : 'neutral'}>
+            {view?.openPositions.length ? 'posição aberta' : 'flat'}
+          </StatusBadge>
+        </div>
+        <div className="mt-4">
+          <SettingsRow
+            label="Equity / cash"
+            value={view?.paperAccount ? `$${view.paperAccount.equityUsd.toFixed(2)} / $${view.paperAccount.cashUsd.toFixed(2)}` : 'indisponível'}
+          />
+          <SettingsRow
+            label="Posições"
+            value={view?.openPositions.length ? view.openPositions.map(position => `${position.symbol} ${position.quantity}`).join(', ') : 'nenhuma'}
+          />
+          <SettingsRow
+            label="Ordens abertas"
+            value={view?.openOrders.length ? view.openOrders.map(order => `${order.symbol} ${order.status}`).join(', ') : 'nenhuma'}
+          />
+          <SettingsRow
+            label="Última simulação"
+            value={
+              view?.lastSimulation
+                ? `${view.lastSimulation.executed ? 'executada' : 'bloqueada'} ${view.lastSimulation.orderEventTypes.join(', ') || view.lastSimulation.message || ''}`
+                : 'nenhuma'
+            }
+            last
+          />
+        </div>
       </SettingsCard>
 
       <SettingsCard className="mt-4 rounded-[22px] p-4">

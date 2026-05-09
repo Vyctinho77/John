@@ -76,6 +76,20 @@ Quatro serviços independentes alimentam o contexto do operador e do tutor:
 
 O tutor recebe automaticamente blocos de contexto de todos os serviços ativos ao processar uma pergunta sobre mercado — sem o usuário precisar pedir.
 
+### Trade Copilot e paper trading
+
+A fundação de autonomia de mercado está funcional em modo local e simulado:
+
+- O pipeline monta snapshot de mercado, gera proposta com `breakout_v1`, avalia risco e só executa paper após aprovação explícita.
+- O paper broker mantém conta, posições e ordens abertas durante a sessão do processo.
+- A auditoria de trades é persistida em `userData/trade-audit-records.json`, com cache em memória e limite dos últimos 300 registros.
+- A HUD mostra proposta, decisão de risco, guards de notícia/macro, account paper, posições, ordens abertas e trilha recente de auditoria.
+- Rejeição manual é registrada como evento auditável `manual_reject`.
+- Kill switch local bloqueia execução paper/auto com violação `kill_switch_active`.
+- A policy ativa é configurável na HUD para modo, símbolo, timeframe, risco por trade, perda diária e trades por sessão, com reset para default seguro.
+
+Broker real e live trading continuam fora de escopo nesta fase.
+
 ### Memória de análises
 
 Cada análise gerada no modo operador é salva em `userData/operator-analyses.json`:

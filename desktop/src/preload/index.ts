@@ -35,7 +35,8 @@ import type {
   MemoryExportResult,
   MemoryImportPreview
 } from '../shared/memory.types'
-import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
+import type { MarketAutonomyKillSwitchState, MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
+import type { MarketAutonomyPolicy } from '../shared/market-autonomy.types'
 
 const hudAPI = {
   resize:    (width: number, height: number) => ipcRenderer.send('hud:resize', { width, height }),
@@ -130,7 +131,14 @@ const marketAutonomyAPI = {
   getView: (): Promise<MarketAutonomyViewSnapshot> => ipcRenderer.invoke('market-autonomy:get-view'),
   getChatPrompt: (): Promise<import('../shared/perception.types').TutorResponse> => ipcRenderer.invoke('market-autonomy:get-chat-prompt'),
   executeAction: (action: MarketAutonomyActionPayload['action']): Promise<import('../shared/perception.types').TutorResponse> =>
-    ipcRenderer.invoke('market-autonomy:execute-action', action)
+    ipcRenderer.invoke('market-autonomy:execute-action', action),
+  getKillSwitch: (): Promise<MarketAutonomyKillSwitchState> => ipcRenderer.invoke('market-autonomy:get-kill-switch'),
+  setKillSwitch: (input: { enabled: boolean; reason?: string | null }): Promise<MarketAutonomyKillSwitchState> =>
+    ipcRenderer.invoke('market-autonomy:set-kill-switch', input),
+  getPolicy: (): Promise<MarketAutonomyPolicy> => ipcRenderer.invoke('market-autonomy:get-policy'),
+  setPolicy: (patch: Partial<MarketAutonomyPolicy>): Promise<MarketAutonomyPolicy> =>
+    ipcRenderer.invoke('market-autonomy:set-policy', patch),
+  resetPolicy: (): Promise<MarketAutonomyPolicy> => ipcRenderer.invoke('market-autonomy:reset-policy')
 }
 
 const aiAPI = {

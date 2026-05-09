@@ -73,17 +73,27 @@ import { operatorAnalyst } from './services/operator-analyst'
 import { calendarService } from './services/calendar-service'
 import { analysisStore } from './services/analysis-store'
 import { evaluateCurrentMarketRun } from './services/market-autonomy-runner'
-import { resolveMarketAutonomyPolicy } from './services/risk-policy'
 import { PaperBroker } from './services/brokers/paper-broker'
 import { marketStateStore } from './services/market-state-store'
-import { listTradeAuditRecords } from './services/trade-audit-log'
+import { appendTradeAuditRecord, listTradeAuditRecords } from './services/trade-audit-log'
 import { buildTradeCopilotProposal } from './services/trade-copilot'
 import { buildMarketAutonomyChatResponse } from './services/market-autonomy-chat'
+import {
+  getMarketAutonomyPolicy,
+  resetMarketAutonomyPolicy,
+  saveMarketAutonomyPolicyPatch
+} from './services/market-autonomy-policy-store'
+import {
+  getMarketAutonomyKillSwitch,
+  setMarketAutonomyKillSwitch
+} from './services/market-autonomy-control'
 import type { DataDeletionSummary, TutorMessage } from '../shared/perception.types'
 import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
+import type { MarketAutonomyPolicy } from '../shared/market-autonomy.types'
 
 let hudWindow: BrowserWindow | null = null
 let screenshotModeTimer: ReturnType<typeof setTimeout> | null = null
+const marketPaperBroker = new PaperBroker()
 
 const HUD_COMPACT = { width: 488, height: 55 }
 const SCREENSHOT_MODE_DURATION_MS = 30_000
@@ -853,13 +863,19 @@ ipcMain.handle('analysis:list',  (_e, symbol?: string) => analysisStore.list(sym
 ipcMain.handle('analysis:clear', () => analysisStore.clear())
 
 ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewSnapshot> => {
-  const policy = resolveMarketAutonomyPolicy('copilot')
-  const broker = new PaperBroker()
+  const policy = getMarketAutonomyPolicy()
+  const killSwitch = getMarketAutonomyKillSwitch()
   const result = await evaluateCurrentMarketRun({
     policy,
-    broker,
-    executeTrade: false
+    broker: marketPaperBroker,
+    executeTrade: false,
+    killSwitchActive: killSwitch.enabled
   })
+  const [paperAccount, openPositions, openOrders] = await Promise.all([
+    marketPaperBroker.getAccountState(),
+    marketPaperBroker.getOpenPositions(),
+    marketPaperBroker.getOpenOrders()
+  ])
   const storeState = marketStateStore.getState()
   const newsSnapshot = newsService.getSnapshot()
   const hotNewsItems = [...newsSnapshot.hotItems].slice(0, 4)
@@ -927,17 +943,31 @@ ipcMain.handle('market-autonomy:get-view', async (): Promise<MarketAutonomyViewS
     },
     lastValidSnapshot: storeState.lastValid,
     invalidReason: storeState.invalidReason,
+    paperAccount,
+    openPositions,
+    openOrders,
+    lastSimulation: result.simulation
+      ? {
+          executed: result.simulation.executed,
+          message: result.simulation.executionResult?.message ?? null,
+          orderEventTypes: result.simulation.orderEvents.map(event => event.type),
+          openPositionCount: result.simulation.openPositionsAfterRun.length
+        }
+      : null,
+    killSwitch,
+    policy,
     recentAuditTrail: listTradeAuditRecords().slice(-6).reverse()
   }
 })
 
 ipcMain.handle('market-autonomy:get-chat-prompt', async (): Promise<import('../shared/perception.types').TutorResponse> => {
-  const policy = resolveMarketAutonomyPolicy('copilot')
-  const broker = new PaperBroker()
+  const policy = getMarketAutonomyPolicy()
+  const killSwitch = getMarketAutonomyKillSwitch()
   const result = await evaluateCurrentMarketRun({
     policy,
-    broker,
-    executeTrade: false
+    broker: marketPaperBroker,
+    executeTrade: false,
+    killSwitchActive: killSwitch.enabled
   })
 
   if (!result.snapshot) {
@@ -975,10 +1005,20 @@ ipcMain.handle('market-autonomy:get-chat-prompt', async (): Promise<import('../s
 ipcMain.handle(
   'market-autonomy:execute-action',
   async (_e, action: import('../shared/perception.types').MarketAutonomyActionPayload['action']) => {
-    const policy = resolveMarketAutonomyPolicy('copilot')
-    const broker = new PaperBroker()
+    const policy = getMarketAutonomyPolicy()
+    const killSwitch = getMarketAutonomyKillSwitch()
 
     if (action === 'reject_trade') {
+      appendTradeAuditRecord({
+        symbol: policy.allowedSymbols[0] ?? 'UNKNOWN',
+        strategyId: policy.allowedStrategies[0] ?? 'manual',
+        phase: 'blocked',
+        snapshotTimestamp: Date.now(),
+        payload: {
+          reason: 'manual_reject',
+          mode: policy.mode
+        }
+      })
       return {
         domain: 'market',
         mode: 'direct',
@@ -1001,8 +1041,9 @@ ipcMain.handle(
 
     const result = await evaluateCurrentMarketRun({
       policy,
-      broker,
-      executeTrade: action === 'approve_paper_trade'
+      broker: marketPaperBroker,
+      executeTrade: action === 'approve_paper_trade',
+      killSwitchActive: killSwitch.enabled
     })
 
     if (!result.snapshot) {
@@ -1061,6 +1102,16 @@ ipcMain.handle(
     return buildMarketAutonomyChatResponse(proposal)
   }
 )
+
+ipcMain.handle('market-autonomy:get-kill-switch', () => getMarketAutonomyKillSwitch())
+ipcMain.handle('market-autonomy:set-kill-switch', (_e, input: { enabled: boolean; reason?: string | null }) =>
+  setMarketAutonomyKillSwitch(input)
+)
+ipcMain.handle('market-autonomy:get-policy', () => getMarketAutonomyPolicy())
+ipcMain.handle('market-autonomy:set-policy', (_e, patch: Partial<MarketAutonomyPolicy>) =>
+  saveMarketAutonomyPolicyPatch(patch)
+)
+ipcMain.handle('market-autonomy:reset-policy', () => resetMarketAutonomyPolicy())
 
 // ─── Spotify IPC ──────────────────────────────────────────────────────────────
 

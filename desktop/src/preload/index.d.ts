@@ -47,7 +47,8 @@ import type {
   MemoryExportResult,
   MemoryImportPreview
 } from '../shared/memory.types'
-import type { MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
+import type { MarketAutonomyKillSwitchState, MarketAutonomyViewSnapshot } from '../shared/market-autonomy-view.types'
+import type { MarketAutonomyPolicy } from '../shared/market-autonomy.types'
 import type { StoredMessage } from '../main/services/conversation-store'
 import type { Chat, ChatMeta } from '../main/services/chat-store'
 
@@ -99,6 +100,11 @@ declare global {
       getView: () => Promise<MarketAutonomyViewSnapshot>
       getChatPrompt: () => Promise<TutorResponse>
       executeAction: (action: MarketAutonomyActionPayload['action']) => Promise<TutorResponse>
+      getKillSwitch: () => Promise<MarketAutonomyKillSwitchState>
+      setKillSwitch: (input: { enabled: boolean; reason?: string | null }) => Promise<MarketAutonomyKillSwitchState>
+      getPolicy: () => Promise<MarketAutonomyPolicy>
+      setPolicy: (patch: Partial<MarketAutonomyPolicy>) => Promise<MarketAutonomyPolicy>
+      resetPolicy: () => Promise<MarketAutonomyPolicy>
     }
     aiAPI: {
       getSettings: () => Promise<AISettingsSnapshot>

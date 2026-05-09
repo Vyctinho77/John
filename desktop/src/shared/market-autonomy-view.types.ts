@@ -1,7 +1,11 @@
 import type {
+  AccountState,
   ExecutionIntent,
   MarketGuardStatus,
   MarketSnapshot,
+  MarketAutonomyPolicy,
+  OrderState,
+  PositionState,
   RiskDecision,
   TradeAuditRecord
 } from './market-autonomy.types'
@@ -44,6 +48,19 @@ export interface TradeCopilotProposalView {
   blockedBy: string[]
 }
 
+export interface MarketAutonomyKillSwitchState {
+  enabled: boolean
+  reason: string | null
+  updatedAt: number | null
+}
+
+export interface MarketAutonomySimulationView {
+  executed: boolean
+  message: string | null
+  orderEventTypes: string[]
+  openPositionCount: number
+}
+
 export interface MarketAutonomyViewSnapshot {
   snapshot: MarketSnapshot | null
   snapshotReasons: string[]
@@ -57,5 +74,11 @@ export interface MarketAutonomyViewSnapshot {
   }
   lastValidSnapshot: MarketSnapshot | null
   invalidReason: string | null
+  paperAccount: AccountState | null
+  openPositions: PositionState[]
+  openOrders: OrderState[]
+  lastSimulation: MarketAutonomySimulationView | null
+  killSwitch: MarketAutonomyKillSwitchState
+  policy: MarketAutonomyPolicy
   recentAuditTrail: TradeAuditRecord[]
 }
