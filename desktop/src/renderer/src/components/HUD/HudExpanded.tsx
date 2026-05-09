@@ -10,7 +10,7 @@ import {
 import { motion } from 'framer-motion'
 import {
   AlignLeft, AlertTriangle, BarChart2, BookOpen, Bug,
-  Code2, FileText, HelpCircle, Lightbulb, ListChecks,
+  Code2, FileText, HelpCircle, Info, Lightbulb, ListChecks,
   MessageSquare, RotateCcw, Scale, Settings2, Zap,
   type LucideIcon
 } from 'lucide-react'
@@ -28,6 +28,7 @@ import {
   SettingsNavItem
 } from './HudSettingsPrimitives'
 import {
+  AboutSettingsPanel,
   AccountSettingsPanel,
   APISettingsPanel,
   DataSettingsPanel,
@@ -167,7 +168,7 @@ interface HudExpandedProps {
   onEnterOperator?: () => void
 }
 
-type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography' | 'market'
+type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography' | 'market' | 'about'
 
 type ProviderDraftMap = Record<
   AIProviderId,
@@ -975,6 +976,10 @@ export const HudExpanded = memo(function HudExpanded({
       )
     }
 
+    if (activeSettingsTab === 'about') {
+      return <AboutSettingsPanel />
+    }
+
     if (activeSettingsTab === 'account') {
       return (
         <AccountSettingsPanel
@@ -1018,7 +1023,7 @@ export const HudExpanded = memo(function HudExpanded({
         onMouseDown={handleMouseDown}
       >
         <div className="w-9 h-6 flex-shrink-0 flex items-center justify-center">
-          <LogoMark className="h-[26px] w-[10px] text-white" />
+          <LogoMark className="h-[24px] w-auto text-white" />
         </div>
         <div className="flex items-center gap-4">
           {([
@@ -1271,6 +1276,12 @@ export const HudExpanded = memo(function HudExpanded({
                     active={activeSettingsTab === 'market'}
                     onClick={() => setActiveSettingsTab('market')}
                     icon={<BarChart2 size={16} strokeWidth={1.75} />}
+                  />
+                  <SettingsNavItem
+                    label="Sobre"
+                    active={activeSettingsTab === 'about'}
+                    onClick={() => setActiveSettingsTab('about')}
+                    icon={<Info size={16} strokeWidth={1.75} />}
                   />
                 </div>
               </aside>

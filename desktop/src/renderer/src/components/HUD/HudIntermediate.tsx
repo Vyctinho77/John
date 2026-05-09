@@ -93,7 +93,7 @@ export function HudIntermediate({
         onMouseDown={handleMouseDown}
       >
         <div className="w-9 h-5 flex-shrink-0 flex items-center justify-center">
-          <LogoMark className="h-[26px] w-[10px] text-white" />
+          <LogoMark className="h-[24px] w-auto text-white" />
         </div>
         <div className="flex items-center gap-4">
           {([

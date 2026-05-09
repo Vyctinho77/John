@@ -49,7 +49,7 @@ export function HudInput({
       }}
     >
       <div className="w-9 h-14 flex items-center justify-center flex-shrink-0">
-        <LogoMark className="h-[26px] w-[10px] text-white" />
+        <LogoMark className="h-[24px] w-auto text-white" />
       </div>
 
       <div

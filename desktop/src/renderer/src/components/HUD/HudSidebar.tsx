@@ -181,7 +181,7 @@ export function HudSidebar({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <LogoMark className="h-[26px] w-[10px] text-white" />
+              <LogoMark className="h-[24px] w-auto text-white" />
               <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.18)', flexShrink: 0 }} />
               <span
                 style={{

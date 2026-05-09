@@ -713,6 +713,114 @@ export function MarketAutonomySettingsPanel({
   )
 }
 
+export function AboutSettingsPanel() {
+  const features: Array<{ title: string; items: string[] }> = [
+    {
+      title: 'Assistente de trading',
+      items: [
+        'Lê e interpreta o estado atual do TradingView em tempo real',
+        'Analisa regime de mercado, sessão, símbolo e timeframe ativos',
+        'Gera propostas de trade com entrada, stop e alvo definidos',
+        'Calcula sizing de posição com base no risco configurado',
+        'Avalia confiança da estratégia e produz tese escrita',
+      ]
+    },
+    {
+      title: 'Pipeline de autonomia',
+      items: [
+        'Roda um pipeline local de análise a cada novo snapshot do mercado',
+        'Bloqueia execução automaticamente em eventos macroeconômicos iminentes',
+        'Detecta notícias quentes e aplica guards de risco em tempo real',
+        'Executa ordens simuladas no broker paper com ordens protetivas',
+        'Mantém auditoria completa de cada fase do ciclo de decisão',
+        'Kill switch manual para travar toda execução imediatamente',
+      ]
+    },
+    {
+      title: 'Memória e contexto',
+      items: [
+        'Persiste memória entre sessões via Memory Card exportável',
+        'Indexa memórias por embeddings para recuperação semântica',
+        'Adapta tom, profundidade e estilo às preferências do usuário',
+        'Reconhece quando o conteúdo na tela é sensível e pausa capturas',
+      ]
+    },
+    {
+      title: 'Captura de tela e percepção',
+      items: [
+        'Captura screenshots da janela ativa automaticamente em baixa frequência',
+        'Filtra janelas por escopo — foca em uma fonte específica ou qualquer janela',
+        'Modo screenshot pausa a captura para que o HUD apareça em prints',
+        'Processa o conteúdo visual para gerar contexto semântico do estado atual',
+      ]
+    },
+    {
+      title: 'Integrações de AI',
+      items: [
+        'Suporte a OpenAI, Anthropic, Gemini e modelos locais via Ollama',
+        'Conexão OAuth com ChatGPT Plus/Pro sem necessidade de API key',
+        'Roteamento por feature: cada tarefa usa o modelo mais adequado',
+        'Teto de custo diário configurável com alertas progressivos',
+        'Fallback automático entre providers quando o primário falha',
+      ]
+    },
+    {
+      title: 'Interface e HUD',
+      items: [
+        'HUD flutuante em três modos: compacto, intermediário e expandido',
+        'Chat direto com o assistente no modo expandido',
+        'Sugestões passivas e alertas contextuais sem interrupção',
+        'Voice mode para comandar o Ares por voz',
+        'Tipografia, tamanho de fonte e família configuráveis',
+        'Modo sempre visível e modo screenshot independentes',
+      ]
+    },
+  ]
+
+  return (
+    <>
+      <SectionTitle className="mb-1 text-[18px]">Sobre o Ares</SectionTitle>
+      <p className="mt-2 text-[12px]" style={{ color: 'var(--ares-text-tertiary)', lineHeight: 1.6 }}>
+        Copilot local de trading com pipeline de autonomia, memória persistida e integração nativa com TradingView.
+      </p>
+
+      <div className="mt-5 flex flex-col gap-4">
+        {features.map(section => (
+          <div
+            key={section.title}
+            className="rounded-[18px] p-4"
+            style={{
+              background: 'color-mix(in srgb, var(--ares-surface-1) 72%, transparent)',
+              border: '1px solid var(--ares-border-soft)'
+            }}
+          >
+            <p className="text-[13px] font-medium mb-3" style={{ color: 'var(--ares-text-strong)' }}>
+              {section.title}
+            </p>
+            <div className="flex flex-col gap-2">
+              {section.items.map(item => (
+                <div key={item} className="flex items-start gap-2">
+                  <span
+                    className="mt-[3px] flex-shrink-0 w-[5px] h-[5px] rounded-full"
+                    style={{ background: 'var(--ares-accent)' }}
+                  />
+                  <p className="text-[11px]" style={{ color: 'var(--ares-text-secondary)', lineHeight: 1.55 }}>
+                    {item}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-5 text-[10px] text-center" style={{ color: 'var(--ares-text-tertiary)' }}>
+        Ares · build local · tudo roda no seu dispositivo
+      </p>
+    </>
+  )
+}
+
 export function AccountSettingsPanel({
   userProfile,
   nameDraft,

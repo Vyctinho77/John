@@ -39,8 +39,8 @@ export const HudCompact = memo(function HudCompact({
       role="button"
       aria-label="Abrir HUD"
     >
-      <div className="w-9 h-full flex-shrink-0 flex items-center justify-center">
-        <LogoMark className="h-[26px] w-[10px] text-white" />
+      <div className="w-9 h-full flex-shrink-0 flex items-center justify-center mr-1">
+        <LogoMark className="h-[24px] w-auto text-white" />
       </div>
 
       <div
