@@ -249,8 +249,15 @@ export function SettingsCard({
     <div
       className={className}
       style={{
-        background: elevated ? 'var(--ares-surface-elevated)' : 'var(--ares-surface-1)',
-        border: `1px solid ${elevated ? 'var(--ares-border-strong)' : 'var(--ares-border-soft)'}`,
+        background: elevated
+          ? 'rgba(255,255,255,0.055)'
+          : 'rgba(255,255,255,0.035)',
+        border: `1px solid ${elevated
+          ? 'rgba(255,255,255,0.16)'
+          : 'rgba(255,255,255,0.10)'}`,
+        boxShadow: elevated
+          ? 'inset 0 1px 0 rgba(255,255,255,0.05)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.035)',
         ...style
       }}
     >

@@ -363,9 +363,8 @@ export async function streamRemoteText(
   for (const providerId of providerOrder) {
     const provider = settings.providers[providerId]
     if (!canUseProvider(provider)) continue
-    const effectiveProvider = tier === 'cheap' && CHEAP_MODELS[provider.id]
-      ? { ...provider, selectedModel: CHEAP_MODELS[provider.id]! }
-      : provider
+    if (!providerSupportsRequest(provider, chatRequest)) continue
+    const effectiveProvider = resolveEffectiveProvider(provider, tier, chatRequest)
     try {
       return await streamProviderChat(effectiveProvider, chatRequest, onChunk)
     } catch {
@@ -909,11 +908,10 @@ export async function generateRemoteText(input: {
     const provider = settings.providers[providerId]
     if (!canUseProvider(provider)) continue
 
-    // Apply cheap model override when tier is 'cheap'
-    const effectiveProvider =
-      tier === 'cheap' && CHEAP_MODELS[provider.id]
-        ? { ...provider, selectedModel: CHEAP_MODELS[provider.id]! }
-        : provider
+    if (!providerSupportsRequest(provider, chatRequest)) continue
+
+    // Apply tier/model overrides, but keep image requests on vision-capable models.
+    const effectiveProvider = resolveEffectiveProvider(provider, tier, chatRequest)
 
     try {
       return await sendProviderChat(effectiveProvider, chatRequest)
@@ -1130,6 +1128,35 @@ function canUseProvider(provider: StoredAIProvider): boolean {
   if (!provider.enabled) return false
   if (provider.id === 'ollama') return true
   return hasSecret(provider)
+}
+
+function providerSupportsRequest(provider: StoredAIProvider, request: RemoteChatRequest): boolean {
+  if (!request.imageDataUrl) return true
+  return PROVIDER_DEFINITIONS[provider.id].capabilities.supportsVision
+}
+
+function resolveEffectiveProvider(
+  provider: StoredAIProvider,
+  tier: AIFeatureTier,
+  request: RemoteChatRequest
+): StoredAIProvider {
+  if (request.imageDataUrl && provider.id === 'openai') {
+    const selectedModel = provider.selectedModel ?? PROVIDER_DEFINITIONS.openai.defaultModel
+    if (!selectedModel || !isOpenAIVisionModel(selectedModel)) {
+      return { ...provider, selectedModel: PROVIDER_DEFINITIONS.openai.defaultModel }
+    }
+  }
+
+  if (tier === 'cheap' && CHEAP_MODELS[provider.id]) {
+    return { ...provider, selectedModel: CHEAP_MODELS[provider.id]! }
+  }
+
+  return provider
+}
+
+function isOpenAIVisionModel(model: string): boolean {
+  const normalized = model.toLowerCase()
+  return normalized.startsWith('gpt-4.1') || normalized.startsWith('gpt-4o')
 }
 
 function hasSecret(provider: Pick<StoredAIProvider, 'id' | 'encryptedApiKey'>): boolean {

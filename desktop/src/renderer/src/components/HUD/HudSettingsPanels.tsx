@@ -36,6 +36,10 @@ import {
   Toggle,
   TypographyChoice
 } from './HudSettingsPrimitives'
+import anthropicLogo from '../../assets/provider-logos/anthropic.svg'
+import geminiLogo from '../../assets/provider-logos/gemini.svg'
+import gptLogo from '../../assets/provider-logos/gpt.svg'
+import ollamaLogo from '../../assets/provider-logos/ollama.svg'
 export { GeneralSettingsPanel } from './HudGeneralSettingsPanel'
 
 const TYPOGRAPHY_FAMILY_OPTIONS: Array<{ id: TypographyFontFamily; label: string; sample: string }> = [
@@ -54,6 +58,13 @@ const TYPOGRAPHY_WEIGHT_OPTIONS: Array<{ id: TypographyFontWeight; label: string
   { id: 'medium', label: 'Medium' },
   { id: 'bold', label: 'Bold' }
 ]
+
+const PROVIDER_LOGOS: Partial<Record<AIProviderId, string>> = {
+  openai: gptLogo,
+  anthropic: anthropicLogo,
+  gemini: geminiLogo,
+  ollama: ollamaLogo
+}
 
 
 export function NotificationsSettingsPanel({
@@ -1363,18 +1374,45 @@ export function APISettingsPanel({
     <>
       <SectionTitle>Minha API Key</SectionTitle>
 
-      <div className="mt-4 flex gap-2 flex-wrap">
-        {aiSettings.providers.map(provider => (
-          <PillButton
-            key={provider.id}
-            onClick={() => onSelectProvider(provider.id)}
-            active={provider.id === activeProviderId}
-            className="px-3 py-1.5 rounded-full text-[11px]"
-            tone={provider.id === activeProviderId ? 'strong' : 'neutral'}
-          >
-            {provider.label}
-          </PillButton>
-        ))}
+      <div className="mt-4 flex gap-3 flex-wrap">
+        {aiSettings.providers.map(provider => {
+          const logo = PROVIDER_LOGOS[provider.id]
+          const active = provider.id === activeProviderId
+
+          return (
+            <button
+              key={provider.id}
+              onClick={() => onSelectProvider(provider.id)}
+              className="h-11 w-11 inline-flex items-center justify-center transition duration-150"
+              style={{
+                appearance: 'none',
+                background: 'transparent',
+                backgroundColor: 'transparent',
+                border: '0',
+                borderRadius: 0,
+                boxShadow: 'none',
+                outline: 'none',
+                padding: 0,
+                opacity: active ? 1 : 0.52,
+                transform: active ? 'scale(1.08)' : 'scale(1)',
+                filter: active ? 'drop-shadow(0 0 10px rgba(255,255,255,0.16))' : 'none',
+                cursor: 'pointer'
+              }}
+              aria-label={provider.label}
+            >
+              {logo ? (
+                <img
+                  src={logo}
+                  alt=""
+                  aria-hidden="true"
+                  className="h-[24px] w-[24px] object-contain flex-shrink-0"
+                />
+              ) : (
+                provider.label
+              )}
+            </button>
+          )
+        })}
       </div>
 
       <SettingsCard className="mt-5 rounded-[22px] p-4">
@@ -1544,7 +1582,10 @@ export function APISettingsPanel({
                 style={{ color: 'var(--ares-text-primary)' }}
               />
             </div>
-            <PillButton onMouseDown={e => { e.preventDefault(); onResetDailyCostLimit() }} className="flex-shrink-0">
+            <PillButton
+              onMouseDown={e => { e.preventDefault(); onResetDailyCostLimit() }}
+              className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
+            >
               sem limite
             </PillButton>
           </div>
@@ -1594,7 +1635,10 @@ export function APISettingsPanel({
                   plano: {codexStatus.planType}
                 </p>
               </div>
-              <PillButton onMouseDown={e => { e.preventDefault(); onCodexLogout() }} className="flex-shrink-0">
+              <PillButton
+                onMouseDown={e => { e.preventDefault(); onCodexLogout() }}
+                className="px-3 py-1.5 rounded-full text-[10px] flex-shrink-0"
+              >
                 desconectar
               </PillButton>
             </div>
@@ -1603,7 +1647,7 @@ export function APISettingsPanel({
               <PillButton
                 onMouseDown={e => { e.preventDefault(); onCodexLogin() }}
                 disabled={codexLoading}
-                className="self-start"
+                className="px-3 py-1.5 rounded-full text-[10px] self-start"
                 tone="strong"
               >
                 {codexLoading ? 'abrindo browser...' : 'conectar com ChatGPT'}

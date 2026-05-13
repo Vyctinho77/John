@@ -253,7 +253,7 @@ function buildLowConfidenceThought(state: SemanticState, confidence: number): In
   return {
     primary: finalize(`calibrando leitura${appPart}`),
     secondary: state.surface_type !== 'unknown'
-      ? finalize(`parece tela de ${state.surface_type}`)
+      ? finalize(`parece tela de ${surfaceLabelPt(state.surface_type)}`)
       : null,
     confidence
   }
@@ -379,4 +379,21 @@ function smartTrim(value: string, max: number): string {
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))))
+}
+
+function surfaceLabelPt(surface: SemanticState['surface_type']): string {
+  switch (surface) {
+    case 'code':
+      return 'codigo'
+    case 'text':
+      return 'texto'
+    case 'graphic':
+      return 'grafico'
+    case 'document':
+      return 'documento'
+    case 'dashboard':
+      return 'painel'
+    default:
+      return 'contexto'
+  }
 }

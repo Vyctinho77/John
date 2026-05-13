@@ -288,19 +288,15 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
     const prevSurface = latestSnapshot?.semanticState.surface_type
     const skipOcr = prevSurface === 'graphic'
 
-    const perception: PerceptionResult = skipOcr
-      ? { rawText: '', confidence: 0, regions: [], capturedAt: Date.now() }
-      : await recognizeImage(dataUrl)
-
     // --- Vision LLM path (primary) ---
     let semanticState: SemanticState | null = null
     let analysisSource: 'vision' | 'heuristic' = 'heuristic'
+    let perception: PerceptionResult = emptyPerceptionResult(Date.now())
 
     if (config.useVisionLLM) {
-      const ocrText = perception.rawText.trim()
       const visionResult = await analyzeScreenWithVision(
         dataUrl,
-        ocrText,
+        '',
         lastRawText,
         userProfile
       )
@@ -313,6 +309,10 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
 
     // --- Heuristic fallback ---
     if (!semanticState) {
+      perception = skipOcr
+        ? emptyPerceptionResult(Date.now())
+        : await recognizeImage(dataUrl)
+
       if (!perception.rawText.trim() && perception.regions.length === 0) {
         const snapshot = await buildEmptySnapshot('ocr sem contexto util no frame atual', userProfile)
         latestSnapshot = snapshot
@@ -413,6 +413,15 @@ export async function analyzeOnce(preloadedDataUrl?: string): Promise<Perception
       status: 'error'
     })
     throw error
+  }
+}
+
+function emptyPerceptionResult(capturedAt: number): PerceptionResult {
+  return {
+    rawText: '',
+    confidence: 0,
+    regions: [],
+    capturedAt
   }
 }
 

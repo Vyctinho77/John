@@ -823,6 +823,67 @@ export const HudExpanded = memo(function HudExpanded({
           query={settingsSearchQuery}
           onQueryChange={setSettingsSearchQuery}
           onOpenTab={tab => setActiveSettingsTab(tab)}
+          installingVSCode={installingVSCode}
+          vscodePendingReload={vscodePendingReload}
+          spotifyAuthing={spotifyAuthing}
+          onVSCodeAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'vscode')?.connected ?? false
+            if (connected) { window.bridgeAPI.disconnect('vscode'); return }
+            setVscodeInstallMsg(null)
+            setInstallingVSCode(true)
+            window.bridgeAPI.installVSCodeConnector().then(res => {
+              setInstallingVSCode(false)
+              if (res.ok) { setVscodePendingReload(true); setVscodeInstallMsg(res.message) }
+              else { setVscodeInstallMsg(res.message); setTimeout(() => setVscodeInstallMsg(null), 6000) }
+            })
+          }}
+          onSpotifyAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'spotify')?.connected ?? false
+            if (connected) { void window.spotifyAPI.disconnect(); return }
+            if (!settings?.spotifyClientId?.trim()) {
+              setSpotifyClientIdDraft(settings?.spotifyClientId ?? '')
+              setSpotifyClientIdCard(true)
+              return
+            }
+            setSpotifyAuthing(true)
+            window.spotifyAPI.startAuth()
+              .catch(() => {})
+              .finally(() => setSpotifyAuthing(false))
+          }}
+          onTradingViewAction={() => {
+            const connected = connectorStatuses.find(s => s.id === 'tradingview')?.connected ?? false
+            if (connected) {
+              void window.tradingViewAPI.close()
+              return
+            }
+            void window.tradingViewAPI.open()
+          }}
+          onTickerAction={() => {
+            setTickerDraft(settings?.tickerSymbol?.trim() ?? '')
+            setTickerCard(true)
+          }}
+          spotifyClientIdCard={spotifyClientIdCard}
+          spotifyClientIdDraft={spotifyClientIdDraft}
+          tickerCard={tickerCard}
+          tickerDraft={tickerDraft}
+          onCloseSpotifyClientIdCard={() => setSpotifyClientIdCard(false)}
+          onSpotifyClientIdDraftChange={setSpotifyClientIdDraft}
+          onSubmitSpotifyClientId={() => {
+            void window.settingsAPI.update({ spotifyClientId: spotifyClientIdDraft.trim() })
+              .then(() => {
+                setSpotifyClientIdCard(false)
+                setSpotifyAuthing(true)
+                return window.spotifyAPI.startAuth()
+              })
+              .catch(() => {})
+              .finally(() => setSpotifyAuthing(false))
+          }}
+          onCloseTickerCard={() => setTickerCard(false)}
+          onTickerDraftChange={setTickerDraft}
+          onSubmitTicker={() => {
+            void window.tickerAPI.setSymbol(tickerDraft.trim())
+              .then(q => { setTickerQuote(q); setTickerCard(false) })
+          }}
         />
       )
     }
@@ -1261,8 +1322,8 @@ export const HudExpanded = memo(function HudExpanded({
             ) : (
             <div className="flex h-full flex-col">
               <aside
-                className="flex flex-shrink-0 items-center gap-3 px-7 py-5"
-                style={{ borderBottom: '1px solid var(--ares-border-soft)' }}
+                className="flex flex-shrink-0 items-center gap-3 px-7 py-3"
+                style={{ background: 'transparent' }}
               >
                 <button
                   onMouseDown={e => {
@@ -1272,8 +1333,8 @@ export const HudExpanded = memo(function HudExpanded({
                   className="flex h-9 w-9 items-center justify-center rounded-[8px] transition-colors duration-150"
                   style={{
                     color: 'var(--ares-text-primary)',
-                    background: 'color-mix(in srgb, var(--ares-surface-1) 62%, transparent)',
-                    border: '1px solid var(--ares-border-soft)'
+                    background: 'transparent',
+                    border: '1px solid transparent'
                   }}
                   aria-label="Voltar para configurações"
                 >
@@ -1299,8 +1360,8 @@ export const HudExpanded = memo(function HudExpanded({
 
               </aside>
 
-              <section className="flex-1 overflow-y-auto scrollbar-none px-7 pb-7 pt-5">
-                <div className="mx-auto max-w-[620px]">
+              <section className="flex-1 overflow-y-auto scrollbar-none px-7 pb-7 pt-2">
+                <div className="w-full">
                   {renderSettingsContent()}
                 </div>
               </section>
