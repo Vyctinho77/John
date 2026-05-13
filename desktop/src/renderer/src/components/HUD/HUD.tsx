@@ -560,7 +560,11 @@ export function HUD() {
     updateUserProfile({ preferred_explanation_style: nextStyle })
   }, [updateUserProfile, userProfile])
 
-  if (prevVisual.current !== visual) prevVisual.current = visual
+  const lastVisual = prevVisual.current
+
+  useEffect(() => {
+    prevVisual.current = visual
+  }, [visual])
 
   const maybeGenerateChatTitle = useCallback((conversationMessages: Message[]) => {
     const chatId = activeChatIdRef.current
@@ -844,7 +848,7 @@ export function HUD() {
 
   return (
     <div className="w-screen h-screen flex items-start justify-center hud-typography" style={hudTypographyStyle}>
-      <HudShell visual={visual} prevVisual={prevVisual.current} sidebarSide={sidebarSide}>
+      <HudShell visual={visual} prevVisual={lastVisual} sidebarSide={sidebarSide}>
         <HudContent id={visual}>
           {visual === 'compact' && (
             <HudCompact

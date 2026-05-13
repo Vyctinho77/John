@@ -137,17 +137,19 @@ export function SettingsNavItem({
   label,
   active,
   onClick,
-  icon
+  icon,
+  compact = false
 }: {
   label: string
   active: boolean
   onClick: () => void
   icon: ReactNode
+  compact?: boolean
 }) {
   return (
     <button
       onClick={onClick}
-      className="relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left"
+      className={`relative flex items-center gap-2.5 rounded-[8px] text-left ${compact ? 'w-auto flex-shrink-0 px-3 py-2' : 'w-full px-3 py-2.5'}`}
       style={{ color: active ? 'var(--ares-text-strong)' : 'var(--ares-text-tertiary)' }}
     >
       {/* Sliding active pill — animates between nav items with layoutId */}
@@ -160,7 +162,7 @@ export function SettingsNavItem({
         />
       )}
       <span
-        className="relative z-10 w-[20px] h-[20px] flex items-center justify-center flex-shrink-0"
+        className="relative z-10 flex h-[20px] w-[20px] flex-shrink-0 items-center justify-center"
         style={{
           color: active ? 'var(--ares-accent)' : 'var(--ares-text-muted)',
           transition: 'color 150ms ease'
@@ -169,7 +171,7 @@ export function SettingsNavItem({
         {icon}
       </span>
       <span
-        className="relative z-10 text-[12px] leading-none whitespace-nowrap"
+        className="relative z-10 whitespace-nowrap text-[12px] leading-none"
         style={{ transition: 'color 150ms ease' }}
       >
         {label}

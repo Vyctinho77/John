@@ -319,6 +319,7 @@ export function HudOperator({
 }: HudOperatorProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const chartWebviewRef = useRef<Electron.WebviewTag | null>(null)
   const prevMsgLen = useRef(messages.length)
   const { handleMouseDown } = useDragWindow()
 
@@ -330,6 +331,7 @@ export function HudOperator({
   const [diaryLoading, setDiaryLoading] = useState(false)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [countdown, setCountdown] = useState<string | null>(null)
+  const [chartVisible, setChartVisible] = useState(true)
 
   useEffect(() => {
     if (!approachingEvent) {
@@ -409,6 +411,25 @@ export function HudOperator({
     setIsAnalyzing(true)
     void onAnalyzeNow()
   }, [isAnalyzing, isStreaming, onAnalyzeNow])
+
+  const clearChartWebview = useCallback(() => {
+    const webview = chartWebviewRef.current
+    if (webview) webview.src = 'about:blank'
+  }, [])
+
+  const teardownChartWebview = useCallback(() => {
+    clearChartWebview()
+    setChartVisible(false)
+  }, [clearChartWebview])
+
+  const handleExitOperator = useCallback(() => {
+    teardownChartWebview()
+    requestAnimationFrame(() => onExitOperator())
+  }, [onExitOperator, teardownChartWebview])
+
+  useEffect(() => {
+    return () => clearChartWebview()
+  }, [clearChartWebview])
 
   const handleTranscript = useCallback((text: string) => {
     const next = inputValue.trim() ? `${inputValue} ${text}` : text
@@ -584,11 +605,15 @@ export function HudOperator({
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
-            <webview
-              src={chartUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              allowpopups=""
-            />
+            {chartVisible ? (
+              <webview
+                ref={chartWebviewRef}
+                src={chartUrl}
+                partition="persist:ares-operator-tradingview"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                allowpopups=""
+              />
+            ) : null}
 
             <div
               className="absolute bottom-0 left-0 flex items-center gap-2 px-4"
@@ -687,7 +712,7 @@ export function HudOperator({
                 <button
                   onMouseDown={e => {
                     e.preventDefault()
-                    onExitOperator()
+                    handleExitOperator()
                   }}
                   className="text-[14px] font-medium transition-opacity hover:opacity-75"
                   style={{ color: '#f3f3f3' }}

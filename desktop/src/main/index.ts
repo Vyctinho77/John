@@ -283,12 +283,19 @@ ipcMain.handle('hud:operator-news-panel', (_e, { open, panelWidth }: { open: boo
 
 ipcMain.on('hud:resize', (_e, { width, height }: { width: number; height: number }) => {
   if (!hudWindow || sidebarDocked) return   // sidebar manages its own bounds
-  const display = screen.getDisplayMatching(hudWindow.getBounds())
-  const { width: sw, height: sh } = display.workArea
-  const { x: cx, y: cy } = hudWindow.getBounds()
+  const bounds = hudWindow.getBounds()
+  const display = screen.getDisplayMatching(bounds)
+  const { x: wx, y: wy, width: sw, height: sh } = display.workArea
+  const centerX = bounds.x + Math.round(bounds.width / 2)
+  const isShrinking = width < bounds.width
   const margin = HUD_MARGIN
-  const newX = Math.max(margin, Math.min(cx, sw - width - margin))
-  const newY = Math.max(margin, Math.min(cy, sh - height - margin))
+  const minX = wx + margin
+  const maxX = wx + sw - width - margin
+  const minY = wy + margin
+  const maxY = wy + sh - height - margin
+  const desiredX = isShrinking ? centerX - Math.round(width / 2) : bounds.x
+  const newX = Math.max(minX, Math.min(desiredX, maxX))
+  const newY = Math.max(minY, Math.min(bounds.y, maxY))
   hudWindow.setBounds({ x: newX, y: newY, width, height }, false)
   persistHudPosition()
 })

@@ -31,6 +31,7 @@ export const HudCompact = memo(function HudCompact({
   return (
     <div
       className="flex items-center gap-0 px-5 h-full cursor-grab active:cursor-grabbing"
+      style={{ background: 'var(--ares-surface-0)' }}
       onMouseDown={handleMouseDown}
       onClick={() => {
         onActivity()

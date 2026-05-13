@@ -76,7 +76,10 @@ export function useSpeechInput(
       if (transcript) onTranscript(transcript)
     }
 
-    recognition.onerror = () => { stop() }
+    recognition.onerror = () => {
+      recognitionRef.current = null
+      setIsListening(false)
+    }
     recognition.onend   = () => { setIsListening(false); recognitionRef.current = null }
 
     recognitionRef.current = recognition

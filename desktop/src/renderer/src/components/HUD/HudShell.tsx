@@ -1,4 +1,4 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useEffect } from 'react'
 import { HudVisual } from '@renderer/hooks/useHudStateMachine'
 
@@ -9,7 +9,10 @@ const DIMS: Record<Exclude<HudVisual, 'sidebar'>, { width: number; height: numbe
   operator: { width: 1574, height: 680, radius: 0 }
 }
 
-const EASE = [0.32, 0.72, 0, 1] as const
+const STAGE_TRANSITION = {
+  duration: 0.26,
+  ease: [0.32, 0.72, 0, 1]
+} as const
 
 const DURATIONS: Record<string, number> = {
   'compact-intermediate': 0.22,
@@ -36,6 +39,12 @@ interface HudShellProps {
 export function HudShell({ visual, prevVisual, sidebarSide = null, children }: HudShellProps) {
   const isSidebar = visual === 'sidebar'
   const isOperator = visual === 'operator'
+  const targetDims = !isSidebar ? DIMS[visual as Exclude<HudVisual, 'sidebar'>] : null
+  const previousDims = !isSidebar
+    ? prevVisual === 'sidebar'
+      ? DIMS.expanded
+      : DIMS[prevVisual as Exclude<HudVisual, 'sidebar'>]
+    : null
 
   useEffect(() => {
     if (isSidebar) return
@@ -44,10 +53,7 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
   }, [visual, isSidebar])
 
   if (isOperator) {
-    const previous =
-      prevVisual === 'sidebar'
-        ? DIMS.expanded
-        : DIMS[prevVisual as Exclude<HudVisual, 'sidebar'>]
+    const previous = previousDims ?? DIMS.expanded
     const { width, height } = DIMS.operator
     const duration = getDuration(prevVisual, visual)
     const enteringFromNormal = prevVisual !== 'operator'
@@ -57,21 +63,19 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
         className="relative pointer-events-none"
         style={{
           background: 'transparent',
-          willChange: 'width, height, opacity, scale'
+          willChange: 'width, height, opacity'
         }}
         initial={{
           width: previous.width,
           height: previous.height,
-          opacity: 0,
-          scale: 0.96
+          opacity: 0
         }}
         animate={{
           width,
           height,
-          opacity: 1,
-          scale: 1
+          opacity: 1
         }}
-        transition={{ duration, ease: EASE }}
+        transition={STAGE_TRANSITION}
       >
         <motion.div
           className="absolute inset-0"
@@ -92,9 +96,8 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
             clipPath: 'inset(0 round 0px)'
           }}
           transition={{
-            duration: Math.max(0.16, duration * 0.72),
-            delay: enteringFromNormal ? Math.min(0.06, duration * 0.22) : 0,
-            ease: EASE
+            ...STAGE_TRANSITION,
+            delay: enteringFromNormal ? Math.min(0.06, duration * 0.22) : 0
           }}
         >
           {children}
@@ -129,28 +132,28 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
     )
   }
 
-  const { width, height, radius } = DIMS[visual as Exclude<HudVisual, 'sidebar'>]
-  const duration = getDuration(prevVisual, visual)
+  const { width, height, radius } = targetDims ?? DIMS.compact
 
   return (
     <motion.div
       className="relative overflow-hidden"
       style={{
-        background: 'var(--ares-surface-0)',
+        background: 'transparent',
         boxShadow: 'var(--ares-shadow-panel)',
         border: '1px solid rgba(255,255,255,0.09)',
+        borderRadius: radius,
         clipPath: `inset(0 round ${radius}px)`,
+        transformOrigin: 'top center',
         willChange: 'width, height, border-radius'
       }}
       initial={{
         width: DIMS.compact.width,
         height: DIMS.compact.height,
         borderRadius: DIMS.compact.radius,
-        opacity: 0,
-        scale: 0.96
+        opacity: 0
       }}
-      animate={{ width, height, borderRadius: radius, opacity: 1, scale: 1 }}
-      transition={{ duration, ease: EASE }}
+      animate={{ width, height, borderRadius: radius, opacity: 1 }}
+      transition={STAGE_TRANSITION}
     >
       <div className="absolute inset-0" style={{ zIndex: 1 }}>
         {children}
@@ -161,17 +164,8 @@ export function HudShell({ visual, prevVisual, sidebarSide = null, children }: H
 
 export function HudContent({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={id}
-        className="absolute inset-0 flex flex-col"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.12 }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <div key={id} className="absolute inset-0 flex flex-col">
+      {children}
+    </div>
   )
 }

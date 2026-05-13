@@ -10,23 +10,18 @@ import {
 import { motion } from 'framer-motion'
 import {
   AlignLeft, AlertTriangle, BarChart2, BookOpen, Bug,
-  Code2, FileText, HelpCircle, Info, Lightbulb, ListChecks,
+  Code2, FileText, HelpCircle, Lightbulb, ListChecks,
   MessageSquare, RotateCcw, Scale, Settings2, Zap,
   type LucideIcon
 } from 'lucide-react'
 import { LogoMark } from './LogoMark'
 import { StageCompactIcon, StageIntermediateIcon, StageExpandedIcon } from './StageIcons'
 import { ConfigIcon } from './ConfigIcon'
-import { NotificationsIcon } from './NotificationsIcon'
-import { DataIcon } from './DataIcon'
-import { ProfileIcon } from './ProfileIcon'
 import { MessageBody } from './MessageBody'
 import { SendIcon } from './SendIcon'
 import { ChatSidebar } from './ChatSidebar'
 import { GlasswingThinkingIndicator } from './GlasswingThinkingIndicator'
-import {
-  SettingsNavItem
-} from './HudSettingsPrimitives'
+import { SettingsHomePanel, type SettingsHomeTab } from './HudSettingsHome'
 import {
   AboutSettingsPanel,
   AccountSettingsPanel,
@@ -168,7 +163,7 @@ interface HudExpandedProps {
   onEnterOperator?: () => void
 }
 
-type SettingsTab = 'general' | 'notifications' | 'data' | 'account' | 'api' | 'typography' | 'market' | 'about'
+type SettingsTab = 'home' | SettingsHomeTab
 
 type ProviderDraftMap = Record<
   AIProviderId,
@@ -229,6 +224,17 @@ const FEATURE_TIER_LABELS: Record<AIFeatureTier, string> = {
   heuristic: 'local',
   cheap:     'barato',
   strong:    'forte'
+}
+
+const SETTINGS_TAB_LABELS: Record<SettingsHomeTab, string> = {
+  general: 'Geral',
+  notifications: 'Alertas',
+  data: 'Dados',
+  account: 'Conta',
+  api: 'IA e API',
+  typography: 'Aparência',
+  market: 'Mercado',
+  about: 'Sobre'
 }
 
 function getCostAlertState(costs: AICostSnapshot | null): {
@@ -364,7 +370,8 @@ export const HudExpanded = memo(function HudExpanded({
   const { handleMouseDown } = useDragWindow()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSpinTurns, setSettingsSpinTurns] = useState(0)
-  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('general')
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>('home')
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState('')
   const [activeProviderId, setActiveProviderId] = useState<AIProviderId>('openai')
   const [providerDrafts, setProviderDrafts] = useState<ProviderDraftMap>(createEmptyProviderDrafts())
   const [apiFeedback, setAPIFeedback] = useState<string | null>(null)
@@ -803,6 +810,23 @@ export const HudExpanded = memo(function HudExpanded({
   }
 
   const renderSettingsContent = () => {
+    if (activeSettingsTab === 'home') {
+      return (
+        <SettingsHomePanel
+          settings={settings}
+          connectorStatuses={connectorStatuses}
+          aiSettings={aiSettings}
+          privacy={privacy}
+          memorySummary={memorySummary}
+          tradingViewState={tradingViewState}
+          userProfile={userProfile}
+          query={settingsSearchQuery}
+          onQueryChange={setSettingsSearchQuery}
+          onOpenTab={tab => setActiveSettingsTab(tab)}
+        />
+      )
+    }
+
     if (!settings) {
       return (
         <div className="pt-2">
@@ -1002,6 +1026,7 @@ export const HudExpanded = memo(function HudExpanded({
   return (
     <div
       className="relative flex flex-col h-full"
+      style={{ background: 'var(--ares-surface-0)' }}
       onMouseMove={onActivity}
       onMouseDown={onActivity}
       onWheel={onActivity}
@@ -1122,7 +1147,10 @@ export const HudExpanded = memo(function HudExpanded({
             e.preventDefault()
             setSettingsSpinTurns(prev => prev + 1)
             setSettingsOpen(prev => {
-              if (!prev) setActiveSettingsTab('general')
+              if (!prev) {
+                setActiveSettingsTab('home')
+                setSettingsSearchQuery('')
+              }
               return !prev
             })
           }}
@@ -1209,19 +1237,45 @@ export const HudExpanded = memo(function HudExpanded({
       ) : (
         <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-none px-0 py-0">
           {settingsOpen ? (
-            <div className="h-full flex">
-              <aside
-                className="w-[200px] flex-shrink-0 px-3 pt-5 pb-6"
-                        style={{ borderRight: '1px solid var(--ares-border-soft)' }}
-              >
+            activeSettingsTab === 'home' ? (
+              <div className="relative h-full">
                 <button
                   onMouseDown={e => {
                     e.preventDefault()
                     setSettingsOpen(false)
                   }}
-                  className="w-8 h-8 flex items-center justify-center mb-5 rounded-lg transition-colors duration-150"
-                  style={{ color: 'var(--ares-text-primary)' }}
-                  aria-label="Voltar"
+                  className="absolute right-5 top-5 z-10 flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors duration-150"
+                  style={{
+                    color: 'var(--ares-text-primary)',
+                    background: 'color-mix(in srgb, var(--ares-surface-1) 62%, transparent)',
+                    border: '1px solid var(--ares-border-soft)'
+                  }}
+                  aria-label="Fechar configurações"
+                >
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                {renderSettingsContent()}
+              </div>
+            ) : (
+            <div className="flex h-full flex-col">
+              <aside
+                className="flex flex-shrink-0 items-center gap-3 px-7 py-5"
+                style={{ borderBottom: '1px solid var(--ares-border-soft)' }}
+              >
+                <button
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setActiveSettingsTab('home')
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-[8px] transition-colors duration-150"
+                  style={{
+                    color: 'var(--ares-text-primary)',
+                    background: 'color-mix(in srgb, var(--ares-surface-1) 62%, transparent)',
+                    border: '1px solid var(--ares-border-soft)'
+                  }}
+                  aria-label="Voltar para configurações"
                 >
                   <svg width="18" height="18" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path
@@ -1234,62 +1288,24 @@ export const HudExpanded = memo(function HudExpanded({
                   </svg>
                 </button>
 
-                <div className="flex flex-col gap-2">
-                  <SettingsNavItem
-                    label="Geral"
-                    active={activeSettingsTab === 'general'}
-                    onClick={() => setActiveSettingsTab('general')}
-                    icon={<ConfigIcon className="h-[18px] w-auto" />}
-                  />
-                  <SettingsNavItem
-                    label="Notificações"
-                    active={activeSettingsTab === 'notifications'}
-                    onClick={() => setActiveSettingsTab('notifications')}
-                    icon={<NotificationsIcon className="h-[18px] w-auto" />}
-                  />
-                  <SettingsNavItem
-                    label="Controle de dados"
-                    active={activeSettingsTab === 'data'}
-                    onClick={() => setActiveSettingsTab('data')}
-                    icon={<DataIcon className="h-[18px] w-auto" />}
-                  />
-                  <SettingsNavItem
-                    label="Conta"
-                    active={activeSettingsTab === 'account'}
-                    onClick={() => setActiveSettingsTab('account')}
-                    icon={<ProfileIcon className="h-[18px] w-auto" />}
-                  />
-                  <SettingsNavItem
-                    label="Minha API Key"
-                    active={activeSettingsTab === 'api'}
-                    onClick={() => setActiveSettingsTab('api')}
-                    icon={<span className="text-[13px] font-medium leading-none">{'</>'}</span>}
-                  />
-                  <SettingsNavItem
-                    label="Tipografia"
-                    active={activeSettingsTab === 'typography'}
-                    onClick={() => setActiveSettingsTab('typography')}
-                    icon={<span className="text-[18px] leading-none">Aa</span>}
-                  />
-                  <SettingsNavItem
-                    label="Mercado"
-                    active={activeSettingsTab === 'market'}
-                    onClick={() => setActiveSettingsTab('market')}
-                    icon={<BarChart2 size={16} strokeWidth={1.75} />}
-                  />
-                  <SettingsNavItem
-                    label="Sobre"
-                    active={activeSettingsTab === 'about'}
-                    onClick={() => setActiveSettingsTab('about')}
-                    icon={<Info size={16} strokeWidth={1.75} />}
-                  />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px]" style={{ color: 'var(--ares-text-muted)' }}>
+                    Configurações
+                  </div>
+                  <h2 className="truncate text-[18px] font-semibold" style={{ color: 'var(--ares-text-strong)' }}>
+                    {SETTINGS_TAB_LABELS[activeSettingsTab]}
+                  </h2>
                 </div>
+
               </aside>
 
-              <section className="flex-1 px-6 pt-5 pb-6 overflow-y-auto scrollbar-none">
-                {renderSettingsContent()}
+              <section className="flex-1 overflow-y-auto scrollbar-none px-7 pb-7 pt-5">
+                <div className="mx-auto max-w-[620px]">
+                  {renderSettingsContent()}
+                </div>
               </section>
             </div>
+            )
           ) : (
             <div style={{ maxWidth: 1040, margin: '0 auto', padding: '28px 30px 18px' }}>
               {messages.map((msg, i) => (
@@ -1464,4 +1480,3 @@ export const HudExpanded = memo(function HudExpanded({
     </div>
   )
 })
-

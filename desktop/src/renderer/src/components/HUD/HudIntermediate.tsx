@@ -40,7 +40,7 @@ export function HudIntermediate({
   inputValue, onInputChange, onSubmit,
   onInputFocus, onInputBlur, onActivity,
   onCollapse: _onCollapse, response, responseMeta: _responseMeta, isStreaming,
-  semanticState, sessionMemory, intermediateThought, isCapturing, isPrivate, onTogglePrivate,
+  semanticState, sessionMemory: _sessionMemory, intermediateThought, isCapturing, isPrivate, onTogglePrivate,
   voiceEnabled,
   onShowStage1, onShowStage2, onShowStage3
 }: HudIntermediateProps) {
@@ -84,6 +84,7 @@ export function HudIntermediate({
   return (
     <div
       className="flex flex-col h-full"
+      style={{ background: 'var(--ares-surface-0)' }}
       onMouseMove={onActivity}
       onMouseDown={onActivity}
       onWheel={onActivity}
